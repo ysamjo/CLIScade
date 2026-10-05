@@ -187,7 +187,11 @@ async function fetchDynamicModelPresets() {
           if (!id) return;
           const name = m.name || id;
           const prov = (m.settings && m.settings.provider) || m.providerID || '';
-          list.push({ id, label: prov ? `${name} (${prov})` : name });
+          // opencode --model expects "provider/model". The bare id fails with
+          // "Invalid model reference", and an id that already contains a slash is still
+          // read as provider/model ("deepseek-ai/x" -> provider deepseek-ai -> unavailable).
+          const ref = prov && !id.startsWith(`${prov}/`) ? `${prov}/${id}` : id;
+          list.push({ id: ref, label: prov ? `${name} (${prov})` : name });
         });
         result.opencode = list;
       }
@@ -1639,6 +1643,36 @@ function buildCliCommand(selectedRoute, fullPrompt, effectiveModel) {
   return { cmd, args };
 }
 
+// Hierarchical AGENTS.md: developer root, then the project, global only as a fallback.
+function buildAgentsContext(workingDir) {
+  let agentsContext = '';
+  const agentsSources = [];
+
+  const tasksData = loadTasksData();
+  const rootDir = tasksData.rootDirectory || DEFAULT_ROOT_DIR;
+  const rootAgentsFile = path.join(rootDir, 'AGENTS.md');
+  if (fs.existsSync(rootAgentsFile)) {
+    const content = fs.readFileSync(rootAgentsFile, 'utf8').trim();
+    agentsContext += `[Entwickler-Richtlinien aus ${rootAgentsFile}]\n` + content + '\n\n';
+    agentsSources.push(`Developer/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
+  }
+
+  const projectAgentsFile = path.join(workingDir, 'AGENTS.md');
+  if (fs.existsSync(projectAgentsFile) && projectAgentsFile !== rootAgentsFile) {
+    const content = fs.readFileSync(projectAgentsFile, 'utf8').trim();
+    agentsContext += `[Projekt-Richtlinien aus ${projectAgentsFile}]\n` + content + '\n\n';
+    agentsSources.push(`${path.basename(workingDir)}/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
+  }
+
+  if (fs.existsSync(AGENTS_MD_FILE) && agentsSources.length === 0) {
+    const content = fs.readFileSync(AGENTS_MD_FILE, 'utf8').trim();
+    agentsContext += `[Globale Richtlinien]\n` + content + '\n\n';
+    agentsSources.push(`Global AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
+  }
+
+  return { agentsContext, agentsSources };
+}
+
 // Consensus Mode Dispatch (Dual-Agent Collaboration & Synthesis)
 function runConsensusDispatch(payload, ws, onComplete) {
   const notify = (obj) => {
@@ -1668,6 +1702,10 @@ function runConsensusDispatch(payload, ws, onComplete) {
   const routeB = enabledRoutes[1];
   const workingDir = projectPath && fs.existsSync(projectPath) ? projectPath : process.env.HOME;
 
+  const { agentsContext, agentsSources } = buildAgentsContext(workingDir);
+  const agentsInfo = agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine';
+  const guidelinePrompt = agentsContext.trim() ? `${agentsContext.trim()}\n\n[Aufgabe]\n${prompt}` : prompt;
+
   const taskId = 'consensus_' + Date.now();
   const taskRecord = {
     id: taskId,
@@ -1678,7 +1716,7 @@ function runConsensusDispatch(payload, ws, onComplete) {
     harness: `Konsens (${routeA.name} ↔ ${routeB.name})`,
     command: 'consensus',
     model: `${routeA.model || 'Standard'} ↔ ${routeB.model || 'Standard'}`,
-    agentsInfo: 'Multi-Agent Konsens',
+    agentsInfo: `Konsens · ${agentsInfo}`,
     timestamp: new Date().toISOString(),
     status: 'running',
     outputHtml: ''
@@ -1698,7 +1736,7 @@ function runConsensusDispatch(payload, ws, onComplete) {
     command: 'consensus',
     model: `${routeA.model || 'Standard'} & ${routeB.model || 'Standard'}`,
     workingDir: workingDir,
-    agentsInfo: 'Dual-Agent Kollaboration & Synthese',
+    agentsInfo: `Dual-Agent Kollaboration & Synthese · Richtlinien: ${agentsInfo}`,
     projectPath: workingDir
   });
 
@@ -1714,8 +1752,8 @@ function runConsensusDispatch(payload, ws, onComplete) {
   notify({ type: 'output', html: banner });
 
   // Handle image attachment
-  let promptA = prompt;
-  let promptB = prompt;
+  let promptA = guidelinePrompt;
+  let promptB = guidelinePrompt;
   if (imagePath && fs.existsSync(imagePath)) {
     try {
       const ext = path.extname(imagePath) || '.png';
@@ -1727,18 +1765,38 @@ function runConsensusDispatch(payload, ws, onComplete) {
     } catch {}
   }
 
+  const phaseFailures = [];
+  const lastOutputLine = (text) => (text || '')
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+    .split('\n').map(l => l.trim()).filter(Boolean).slice(-1)[0] || '';
+  const reportPhaseFailure = (route, err, code, output) => {
+    const base = err ? err.message
+      : (code !== 0 ? `Prozess endete mit Exit-Code ${code}` : 'Engine hat keine Antwort geliefert');
+    // The CLI usually names the reason on its last line — without it the banner is useless.
+    const detail = err ? '' : lastOutputLine(output);
+    const reason = detail ? `${base}: ${detail.slice(0, 160)}` : base;
+    phaseFailures.push(`${route.name}: ${reason}`);
+    const html = `\n<div class="consensus-phase phase-fail"><strong>⚠ Phase ausgefallen:</strong> ${escapeHtml(route.name)} — ${escapeHtml(reason)}. Dieser Ansatz fehlt der Abstimmung.</div>\n`;
+    taskRecord.outputHtml += html;
+    notify({ type: 'output', html });
+  };
+
   // Phase 1: Route A
   const p1Header = `<div class="consensus-phase phase-a"><strong>Phase 1:</strong> ${escapeHtml(routeA.name)} erarbeitet Lösungsansatz A...</div>\n`;
   taskRecord.outputHtml += p1Header;
   notify({ type: 'output', html: p1Header });
 
-  executeSingleRun(routeA, `[Phase 1 Entwurf] ${promptA}`, workingDir, notify, taskRecord, (errA, outputA) => {
+  executeSingleRun(routeA, `[Phase 1 Entwurf] ${promptA}`, workingDir, notify, taskRecord, (errA, outputA, codeA) => {
+    if (errA || codeA !== 0 || !(outputA || '').trim()) reportPhaseFailure(routeA, errA, codeA, outputA);
+
     // Phase 2: Route B
     const p2Header = `\n<div class="consensus-phase phase-b"><strong>Phase 2:</strong> ${escapeHtml(routeB.name)} erarbeitet alternativen Lösungsansatz B...</div>\n`;
     taskRecord.outputHtml += p2Header;
     notify({ type: 'output', html: p2Header });
 
-    executeSingleRun(routeB, `[Phase 2 Alternativ-Entwurf] ${promptB}`, workingDir, notify, taskRecord, (errB, outputB) => {
+    executeSingleRun(routeB, `[Phase 2 Alternativ-Entwurf] ${promptB}`, workingDir, notify, taskRecord, (errB, outputB, codeB) => {
+      if (errB || codeB !== 0 || !(outputB || '').trim()) reportPhaseFailure(routeB, errB, codeB, outputB);
+
       // Phase 3: Synthesis & Implementation
       const p3Header = `\n<div class="consensus-phase phase-debate"><strong>Phase 3 (Debatte & Synthese):</strong> Gemeinsame Prüfung & Erarbeitung der perfekten Konsens-Lösung...</div>\n`;
       taskRecord.outputHtml += p3Header;
@@ -1746,25 +1804,31 @@ function runConsensusDispatch(payload, ws, onComplete) {
 
       const textA = (outputA || '').slice(-2500).replace(/<[^>]+>/g, '').trim();
       const textB = (outputB || '').slice(-2500).replace(/<[^>]+>/g, '').trim();
+      const missing = (name) => `⚠ ${name} hat keinen Ansatz geliefert. Behandle das als fehlend und erfinde keine Vorteile dieses Ansatzes.`;
 
       const synthesisPrompt = `[KONSENS-SYNTHESE UND FINALE UMSETZUNG]
 Benutzeraufgabe: "${prompt}"
 
 Hier sind zwei unabhängig erarbeitete Lösungsansätze:
 === ANSATZ A (${routeA.name}) ===
-${textA || '(Kein Textauszug)'}
+${textA || missing(routeA.name)}
 
 === ANSATZ B (${routeB.name}) ===
-${textB || '(Kein Textauszug)'}
+${textB || missing(routeB.name)}
 
 AUFGABE FÜR DIE KONSENS-SYNTHESE:
 1. Vergleiche beide Ansätze kritisch: Welche Best Practices, Edge-Cases oder Syntax-Fehler wurden beachtet oder übersehen?
 2. Führe die finale, perfekte und vollständige Lösung im Codebase-Projekt aus.
-3. Fasse in 2-3 Sätzen zusammen, welche jeweiligen Vorteile von Ansatz A und Ansatz B in das finale Ergebnis eingeflossen sind.`;
+3. Fasse in 2-3 Sätzen zusammen, welche Vorteile der tatsächlich vorliegenden Ansätze eingeflossen sind. Fehlt ein Ansatz, sage das ausdrücklich.`;
 
-      executeSingleRun(routeA, synthesisPrompt, workingDir, notify, taskRecord, (errFinal, outputFinal) => {
+      executeSingleRun(routeA, synthesisPrompt, workingDir, notify, taskRecord, (errFinal, outputFinal, codeFinal) => {
+        if (errFinal || codeFinal !== 0 || !(outputFinal || '').trim()) reportPhaseFailure(routeA, errFinal, codeFinal, outputFinal);
         taskRecord.status = 'completed';
-        const finishBanner = `\n<div class="consensus-phase phase-done"><strong>Konsens erfolgreich erzielt!</strong> Die gemeinsame Lösung wurde im Projekt angewendet.</div>\n`;
+
+        const complete = phaseFailures.length === 0;
+        const finishBanner = complete
+          ? `\n<div class="consensus-phase phase-done"><strong>Konsens erfolgreich erzielt!</strong> Die gemeinsame Lösung wurde im Projekt angewendet.</div>\n`
+          : `\n<div class="consensus-phase phase-fail"><strong>Konsens unvollständig (${phaseFailures.length} Ausfall/Ausfälle):</strong> ${escapeHtml(phaseFailures.join(' · '))}</div>\n`;
         taskRecord.outputHtml += finishBanner;
         notify({ type: 'output', html: finishBanner });
 
@@ -1772,8 +1836,8 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
         notify({
           type: 'done',
           taskId: taskId,
-          exitCode: 0,
-          message: 'Konsens erfolgreich abgeschlossen'
+          exitCode: complete ? 0 : 1,
+          message: complete ? 'Konsens erfolgreich abgeschlossen' : `Konsens mit Ausfall abgeschlossen — ${phaseFailures.join(' · ')}`
         });
 
         if (onComplete) onComplete(null, taskRecord);
@@ -1833,7 +1897,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
 
     child.on('close', (code) => {
       if (activeProcess === child) activeProcess = null;
-      callback(null, collectedOutput);
+      callback(null, collectedOutput, code);
     });
 
     child.on('error', (err) => {
@@ -1887,32 +1951,9 @@ function runDispatch(payload, ws, onComplete) {
   }
 
   // Read Hierarchical AGENTS.md
-  let agentsContext = '';
-  const agentsSources = [];
-
-  const tasksData = loadTasksData();
-  const rootDir = tasksData.rootDirectory || DEFAULT_ROOT_DIR;
-  const rootAgentsFile = path.join(rootDir, 'AGENTS.md');
-  if (fs.existsSync(rootAgentsFile)) {
-    const content = fs.readFileSync(rootAgentsFile, 'utf8').trim();
-    agentsContext += `[Entwickler-Richtlinien aus ${rootAgentsFile}]\n` + content + '\n\n';
-    agentsSources.push(`Developer/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
-  }
-
-  const projectAgentsFile = path.join(workingDir, 'AGENTS.md');
-  if (fs.existsSync(projectAgentsFile) && projectAgentsFile !== rootAgentsFile) {
-    const content = fs.readFileSync(projectAgentsFile, 'utf8').trim();
-    agentsContext += `[Projekt-Richtlinien aus ${projectAgentsFile}]\n` + content + '\n\n';
-    agentsSources.push(`${path.basename(workingDir)}/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
-  }
-
-  if (fs.existsSync(AGENTS_MD_FILE) && agentsSources.length === 0) {
-    const content = fs.readFileSync(AGENTS_MD_FILE, 'utf8').trim();
-    agentsContext += `[Globale Richtlinien]\n` + content + '\n\n';
-    agentsSources.push(`Global AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
-  }
-
+  const { agentsContext, agentsSources } = buildAgentsContext(workingDir);
   const agentsInfo = agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine';
+  const tasksData = loadTasksData();
 
   let fullPrompt = prompt;
   if (agentsContext.trim()) {
@@ -2886,8 +2927,27 @@ if (process.argv.includes('sync-skills')) {
   process.exit(0);
 }
 
+// A restart kills every child process, so tasks that were mid-run would otherwise
+// stay "running" in the history forever.
+function reconcileOrphanedTasks() {
+  try {
+    const data = loadTasksData();
+    const orphans = (data.tasks || []).filter(t => t.status === 'running');
+    if (orphans.length === 0) return;
+    orphans.forEach(t => {
+      t.status = 'error';
+      t.outputHtml += `\n<span style="color:#ef4444;">[Unterbrochen: Der Server wurde neu gestartet, bevor dieser Task endete.]</span>\n`;
+    });
+    saveTasksData(data);
+    console.log(`⚠ ${orphans.length} Task(s) als unterbrochen markiert.`);
+  } catch (err) {
+    console.error('Konnte Task-Historie nicht bereinigen:', err.message);
+  }
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   const lanIp = getLanIp();
   console.log(`Harness Studio running on http://0.0.0.0:${PORT} (LAN: http://${lanIp}:${PORT})`);
+  reconcileOrphanedTasks();
   startTelegramBot().catch(err => console.error("Telegram Bot Start:", err));
 });

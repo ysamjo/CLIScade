@@ -2164,6 +2164,12 @@ kbd {
   color: #86efac;
 }
 
+.consensus-phase.phase-fail {
+  background: rgba(239, 68, 68, 0.15);
+  border-left: 3px solid #ef4444;
+  color: #fca5a5;
+}
+
 .route-fallback-banner {
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.3);
