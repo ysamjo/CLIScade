@@ -95,6 +95,27 @@ const dom = {
 
   // Skills
   skillsGrid: document.getElementById('skills-grid'),
+  syncSkillsBtn: document.getElementById('sync-skills-btn'),
+  openInstallSkillBtn: document.getElementById('open-install-skill-btn'),
+  skillsSyncBanner: document.getElementById('skills-sync-banner'),
+  skillsSyncText: document.getElementById('skills-sync-text'),
+  closeSkillsSyncBannerBtn: document.getElementById('close-skills-sync-banner-btn'),
+  skillsSearchInput: document.getElementById('skills-search-input'),
+  skillsStatusBadge: document.getElementById('skills-status-badge'),
+  installSkillModal: document.getElementById('install-skill-modal'),
+  closeInstallSkillBtn: document.getElementById('close-install-skill-btn'),
+  cancelInstallSkillBtn: document.getElementById('cancel-install-skill-btn'),
+  confirmInstallSkillBtn: document.getElementById('confirm-install-skill-btn'),
+  skillTabGit: document.getElementById('skill-tab-git'),
+  skillTabCustom: document.getElementById('skill-tab-custom'),
+  skillFormGit: document.getElementById('skill-form-git'),
+  skillFormCustom: document.getElementById('skill-form-custom'),
+  skillGitUrl: document.getElementById('skill-git-url'),
+  skillGitName: document.getElementById('skill-git-name'),
+  skillCustomName: document.getElementById('skill-custom-name'),
+  skillCustomDesc: document.getElementById('skill-custom-desc'),
+  skillCustomContent: document.getElementById('skill-custom-content'),
+  skillInstallFeedback: document.getElementById('skill-install-feedback'),
 
   // Diagnostics & Status
   diagnosticsTableBody: document.getElementById('diagnostics-table-body'),
@@ -247,6 +268,8 @@ function switchSettingsSection(sectionId) {
     loadRemoteConfig();
   } else if (sectionId === 'schedules') {
     loadSchedules();
+  } else if (sectionId === 'skills') {
+    loadSkills();
   }
 }
 
@@ -990,29 +1013,143 @@ function renderAgentsEditor() {
 }
 
 // --- SKILLS & PLUGINS ---
-async function loadSkills() {
+async function loadSkills(filterQuery = '') {
   try {
     const res = await fetch('/api/skills');
     const data = await res.json();
+    state.skillsData = data;
     dom.skillsGrid.innerHTML = '';
 
-    if (!data.skills || data.skills.length === 0) {
-      dom.skillsGrid.innerHTML = '<div style="color:var(--text-dim)">Keine externen Plugins gefunden. Lokale CLIs nutzen Standard-Skills.</div>';
+    if (dom.skillsStatusBadge) {
+      dom.skillsStatusBadge.textContent = `${data.totalSkills || (data.skills && data.skills.length) || 0} Skills aktiv auf allen 8 CLIs`;
+    }
+
+    let skillsList = data.skills || [];
+    const q = (filterQuery !== '' ? filterQuery : (dom.skillsSearchInput ? dom.skillsSearchInput.value : '')).toLowerCase().trim();
+    if (q) {
+      skillsList = skillsList.filter(s =>
+        (s.name && s.name.toLowerCase().includes(q)) ||
+        (s.displayName && s.displayName.toLowerCase().includes(q)) ||
+        (s.description && s.description.toLowerCase().includes(q))
+      );
+    }
+
+    if (skillsList.length === 0) {
+      dom.skillsGrid.innerHTML = `<div style="grid-column:1/-1; padding:30px; text-align:center; color:var(--text-dim); background:var(--bg-card); border-radius:8px; border:1px solid var(--border-color);">
+        Keine Skills gefunden für <strong>"${escapeHtml(q)}"</strong>.
+      </div>`;
       return;
     }
 
-    data.skills.forEach(s => {
+    skillsList.forEach(s => {
       const card = document.createElement('div');
       card.className = 'skill-card';
+      
+      const harnessesHtml = (s.activeHarnesses || []).map(h => 
+        `<span class="badge" style="background:rgba(59,130,246,0.12); color:#60a5fa; font-size:10px; padding:2px 6px; border:1px solid rgba(59,130,246,0.25); white-space:nowrap;">${escapeHtml(h.name)}</span>`
+      ).join(' ');
+
       card.innerHTML = `
-        <div class="skill-title">${escapeHtml(s.name)}</div>
-        <div class="skill-desc">Plugin: ${escapeHtml(s.plugin)}</div>
-        <div class="skill-desc" style="font-size:10px;">${escapeHtml(s.path)}</div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <div class="skill-title" style="font-size:14px; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+            <span style="color:var(--accent); font-size:15px;">🧩</span> ${escapeHtml(s.displayName || s.name)}
+          </div>
+          <span class="badge ${s.isFullySynced ? 'badge-success' : 'badge-accent'}" style="font-size:10px; padding:2px 6px; white-space:nowrap;">
+            ${s.isFullySynced ? '✓ Alle 8 CLIs' : `${(s.activeHarnesses || []).length}/8 CLIs`}
+          </span>
+        </div>
+        <div class="skill-desc" style="font-size:12px; color:var(--text-muted); line-height:1.45; margin:6px 0 10px 0; min-height:34px;">
+          ${escapeHtml(s.description || 'Keine Beschreibung vorhanden.')}
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px;">
+          ${harnessesHtml}
+        </div>
+        <div style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); word-break:break-all; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px; margin-top:auto;">
+          📂 ${escapeHtml(s.sourcePath || s.path || '')}
+        </div>
       `;
       dom.skillsGrid.appendChild(card);
     });
   } catch (err) {
     console.error("Fehler beim Laden der Skills:", err);
+  }
+}
+
+async function syncSkills() {
+  if (dom.syncSkillsBtn) {
+    dom.syncSkillsBtn.disabled = true;
+    dom.syncSkillsBtn.innerHTML = '🔄 Synchronisiere...';
+  }
+  try {
+    const res = await fetch('/api/skills/sync', { method: 'POST' });
+    const data = await res.json();
+    state.skillsData = data;
+    await loadSkills();
+
+    if (dom.skillsSyncBanner && dom.skillsSyncText) {
+      dom.skillsSyncText.textContent = `✅ ${data.totalSkills} Skills erfolgreich über alle ${data.harnesses.length} Harnesses synchronisiert! (${data.newlyLinked} neu verlinkt)`;
+      dom.skillsSyncBanner.classList.remove('hidden');
+    }
+  } catch (err) {
+    alert('Fehler beim Synchronisieren: ' + err.message);
+  } finally {
+    if (dom.syncSkillsBtn) {
+      dom.syncSkillsBtn.disabled = false;
+      dom.syncSkillsBtn.innerHTML = '<span data-icon="refresh"></span> Skills für alle 8 CLIs synchronisieren';
+      if (typeof refreshIcons === 'function') refreshIcons(dom.syncSkillsBtn);
+    }
+  }
+}
+
+async function handleInstallSkill() {
+  const isGit = dom.skillTabGit && dom.skillTabGit.classList.contains('active');
+  const feedback = dom.skillInstallFeedback;
+  if (!feedback) return;
+  feedback.style.display = 'block';
+  feedback.style.background = 'rgba(59,130,246,0.15)';
+  feedback.style.border = '1px solid rgba(59,130,246,0.3)';
+  feedback.style.color = '#60a5fa';
+  feedback.textContent = '⏳ Installiere Skill und verteile per Symlink auf alle 8 Harnesses...';
+
+  const payload = {
+    mode: isGit ? 'git' : 'custom',
+    repoUrl: dom.skillGitUrl ? dom.skillGitUrl.value.trim() : '',
+    name: isGit ? (dom.skillGitName ? dom.skillGitName.value.trim() : '') : (dom.skillCustomName ? dom.skillCustomName.value.trim() : ''),
+    description: dom.skillCustomDesc ? dom.skillCustomDesc.value.trim() : '',
+    content: dom.skillCustomContent ? dom.skillCustomContent.value.trim() : ''
+  };
+
+  try {
+    const res = await fetch('/api/skills/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Fehler beim Installieren');
+
+    feedback.style.background = 'rgba(34,197,94,0.15)';
+    feedback.style.border = '1px solid rgba(34,197,94,0.3)';
+    feedback.style.color = '#4ade80';
+    feedback.textContent = `✅ ${data.message}`;
+
+    state.skillsData = data.sync;
+    await loadSkills();
+
+    setTimeout(() => {
+      if (dom.installSkillModal) dom.installSkillModal.classList.add('hidden');
+      feedback.style.display = 'none';
+      if (dom.skillGitUrl) dom.skillGitUrl.value = '';
+      if (dom.skillGitName) dom.skillGitName.value = '';
+      if (dom.skillCustomName) dom.skillCustomName.value = '';
+      if (dom.skillCustomDesc) dom.skillCustomDesc.value = '';
+      if (dom.skillCustomContent) dom.skillCustomContent.value = '';
+    }, 1200);
+  } catch (err) {
+    feedback.style.background = 'rgba(239,68,68,0.15)';
+    feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+    feedback.style.color = '#f87171';
+    feedback.textContent = `✕ ${err.message}`;
   }
 }
 
@@ -1391,6 +1528,53 @@ function setupEventListeners() {
   }
   if (dom.closeSettingsFooterBtn) {
     dom.closeSettingsFooterBtn.addEventListener('click', closeSettingsModal);
+  }
+
+  // Universal Skills Hub Listeners
+  if (dom.syncSkillsBtn) {
+    dom.syncSkillsBtn.addEventListener('click', syncSkills);
+  }
+  if (dom.closeSkillsSyncBannerBtn) {
+    dom.closeSkillsSyncBannerBtn.addEventListener('click', () => {
+      if (dom.skillsSyncBanner) dom.skillsSyncBanner.classList.add('hidden');
+    });
+  }
+  if (dom.skillsSearchInput) {
+    dom.skillsSearchInput.addEventListener('input', (e) => {
+      loadSkills(e.target.value);
+    });
+  }
+  if (dom.openInstallSkillBtn) {
+    dom.openInstallSkillBtn.addEventListener('click', () => {
+      if (dom.installSkillModal) dom.installSkillModal.classList.remove('hidden');
+    });
+  }
+  if (dom.closeInstallSkillBtn) {
+    dom.closeInstallSkillBtn.addEventListener('click', () => {
+      if (dom.installSkillModal) dom.installSkillModal.classList.add('hidden');
+    });
+  }
+  if (dom.cancelInstallSkillBtn) {
+    dom.cancelInstallSkillBtn.addEventListener('click', () => {
+      if (dom.installSkillModal) dom.installSkillModal.classList.add('hidden');
+    });
+  }
+  if (dom.confirmInstallSkillBtn) {
+    dom.confirmInstallSkillBtn.addEventListener('click', handleInstallSkill);
+  }
+  if (dom.skillTabGit && dom.skillTabCustom) {
+    dom.skillTabGit.addEventListener('click', () => {
+      dom.skillTabGit.classList.add('active');
+      dom.skillTabCustom.classList.remove('active');
+      if (dom.skillFormGit) dom.skillFormGit.classList.remove('hidden');
+      if (dom.skillFormCustom) dom.skillFormCustom.classList.add('hidden');
+    });
+    dom.skillTabCustom.addEventListener('click', () => {
+      dom.skillTabCustom.classList.add('active');
+      dom.skillTabGit.classList.remove('active');
+      if (dom.skillFormCustom) dom.skillFormCustom.classList.remove('hidden');
+      if (dom.skillFormGit) dom.skillFormGit.classList.add('hidden');
+    });
   }
 
   // Settings Section Navigation

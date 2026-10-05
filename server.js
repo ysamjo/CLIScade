@@ -3,6 +3,7 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn, execSync } = require('child_process');
 const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
@@ -991,24 +992,211 @@ app.post('/api/agents-md', (req, res) => {
   }
 });
 
-app.get('/api/skills', (req, res) => {
-  const skills = [];
-  const skillsDir = path.join(process.env.HOME, '.gemini/config/plugins');
-  if (fs.existsSync(skillsDir)) {
+// --- UNIVERSAL SKILLS HUB & SYNC (Open-Agent Standard for all 8 CLIs) ---
+const HARNESS_DIRS = [
+  { id: 'agents', name: 'Open-Agent Standard Hub', path: path.join(os.homedir(), '.agents', 'skills') },
+  { id: 'claude', name: 'Claude Code', path: path.join(os.homedir(), '.claude', 'skills') },
+  { id: 'opencode', name: 'OpenCode', path: path.join(os.homedir(), '.config', 'opencode', 'skills') },
+  { id: 'codex', name: 'Codex CLI', path: path.join(os.homedir(), '.codex', 'skills') },
+  { id: 'cline', name: 'Cline CLI', path: path.join(os.homedir(), '.cline', 'skills') },
+  { id: 'qoder', name: 'Qoder CLI', path: path.join(os.homedir(), '.qoder', 'skills') },
+  { id: 'codebuddy', name: 'CodeBuddy CLI', path: path.join(os.homedir(), '.codebuddy', 'skills') },
+  { id: 'gemini', name: 'Gemini / Antigravity', path: path.join(os.homedir(), '.gemini', 'antigravity', 'skills') }
+];
+const HARNESS_SKILLS_DIRS = HARNESS_DIRS;
+
+function parseSkillMetadata(skillDir) {
+  const skillFile = path.join(skillDir, 'SKILL.md');
+  let name = path.basename(skillDir);
+  let description = '';
+  if (!fs.existsSync(skillFile)) {
+    return { name, description: 'Standard-Skill ohne SKILL.md', hasSkillMd: false };
+  }
+  try {
+    const content = fs.readFileSync(skillFile, 'utf8');
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (frontmatterMatch) {
+      try {
+        const parsed = yaml.load(frontmatterMatch[1]);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.name) name = parsed.name;
+          if (parsed.description) description = parsed.description;
+        }
+      } catch {}
+    }
+    if (!description) {
+      const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---/, '').trim();
+      const firstLine = body.split('\n').map(l => l.trim()).find(l => l.length > 0 && !l.startsWith('#'));
+      description = firstLine ? firstLine.slice(0, 160) : 'Agent-Skill für alle Harnesses';
+    }
+    return { name, description, hasSkillMd: true };
+  } catch (e) {
+    return { name, description: 'Fehler beim Lesen der SKILL.md', hasSkillMd: true };
+  }
+}
+
+function syncAllSkills() {
+  const HUB_DIR = path.join(os.homedir(), '.agents', 'skills');
+  if (!fs.existsSync(HUB_DIR)) {
+    try { fs.mkdirSync(HUB_DIR, { recursive: true }); } catch {}
+  }
+
+  const candidateSources = [
+    path.join(os.homedir(), '.agents', 'skills'),
+    path.join(os.homedir(), '.claude', 'skills'),
+    path.join(os.homedir(), '.codex', 'skills'),
+    path.join(os.homedir(), '.qoder', 'skills'),
+    path.join(os.homedir(), '.codebuddy', 'skills'),
+    path.join(os.homedir(), '.cline', 'skills'),
+    path.join(os.homedir(), '.config', 'opencode', 'skills'),
+    path.join(os.homedir(), '.gemini', 'antigravity', 'builtin', 'skills'),
+    path.join(os.homedir(), '.local', 'share', 'ego', 'ego-skills')
+  ];
+
+  // Gemini plugins
+  const plugDir = path.join(os.homedir(), '.gemini', 'config', 'plugins');
+  if (fs.existsSync(plugDir)) {
     try {
-      const plugins = fs.readdirSync(skillsDir);
-      for (const p of plugins) {
-        const pPath = path.join(skillsDir, p, 'skills');
-        if (fs.existsSync(pPath)) {
-          const sks = fs.readdirSync(pPath);
-          for (const s of sks) {
-            skills.push({ name: s, plugin: p, path: path.join(pPath, s) });
+      for (const p of fs.readdirSync(plugDir)) {
+        const sp = path.join(plugDir, p, 'skills');
+        if (fs.existsSync(sp)) candidateSources.push(sp);
+      }
+    } catch {}
+  }
+
+  // 1. Discover unique skills across all sources
+  const discovered = new Map();
+  for (const src of candidateSources) {
+    if (!fs.existsSync(src)) continue;
+    try {
+      const entries = fs.readdirSync(src, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+        const fullPath = path.join(src, ent.name);
+        let realTarget = fullPath;
+        try {
+          realTarget = fs.realpathSync(fullPath);
+        } catch {
+          continue;
+        }
+        const skillMd = path.join(realTarget, 'SKILL.md');
+        if (fs.existsSync(skillMd)) {
+          if (!discovered.has(ent.name)) {
+            const meta = parseSkillMetadata(realTarget);
+            discovered.set(ent.name, {
+              name: ent.name,
+              displayName: meta.name || ent.name,
+              description: meta.description,
+              sourcePath: realTarget
+            });
           }
         }
       }
     } catch {}
   }
-  res.json({ skills });
+
+  // 2. Link each unique skill into every harness directory
+  let newlyLinked = 0;
+  for (const h of HARNESS_DIRS) {
+    if (!fs.existsSync(h.path)) {
+      try { fs.mkdirSync(h.path, { recursive: true }); } catch {}
+    }
+    for (const [skillName, skillInfo] of discovered) {
+      const destPath = path.join(h.path, skillName);
+      let exists = false;
+      try {
+        fs.lstatSync(destPath);
+        exists = true;
+      } catch {}
+
+      if (!exists) {
+        try {
+          fs.symlinkSync(skillInfo.sourcePath, destPath, 'dir');
+          newlyLinked++;
+        } catch (err) {}
+      }
+    }
+  }
+
+  // 3. Assemble full inventory of skills and their active status per harness
+  const resultList = [];
+  for (const [skillName, skillInfo] of discovered) {
+    const activeIn = [];
+    for (const h of HARNESS_DIRS) {
+      const p = path.join(h.path, skillName);
+      if (fs.existsSync(p)) {
+        activeIn.push({ id: h.id, name: h.name });
+      }
+    }
+    resultList.push({
+      ...skillInfo,
+      activeHarnesses: activeIn,
+      isFullySynced: activeIn.length === HARNESS_DIRS.length
+    });
+  }
+
+  return {
+    totalSkills: discovered.size,
+    newlyLinked,
+    hubDir: HUB_DIR,
+    harnesses: HARNESS_DIRS.map(h => ({
+      id: h.id,
+      name: h.name,
+      path: h.path,
+      exists: fs.existsSync(h.path),
+      count: fs.existsSync(h.path) ? (fs.readdirSync(h.path).filter(n => !n.startsWith('.')).length) : 0
+    })),
+    skills: resultList.sort((a, b) => a.name.localeCompare(b.name))
+  };
+}
+
+app.get('/api/skills', (req, res) => {
+  try {
+    const syncResult = syncAllSkills();
+    res.json(syncResult);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/skills/sync', (req, res) => {
+  try {
+    const syncResult = syncAllSkills();
+    res.json({ success: true, ...syncResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/skills/install', (req, res) => {
+  try {
+    const { mode, name, repoUrl, description, content } = req.body;
+    const HUB_DIR = path.join(os.homedir(), '.agents', 'skills');
+    if (!fs.existsSync(HUB_DIR)) fs.mkdirSync(HUB_DIR, { recursive: true });
+
+    if (mode === 'git') {
+      if (!repoUrl) return res.status(400).json({ error: 'Git Repository URL erforderlich' });
+      const targetName = (name || path.basename(repoUrl, '.git')).trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+      const targetDir = path.join(HUB_DIR, targetName);
+      if (fs.existsSync(targetDir)) return res.status(400).json({ error: `Skill "${targetName}" existiert bereits` });
+      execSync(`git clone --depth 1 "${repoUrl}" "${targetDir}"`, { timeout: 30000 });
+    } else {
+      // Create custom skill
+      if (!name) return res.status(400).json({ error: 'Skill-Name ist erforderlich' });
+      const safeName = name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      const targetDir = path.join(HUB_DIR, safeName);
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      const skillMd = path.join(targetDir, 'SKILL.md');
+      const mdContent = `---\nname: "${safeName}"\ndescription: "${(description || '').replace(/"/g, '\\"')}"\n---\n\n${content || `# ${safeName}\nSkill für alle 8 Harnesses.`}\n`;
+      fs.writeFileSync(skillMd, mdContent, 'utf8');
+    }
+
+    // Automatically sync across all 8 CLIs
+    const syncResult = syncAllSkills();
+    res.json({ success: true, message: 'Skill erfolgreich für alle 8 CLIs installiert & synchronisiert!', sync: syncResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Image Upload endpoint
@@ -1155,6 +1343,20 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function getWorkspaceChanges(dir) {
+  try {
+    if (dir && fs.existsSync(path.join(dir, '.git'))) {
+      const status = execSync('git status --short', { cwd: dir, encoding: 'utf8', timeout: 3000 }).trim();
+      const diffStat = execSync('git diff --stat 2>/dev/null', { cwd: dir, encoding: 'utf8', timeout: 3000 }).trim();
+      if (status || diffStat) {
+        return `Geänderte Dateien (Git Status):\n${status || 'Keine uncommitted Dateien'}\n\nDiff-Zusammenfassung:\n${diffStat || 'Keine Diff-Änderungen'}`;
+      }
+      return 'Keine lokalen Dateiänderungen im Git-Repository festgestellt.';
+    }
+  } catch (e) {}
+  return 'Kein Git-Repository oder keine Änderungen festgestellt.';
 }
 
 function broadcastToClients(msg, excludeWs) {
@@ -1584,8 +1786,8 @@ function runDispatch(payload, ws, onComplete) {
 
   notify({ type: 'task_created', task: taskRecord });
 
-  // Function to execute routes sequentially in priority chain
-  function tryRoute(routeIndex) {
+  // Function to execute routes sequentially in priority chain with Smart Context Handoff (Relay)
+  function tryRoute(routeIndex, relayContext = null) {
     if (routeIndex >= candidateRoutes.length) {
       const errMsg = 'Alle verfügbaren Harnesses in der Prioritätskette sind fehlgeschlagen oder nicht installiert.';
       const failBanner = `\n<div class="route-failed-banner" style="background:rgba(239,68,68,0.15); border:1px solid var(--danger); padding:10px 14px; border-radius:8px; margin-top:8px; color:#ef4444;">✕ <strong>Routing-Kette erschöpft:</strong> ${errMsg}</div>\n`;
@@ -1616,7 +1818,7 @@ function runDispatch(payload, ws, onComplete) {
       const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) nicht im System-PATH gefunden.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
       taskRecord.outputHtml += skipNotice;
       notify({ type: 'output', raw: '', html: skipNotice });
-      return tryRoute(routeIndex + 1);
+      return tryRoute(routeIndex + 1, relayContext);
     }
 
     // Update taskRecord details
@@ -1636,8 +1838,9 @@ function runDispatch(payload, ws, onComplete) {
       projectPath: workingDir
     });
 
-    const headerMsg = `<div class="route-banner">
-      <span class="badge badge-accent">Priorität #${routeIndex + 1}</span>
+    const isRelay = Boolean(relayContext);
+    const headerMsg = `<div class="route-banner" style="${isRelay ? 'border-left: 3px solid #f59e0b;' : ''}">
+      <span class="badge ${isRelay ? 'badge-warning' : 'badge-accent'}">${isRelay ? '🔄 Kontext-Relay #' + (routeIndex + 1) : 'Priorität #' + (routeIndex + 1)}</span>
       <span><strong>Harness:</strong> ${selectedRoute.name} (${selectedRoute.command})</span>
       <span><strong>Modell:</strong> ${effectiveModel}</span>
       <span><strong>Projekt:</strong> ${path.basename(workingDir)}</span>
@@ -1647,7 +1850,28 @@ function runDispatch(payload, ws, onComplete) {
     taskRecord.outputHtml += headerMsg;
     notify({ type: 'output', html: headerMsg });
 
-    const { cmd, args } = buildCliCommand(selectedRoute, fullPrompt, effectiveModel);
+    // Build prompt: If relayContext is provided, wrap in structured handoff format
+    let effectivePrompt = fullPrompt;
+    if (relayContext) {
+      effectivePrompt = `[AUTOMATISCHE KONTEXT-ÜBERGABE & NAHTLOSE FORTSETZUNG]\n` +
+        `Das vorherige Harness "${relayContext.prevHarness}" (${relayContext.prevCommand}) wurde vorzeitig abgebrochen (${relayContext.reason}).\n\n` +
+        `URSPRÜNGLICHER BENUTZER-AUFTRAG:\n${prompt}\n\n` +
+        `STAND DER DATEIEN IM PROJEKTVERZEICHNIS:\n${relayContext.workspaceDiff}\n\n` +
+        `LETZTER ZWISCHENSTAND / AUSGABE DES VORHERIGEN HARNESS:\n"""\n${relayContext.lastOutput}\n"""\n\n` +
+        `DEIN AUFTRAG:\n` +
+        `1. Analysiere den bisher erarbeiteten Code und die Dateien im Projekt.\n` +
+        `2. Knüpfe nahtlos an den bestehenden Zwischenstand an, ohne von vorn zu beginnen.\n` +
+        `3. Schließe die Aufgabe vollständig und funktionstüchtig ab.`;
+
+      if (imagePath && fs.existsSync(imagePath)) {
+        const ext = path.extname(imagePath) || '.png';
+        const targetLocal = path.join(workingDir, `.harness-task-image${ext}`);
+        effectivePrompt += `\n\n[Beigefügtes Bild / Screenshot: ${path.basename(targetLocal)}]\nBitte beachte auch das beigefügte Bild.`;
+      }
+    }
+
+    const { cmd, args } = buildCliCommand(selectedRoute, effectivePrompt, effectiveModel);
+    let currentRunRawOutput = '';
 
     try {
       const child = spawn(cmd, args, {
@@ -1658,7 +1882,7 @@ function runDispatch(payload, ws, onComplete) {
 
       const isFreebuff = (selectedRoute.command === 'freebuff' || selectedRoute.harness === 'freebuff');
       if (isFreebuff && child.stdin) {
-        child.stdin.write(fullPrompt + '\n');
+        child.stdin.write(effectivePrompt + '\n');
         setTimeout(() => { try { child.stdin.end(); } catch {} }, 1000);
       } else if (child.stdin) {
         child.stdin.end();
@@ -1666,6 +1890,7 @@ function runDispatch(payload, ws, onComplete) {
 
       child.stdout.on('data', (data) => {
         const text = data.toString();
+        currentRunRawOutput += text;
         const html = ansiConverter.toHtml(text);
         taskRecord.outputHtml += html;
         notify({ type: 'output', raw: text, html });
@@ -1673,6 +1898,7 @@ function runDispatch(payload, ws, onComplete) {
 
       child.stderr.on('data', (data) => {
         const text = data.toString();
+        currentRunRawOutput += text;
         const html = `<span style="color:#f59e0b">${ansiConverter.toHtml(text)}</span>`;
         taskRecord.outputHtml += html;
         notify({ type: 'output', raw: text, html });
@@ -1681,12 +1907,52 @@ function runDispatch(payload, ws, onComplete) {
       child.on('close', (code) => {
         if (activeProcess === child) activeProcess = null;
 
-        // If failed and more routes exist, auto-fallback to next!
+        // If failed and more routes exist, auto-fallback with SMART CONTEXT HANDOFF!
         if (code !== 0 && routeIndex + 1 < candidateRoutes.length) {
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> wurde mit Fehlercode ${code} beendet.<br/><em>Starte automatisches Weiter-Routing zum nächsten Harness (#${routeIndex + 2})...</em></div>\n`;
+          let reason = `Fehlercode ${code}`;
+          if (currentRunRawOutput.match(/429|rate\s*limit|quota|credit|insufficient|budget|overloaded/i)) {
+            reason = 'Quota / Rate-Limit erreicht (429 / Guthaben erschöpft)';
+          } else if (currentRunRawOutput.match(/context.*(length|window|limit|exceeded|too long)/i)) {
+            reason = 'Kontextfenster-Limit überschritten';
+          } else if (code === 137 || code === 143) {
+            reason = 'Prozess beendet (OOM / Timeout)';
+          }
+
+          const cleanOutput = currentRunRawOutput
+            .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+            .trim();
+          const lastOutputSnippet = cleanOutput.length > 2500 ? '...' + cleanOutput.slice(-2500) : (cleanOutput || 'Keine Konsolenausgabe vorhanden');
+          const wsDiff = getWorkspaceChanges(workingDir);
+
+          const nextRelayContext = {
+            prevHarness: selectedRoute.name,
+            prevCommand: selectedRoute.command,
+            exitCode: code,
+            reason: reason,
+            lastOutput: lastOutputSnippet,
+            workspaceDiff: wsDiff
+          };
+
+          taskRecord.relayHandoffs = taskRecord.relayHandoffs || [];
+          taskRecord.relayHandoffs.push({
+            from: selectedRoute.name,
+            to: candidateRoutes[routeIndex + 1].name,
+            reason: reason,
+            timestamp: new Date().toISOString()
+          });
+
+          const nextName = candidateRoutes[routeIndex + 1].name;
+          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:10px 14px; border-radius:8px; margin:8px 0; color:#f59e0b; font-size:12px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span class="badge" style="background:#f59e0b; color:#000; font-weight:700;">🔄 Smart Context Relay</span>
+              <strong>${escapeHtml(selectedRoute.name)} abgebrochen (${escapeHtml(reason)})</strong>
+            </div>
+            <div>Zwischenstand (${lastOutputSnippet.length} Zeichen) und Workspace-Status werden nahtlos an Priorität #${routeIndex + 2} (<strong>${escapeHtml(nextName)}</strong>) übergeben...</div>
+          </div>\n`;
+
           taskRecord.outputHtml += fallbackNotice;
           notify({ type: 'output', raw: '', html: fallbackNotice });
-          return tryRoute(routeIndex + 1);
+          return tryRoute(routeIndex + 1, nextRelayContext);
         }
 
         taskRecord.status = code === 0 ? 'completed' : 'failed';
@@ -1763,10 +2029,25 @@ function runDispatch(payload, ws, onComplete) {
       child.on('error', (err) => {
         if (activeProcess === child) activeProcess = null;
         if (routeIndex + 1 < candidateRoutes.length) {
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">Fehler beim Starten von <strong>${escapeHtml(selectedRoute.name)}</strong>: ${escapeHtml(err.message)}.<br/><em>Starte automatisches Weiter-Routing zum nächsten Harness...</em></div>\n`;
+          const nextRelayContext = {
+            prevHarness: selectedRoute.name,
+            prevCommand: selectedRoute.command,
+            exitCode: -1,
+            reason: `Startfehler: ${err.message}`,
+            lastOutput: `Konnte ${selectedRoute.command} nicht starten: ${err.message}`,
+            workspaceDiff: getWorkspaceChanges(workingDir)
+          };
+          const nextName = candidateRoutes[routeIndex + 1].name;
+          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:10px 14px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span class="badge" style="background:#f59e0b; color:#000; font-weight:700;">🔄 Smart Relay</span>
+              <strong>Fehler beim Starten von ${escapeHtml(selectedRoute.name)}: ${escapeHtml(err.message)}</strong>
+            </div>
+            <div>Übergebe an <strong>${escapeHtml(nextName)}</strong>...</div>
+          </div>\n`;
           taskRecord.outputHtml += fallbackNotice;
           notify({ type: 'output', raw: '', html: fallbackNotice });
-          return tryRoute(routeIndex + 1);
+          return tryRoute(routeIndex + 1, nextRelayContext);
         }
 
         taskRecord.status = 'error';
@@ -1780,7 +2061,7 @@ function runDispatch(payload, ws, onComplete) {
       });
     } catch (err) {
       if (routeIndex + 1 < candidateRoutes.length) {
-        return tryRoute(routeIndex + 1);
+        return tryRoute(routeIndex + 1, relayContext);
       }
       notify({ type: 'error', message: err.message });
       if (onComplete) onComplete(err, null);
@@ -2425,6 +2706,16 @@ app.post('/api/remote/telegram/test', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+if (process.argv.includes('sync-skills')) {
+  console.log('🔄 Synchronisiere alle Skills für alle 8 Harnesses...');
+  const res = syncAllSkills();
+  console.log(`✅ ${res.totalSkills} Skills inventarisiert (${res.newlyLinked} neu verlinkt).`);
+  res.harnesses.forEach(h => {
+    console.log(`   • ${h.name}: ${h.count} Skills aktiv in ${h.path}`);
+  });
+  process.exit(0);
+}
 
 server.listen(PORT, '0.0.0.0', () => {
   const lanIp = getLanIp();

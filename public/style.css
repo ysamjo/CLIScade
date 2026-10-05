@@ -4,6 +4,7 @@
   --bg-card: #171b27;
   --bg-card-hover: #1d2233;
   --bg-elevated: #202637;
+  --bg-input: #121622;
   --border-color: #232839;
   --border-soft: #1b2030;
   --border-focus: #6366f1;
@@ -1141,6 +1142,12 @@ textarea#prompt-input::-webkit-scrollbar {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.skill-card:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  transform: translateY(-2px);
 }
 
 .skill-title {
@@ -1173,12 +1180,12 @@ textarea#prompt-input::-webkit-scrollbar {
 }
 
 .modal-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: #181c2b !important;
+  border: 1px solid rgba(99, 102, 241, 0.45) !important;
   border-radius: 14px;
   width: 480px;
   max-width: 90vw;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.95) !important;
   animation: fadeIn 0.15s ease-out;
 }
 

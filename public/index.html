@@ -373,9 +373,35 @@
 
           <!-- SECTION 4: SKILLS & MCP-PLUGINS -->
           <div id="settings-sec-skills" class="settings-section">
-            <div class="settings-section-header">
-              <h4>Installierte Skills & MCP-Plugins</h4>
-              <p>Zentrale Übersicht deiner installierten Werkzeuge. Einmal installiert – von allen Harnesses automatisch geteilt.</p>
+            <div class="settings-section-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h4>Installierte Skills & MCP-Plugins (Open-Agent Hub)</h4>
+                <p>Zentraler Standard (<code>~/.agents/skills</code>). Einmal synchronisiert – sofort von allen 8 Harnesses per Symlink geteilt.</p>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button id="sync-skills-btn" class="btn btn-secondary" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
+                  <span data-icon="refresh"></span> Skills für alle 8 CLIs synchronisieren
+                </button>
+                <button id="open-install-skill-btn" class="btn btn-primary" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
+                  <span data-icon="plus"></span> Skill installieren
+                </button>
+              </div>
+            </div>
+
+            <!-- Sync feedback banner -->
+            <div id="skills-sync-banner" class="hidden" style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.3); color:#4ade80; font-size:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span id="skills-sync-text">Skills erfolgreich synchronisiert!</span>
+              <button id="close-skills-sync-banner-btn" style="background:transparent; border:none; color:inherit; cursor:pointer;">✕</button>
+            </div>
+
+            <!-- Filter & Stats Bar -->
+            <div class="skills-filter-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
+              <div style="position:relative; flex:1; min-width:240px;">
+                <input id="skills-search-input" type="text" placeholder="🔍 Skill suchen (z. B. pdf, browser, perf, agent)..." style="width:100%; padding:8px 12px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; color:#fff; font-size:12px;" />
+              </div>
+              <div id="skills-status-badge" class="badge badge-accent" style="font-size:11px; padding:6px 10px;">
+                Lade Skills...
+              </div>
             </div>
 
             <div id="skills-grid" class="skills-grid">
@@ -786,6 +812,48 @@
           Alle CLIs werden global bzw. in <code>~/.local/bin</code> installiert und stehen sofort ohne Neustart zur Verfügung.
         </span>
         <button id="close-installer-footer-btn" class="btn btn-secondary">Fertig / Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTALL SKILL MODAL -->
+  <div id="install-skill-modal" class="modal-overlay hidden" style="z-index: 2100;">
+    <div class="modal-card" style="max-width:560px;">
+      <div class="modal-header">
+        <h5>Neuen Skill für alle 8 Harnesses installieren</h5>
+        <button id="close-install-skill-btn" class="icon-btn" data-icon="x"></button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
+        <p style="font-size:12px; color:var(--text-muted); margin:0;">
+          Der Skill wird zentral unter <code>~/.agents/skills/</code> abgelegt und sofort automatisch als Symlink für alle 8 CLIs (Claude Code, OpenCode, Codex, Cline, Qoder, CodeBuddy, Antigravity) freigeschaltet.
+        </p>
+
+        <div style="display:flex; gap:8px; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+          <button id="skill-tab-git" class="btn btn-secondary-sm active" style="font-size:12px;">Git Repository</button>
+          <button id="skill-tab-custom" class="btn btn-secondary-sm" style="font-size:12px;">Eigener Custom-Skill</button>
+        </div>
+
+        <div id="skill-form-git">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Git Repository URL:</label>
+          <input id="skill-git-url" type="text" placeholder="https://github.com/owner/skill-repo.git" style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; margin-bottom:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Skill-Name (optional):</label>
+          <input id="skill-git-name" type="text" placeholder="Automatisch aus URL oder z. B. my-skill" style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px;" />
+        </div>
+
+        <div id="skill-form-custom" class="hidden">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Skill-Name (Identifier):</label>
+          <input id="skill-custom-name" type="text" placeholder="z. B. docker-optimizer" style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; margin-bottom:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Kurzbeschreibung:</label>
+          <input id="skill-custom-desc" type="text" placeholder="Wofür dieser Skill von den Agenten verwendet wird..." style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; margin-bottom:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">SKILL.md Anweisungen / Prompt:</label>
+          <textarea id="skill-custom-content" rows="6" placeholder="# Workflow & Regeln für den Agenten..." style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; font-family:var(--font-mono);"></textarea>
+        </div>
+
+        <div id="skill-install-feedback" style="font-size:12px; display:none; padding:8px 10px; border-radius:6px;"></div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="cancel-install-skill-btn" class="btn btn-secondary">Abbrechen</button>
+        <button id="confirm-install-skill-btn" class="btn btn-primary">Jetzt installieren & verteilen</button>
       </div>
     </div>
   </div>
