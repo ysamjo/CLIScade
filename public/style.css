@@ -947,7 +947,7 @@ textarea#prompt-input::-webkit-scrollbar {
 
 .harness-table-header {
   display: grid;
-  grid-template-columns: 50px 50px 140px 110px 1fr 100px;
+  grid-template-columns: 50px 50px 140px 110px minmax(0, 1fr) 100px;
   padding: 12px 16px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -964,7 +964,7 @@ textarea#prompt-input::-webkit-scrollbar {
 
 .harness-row {
   display: grid;
-  grid-template-columns: 50px 50px 140px 110px 1fr 100px;
+  grid-template-columns: 50px 50px 140px 110px minmax(0, 1fr) 100px;
   padding: 10px 16px;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
@@ -993,6 +993,7 @@ textarea#prompt-input::-webkit-scrollbar {
   display: flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
 }
 
 .model-dropdown {
@@ -1004,6 +1005,7 @@ textarea#prompt-input::-webkit-scrollbar {
   font-family: var(--font-mono);
   font-size: 12px;
   flex: 1;
+  min-width: 0;
   outline: none;
 }
 
@@ -1052,6 +1054,54 @@ textarea#prompt-input::-webkit-scrollbar {
   color: var(--danger);
   border-color: var(--danger);
 }
+
+/* MODEL LIVE TEST */
+.model-test-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.btn-model-test {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex: 0 0 auto;
+}
+
+.btn-model-test:hover:not(:disabled) {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-model-test:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.model-test-result {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  cursor: help;
+}
+
+.model-test-result.ok { color: var(--success); }
+.model-test-result.fail { color: var(--danger); }
+.model-test-result.running { color: var(--accent); }
 
 /* AGENTS.MD TABS */
 .agents-tabs {

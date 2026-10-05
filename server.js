@@ -1029,6 +1029,104 @@ app.post('/api/config', (req, res) => {
   }
 });
 
+// Commands the model test may run. The GUI listens on all interfaces, so this
+// endpoint must never spawn a command name supplied by the browser.
+const TESTABLE_COMMANDS = new Set(
+  Object.values(CLI_INSTALL_REGISTRY).flatMap(m => [m.cmd, m.altCmd].filter(Boolean))
+);
+
+const MODEL_TEST_PROMPT = 'Antworte mit genau einem Wort: OK';
+const MODEL_TEST_TIMEOUT_MS = 90000;
+
+function classifyModelFailure(text) {
+  if (/model.{0,20}(not.{0,10}found|invalid|unknown|unavailable|unsupported|doesn't exist)/i.test(text) ||
+      /(invalid|unknown|unsupported|not supported).{0,20}model/i.test(text)) return 'unknown_model';
+  if (/unauthorized|invalid.{0,10}(api.?key|token)|no auth|please.{0,10}login|not authenticated/i.test(text)) return 'auth';
+  if (/429|rate\s*limit|quota|insufficient|credit|budget|overloaded/i.test(text)) return 'rate_limit';
+  if (/context.{0,20}(length|window|limit|exceeded|too long)/i.test(text)) return 'context_limit';
+  if (/\b5\d\d\b|service.{0,10}unavailable|bad gateway|fetch failed|ENOTFOUND|ECONNREFUSED/i.test(text)) return 'service';
+  return 'unknown';
+}
+
+app.post('/api/harness/test', (req, res) => {
+  const { command, harness, model } = req.body || {};
+
+  if (!TESTABLE_COMMANDS.has(command)) {
+    return res.status(400).json({ ok: false, error: `Unbekanntes Harness: ${command}` });
+  }
+  if (TUI_ONLY_COMMANDS.has(command)) {
+    return res.status(400).json({
+      ok: false,
+      errorKind: 'tui_only',
+      error: `${command} ist ein reines TUI-CLI ohne Headless-Modus und lässt sich nicht automatisch abfragen.`
+    });
+  }
+  try {
+    execSync(`which ${command}`, { stdio: 'ignore' });
+  } catch {
+    return res.json({ ok: false, errorKind: 'not_installed', error: `Befehl "${command}" nicht im PATH gefunden.` });
+  }
+
+  // A throwaway directory keeps an agent that auto-accepts edits away from real projects.
+  let workDir;
+  try {
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-modeltest-'));
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: `Kein Testverzeichnis möglich: ${err.message}` });
+  }
+
+  const { cmd, args } = buildCliCommand({ command, harness }, MODEL_TEST_PROMPT, model || 'Standard');
+  const startedAt = Date.now();
+  let raw = '';
+  let settled = false;
+
+  const finish = (payload) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    fs.rmSync(workDir, { recursive: true, force: true });
+    res.json({
+      ...payload,
+      latencyMs: Date.now() - startedAt,
+      sample: raw.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, '').trim().slice(-600)
+    });
+  };
+
+  const timer = setTimeout(() => {
+    try { child.kill('SIGKILL'); } catch {}
+    finish({ ok: false, errorKind: 'timeout', error: `Keine Antwort innerhalb von ${MODEL_TEST_TIMEOUT_MS / 1000}s.` });
+  }, MODEL_TEST_TIMEOUT_MS);
+
+  let child;
+  try {
+    child = spawn(cmd, args, {
+      cwd: workDir,
+      env: { ...process.env, FORCE_COLOR: '1' }
+    });
+  } catch (err) {
+    return finish({ ok: false, errorKind: 'unknown', error: err.message });
+  }
+
+  if (child.stdin) child.stdin.end();
+  child.stdout.on('data', d => { raw += d.toString(); });
+  child.stderr.on('data', d => { raw += d.toString(); });
+
+  child.on('error', (err) => finish({ ok: false, errorKind: 'unknown', error: err.message }));
+  child.on('close', (code) => {
+    if (code === 0 && raw.trim()) {
+      finish({ ok: true, exitCode: code });
+    } else {
+      const errorKind = classifyModelFailure(raw);
+      finish({
+        ok: false,
+        exitCode: code,
+        errorKind,
+        error: raw.trim() ? '' : 'Prozess endete ohne Ausgabe.'
+      });
+    }
+  });
+});
+
 app.get('/api/agents-md', (req, res) => {
   try {
     const data = loadTasksData();

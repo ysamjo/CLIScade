@@ -8,6 +8,7 @@ let state = {
   clis: [],
   health: [],
   modelPresets: {},
+  modelTests: {},
   expandedProjects: new Set(),
   activeAgentsTab: 'rootDev',
   agentsData: null,
@@ -693,6 +694,10 @@ function renderHarnessConfigList() {
           </select>
           <input type="text" class="model-custom-input ${!isPreset && currentModel !== 'Standard' ? '' : 'hidden'}" data-idx="${index}" value="${!isPreset ? escapeHtml(currentModel) : ''}" placeholder="Modell-ID" />
         </div>
+        <div class="model-test-line">
+          <button class="btn-model-test" data-idx="${index}" title="Testet, ob ${escapeHtml(item.model || 'Standard')} über ${escapeHtml(item.command || '')} antwortet">Test</button>
+          <span class="model-test-result"></span>
+        </div>
       </div>
       <div class="row-actions">
         <button class="btn-arrow" data-dir="up" data-idx="${index}" title="Nach oben" ${index === 0 ? 'disabled' : ''}>↑</button>
@@ -702,6 +707,8 @@ function renderHarnessConfigList() {
     `;
 
     dom.harnessConfigList.appendChild(row);
+    row.dataset.testKey = modelTestKey(item);
+    paintModelTest(row);
   });
 
   // Re-bind row events
@@ -758,6 +765,8 @@ function renderHarnessConfigList() {
         customInp.classList.add('hidden');
         state.clis[idx].model = sel.value;
       }
+      row.dataset.testKey = modelTestKey(state.clis[idx]);
+      paintModelTest(row);
       renderHarnessOverrideSelect();
     });
   });
@@ -766,9 +775,85 @@ function renderHarnessConfigList() {
     inp.addEventListener('input', () => {
       const idx = parseInt(inp.dataset.idx, 10);
       state.clis[idx].model = inp.value.trim() || 'Standard';
+      const row = inp.closest('.harness-row');
+      row.dataset.testKey = modelTestKey(state.clis[idx]);
+      paintModelTest(row);
       renderHarnessOverrideSelect();
     });
   });
+
+  dom.harnessConfigList.querySelectorAll('.btn-model-test').forEach(btn => {
+    btn.addEventListener('click', () => runModelTest(btn));
+  });
+}
+
+const MODEL_TEST_LABELS = {
+  unknown_model: 'Modell unbekannt',
+  auth: 'Login fehlt',
+  rate_limit: 'Quota erschöpft',
+  context_limit: 'Kontext voll',
+  service: 'Dienstfehler',
+  timeout: 'Timeout',
+  not_installed: 'nicht installiert',
+  tui_only: 'nur TUI',
+  unknown: 'Fehler'
+};
+
+// Results are keyed by command+model instead of by row, so the dynamic model
+// refresh (and route reordering) can re-render the list without losing a test.
+function modelTestKey(item) {
+  return `${item.command || item.harness || ''}|${item.model || 'Standard'}`;
+}
+
+function paintModelTest(row) {
+  if (!row) return;
+  const key = row.dataset.testKey;
+  const entry = state.modelTests[key];
+  const span = row.querySelector('.model-test-result');
+  const btn = row.querySelector('.btn-model-test');
+  if (!span || !btn) return;
+
+  const running = entry && entry.status === 'running';
+  span.className = 'model-test-result' + (entry ? ` ${running ? 'running' : (entry.ok ? 'ok' : 'fail')}` : '');
+  span.textContent = entry ? entry.text : '';
+  span.title = entry ? (entry.title || '') : '';
+  btn.disabled = !!running;
+  btn.textContent = running ? '…' : 'Test';
+}
+
+async function runModelTest(btn) {
+  const idx = parseInt(btn.dataset.idx, 10);
+  const route = state.clis[idx];
+  const row = btn.closest('.harness-row');
+  if (!route || !row) return;
+
+  const key = row.dataset.testKey;
+  if (state.modelTests[key] && state.modelTests[key].status === 'running') return;
+
+  const model = route.model || 'Standard';
+  state.modelTests[key] = { status: 'running', text: 'läuft…', title: `${route.command} · ${model}` };
+  paintModelTest(row);
+
+  let data;
+  try {
+    const res = await fetch('/api/harness/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: route.command, harness: route.harness, model })
+    });
+    data = await res.json();
+  } catch (err) {
+    data = { ok: false, errorKind: 'unknown', error: err.message };
+  }
+
+  const secs = data.latencyMs ? ` ${(data.latencyMs / 1000).toFixed(1)}s` : '';
+  state.modelTests[key] = {
+    status: 'done',
+    ok: !!data.ok,
+    text: data.ok ? `✓ antwortet${secs}` : `✕ ${MODEL_TEST_LABELS[data.errorKind] || 'Fehler'}${secs}`,
+    title: [`${route.command} · ${model}`, data.error, data.sample].filter(Boolean).join('\n')
+  };
+  paintModelTest(dom.harnessConfigList.querySelector(`[data-test-key="${CSS.escape(key)}"]`));
 }
 
 function swapClis(i, j) {
