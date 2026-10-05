@@ -76,80 +76,183 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Model presets per harness
-const MODEL_PRESETS = {
+// Model presets per harness (defaults + dynamic discovery)
+const DEFAULT_MODEL_PRESETS = {
   claude_code: [
-    { id: 'Standard', label: 'Standard / Umgebungsvariable' },
+    { id: 'Standard', label: 'Standard / OmniRoute Default' },
     { id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet (Thinking & Code)' },
     { id: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet (Sehr stark)' },
     { id: 'claude-3-5-haiku', label: 'Claude 3.5 Haiku (Schnell & Günstig)' },
-    { id: 'claude-opus-4-8', label: 'Claude Opus (Tiefe Analyse)' }
+    { id: 'Claude Sonnet 5', label: 'Claude Sonnet 5 (OmniRoute)' },
+    { id: 'Claude Opus 5', label: 'Claude Opus 5 (OmniRoute)' }
   ],
   codex: [
-    { id: 'Standard', label: 'Standard / Produkt-Login' },
-    { id: 'gpt-5', label: 'GPT-5' },
+    { id: 'Standard', label: 'Standard / ChatGPT Plus/Pro' },
+    { id: 'o3', label: 'o3 (High Reasoning)' },
+    { id: 'o3-mini', label: 'o3-mini (Reasoning & Code)' },
+    { id: 'o1', label: 'o1 (Reasoning)' },
+    { id: 'gpt-4.5-preview', label: 'GPT-4.5 Preview' },
     { id: 'gpt-4o', label: 'GPT-4o' },
     { id: 'gpt-4o-mini', label: 'GPT-4o Mini (Schnell)' },
-    { id: 'o3-mini', label: 'o3-mini (Reasoning)' }
+    { id: 'gpt-5', label: 'GPT-5' }
   ],
   cline: [
     { id: 'Standard', label: 'Standard' },
+    { id: 'stealth/space-bunny-alpha', label: 'Space Bunny Alpha (Kostenlos)' },
     { id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet' },
-    { id: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { id: 'claude-3-5-haiku', label: 'Claude 3.5 Haiku' },
-    { id: 'gpt-4o', label: 'GPT-4o' },
-    { id: 'deepseek-chat', label: 'DeepSeek Chat (V3)' }
-  ],
-  opencode: [
-    { id: 'Standard', label: 'Standard' },
-    { id: 'anthropic/claude-3-7-sonnet', label: 'Claude 3.7 Sonnet (Anthropic)' },
-    { id: 'anthropic/claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat' },
-    { id: 'openai/gpt-4o', label: 'GPT-4o' },
-    { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' }
-  ],
-  antigravity_cli: [
-    { id: 'Standard', label: 'Standard' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }
-  ],
-  qoder: [
-    { id: 'Standard', label: 'Standard / Account Default' },
-    { id: 'Qwen3.8-Max', label: 'Qwen 3.8 Max' },
-    { id: 'Qwen3.8-Flash', label: 'Qwen 3.8 Flash' },
-    { id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'deepseek-v3', label: 'DeepSeek V3' },
     { id: 'gpt-4o', label: 'GPT-4o' }
   ],
+  opencode: [
+    { id: 'Standard', label: 'Standard (fledge-alpha-free)' },
+    { id: 'fledge-alpha-free', label: 'Fledge Alpha (Free Tier)' },
+    { id: 'ling-3.1-flash-free', label: 'Ling 3.1 Flash (Free Tier)' },
+    { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+    { id: 'space-bunny-free', label: 'Space Bunny (Free Tier)' },
+    { id: 'deepseek-ai/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' }
+  ],
+  antigravity_cli: [
+    { id: 'Standard', label: 'Standard (Google AI Studio)' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Thinking)' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }
+  ],
+  qoder: [
+    { id: 'Standard', label: 'Standard / Default' },
+    { id: 'Qwen3.8-Max', label: 'Qwen 3.8 Max' },
+    { id: 'Qwen3.8-Flash', label: 'Qwen 3.8 Flash' }
+  ],
   freebuff: [
-    { id: 'Standard', label: 'Standard (GLM 5.3 Flash / Stealth)' },
+    { id: 'Standard', label: 'Standard (GLM 5.3 Flash)' },
     { id: 'glm-5.3-flash', label: 'GLM 5.3 Flash (Gratis & Unmetered)' },
     { id: 'stealth/space-bunny-alpha', label: 'Space Bunny Alpha' },
-    { id: 'deepseek', label: 'DeepSeek V4.1 Flash' },
+    { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
+    { id: 'deepseek-v3', label: 'DeepSeek V3' },
     { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
     { id: 'mimo-2.6-flash', label: 'MiMo 2.6 Flash' },
-    { id: 'mimo-2.6-pro', label: 'MiMo 2.6 Pro' },
-    { id: 'solar-mini-4', label: 'Solar Mini 4' },
-    { id: 'solar-pro-4', label: 'Solar Pro 4' },
-    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
-    { id: 'muse-spark-1.3', label: 'Muse Spark 1.3' }
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }
   ],
   codebuddy: [
-    { id: 'Standard', label: 'Standard / Default Model' },
+    { id: 'Standard', label: 'Standard (hy3)' },
+    { id: 'hy3', label: 'Tencent Hunyuan 3 (hy3)' },
+    { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
+    { id: 'deepseek-v3', label: 'DeepSeek V3' },
     { id: 'fast-model', label: 'Fast Model (Schnell)' },
     { id: 'balanced-model', label: 'Balanced Model' },
-    { id: 'deep-model', label: 'Deep Model (Tiefe Analyse)' },
-    { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
-    { id: 'gpt-6-astra', label: 'GPT-6 Astra' },
-    { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
-    { id: 'glm-5.3-flash', label: 'GLM 5.3 Flash' },
-    { id: 'kimi-k3', label: 'Kimi K3' },
-    { id: 'kimi-k2.6', label: 'Kimi K2.6' },
-    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-    { id: 'hy4-preview', label: 'HY4 Preview' }
+    { id: 'deep-model', label: 'Deep Model (Tiefe Analyse)' }
   ]
 };
+
+let cachedModelPresets = null;
+let modelPresetsCachedAt = 0;
+
+function parseTokenCount(s) {
+  if (!s) return 0;
+  s = String(s).replace(/,/g, '').trim();
+  if (s.endsWith('M') || s.endsWith('m')) return Math.round(parseFloat(s) * 1000000);
+  if (s.endsWith('K') || s.endsWith('k')) return Math.round(parseFloat(s) * 1000);
+  return parseInt(s, 10) || 0;
+}
+
+function fetchDynamicModelPresets() {
+  const result = JSON.parse(JSON.stringify(DEFAULT_MODEL_PRESETS));
+
+  // 1. OpenCode: query live models via `opencode api GET /api/model`
+  try {
+    const raw = execSync('opencode api GET /api/model', { encoding: 'utf8', timeout: 3500 });
+    const json = JSON.parse(raw);
+    const models = Array.isArray(json) ? json : (json.data || []);
+    if (models.length > 0) {
+      const list = [{ id: 'Standard', label: 'Standard / OpenCode Free Default' }];
+      models.forEach(m => {
+        const id = m.id || m.modelID;
+        if (!id) return;
+        const name = m.name || id;
+        const prov = (m.settings && m.settings.provider) || m.providerID || '';
+        list.push({ id, label: prov ? `${name} (${prov})` : name });
+      });
+      result.opencode = list;
+    }
+  } catch (e) {}
+
+  // 2. Qoder: query live models via `qodercli --list-models`
+  try {
+    const raw = execSync('qodercli --list-models 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l !== 'MODEL' && !l.startsWith('-'));
+    if (lines.length > 0) {
+      const list = [{ id: 'Standard', label: 'Standard / Account Default' }];
+      lines.forEach(m => {
+        list.push({ id: m, label: m });
+      });
+      if (!lines.includes('claude-3-7-sonnet')) list.push({ id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet' });
+      if (!lines.includes('gpt-4o')) list.push({ id: 'gpt-4o', label: 'GPT-4o' });
+      result.qoder = list;
+    }
+  } catch (e) {}
+
+  // 3. Claude Code / OmniRoute: query `omniroute models`
+  try {
+    const raw = execSync('omniroute models 2>/dev/null', { encoding: 'utf8', timeout: 3500 });
+    const clean = raw.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+    const claudeList = [];
+    const otherList = [];
+    clean.split('\n').forEach(line => {
+      if (!line.includes('|')) return;
+      const parts = line.split('|').map(s => s.trim());
+      if (parts.length >= 3 && parts[1] && parts[1] !== 'Model ID' && !parts[1].startsWith('-')) {
+        const id = parts[1];
+        const prov = parts[2];
+        const item = { id, label: prov && prov !== '-' ? `${id} (${prov})` : id };
+        if (id.toLowerCase().includes('claude')) {
+          claudeList.push(item);
+        } else {
+          otherList.push(item);
+        }
+      }
+    });
+
+    if (claudeList.length > 0 || otherList.length > 0) {
+      const list = [{ id: 'Standard', label: 'Standard / OmniRoute Default' }];
+      result.claude_code = list.concat(claudeList).concat(otherList);
+    }
+  } catch (e) {}
+
+  // 4. Cline: inspect configured model from ~/.cline/data/settings/providers.json
+  try {
+    const clineProvPath = path.join(os.homedir(), '.cline', 'data', 'settings', 'providers.json');
+    if (fs.existsSync(clineProvPath)) {
+      const pData = JSON.parse(fs.readFileSync(clineProvPath, 'utf8'));
+      const activeModel = pData.providers && pData.providers.cline && pData.providers.cline.settings && pData.providers.cline.settings.model;
+      if (activeModel && !result.cline.some(m => m.id === activeModel)) {
+        result.cline.splice(1, 0, { id: activeModel, label: `${activeModel} (Aktiv konfiguriert)` });
+      }
+    }
+  } catch (e) {}
+
+  // 5. CodeBuddy: inspect configured model from ~/.codebuddy/settings.json
+  try {
+    const cbPath = path.join(os.homedir(), '.codebuddy', 'settings.json');
+    if (fs.existsSync(cbPath)) {
+      const cbData = JSON.parse(fs.readFileSync(cbPath, 'utf8'));
+      if (cbData.model && !result.codebuddy.some(m => m.id === cbData.model)) {
+        result.codebuddy.splice(1, 0, { id: cbData.model, label: `${cbData.model} (In settings.json konfiguriert)` });
+      }
+    }
+  } catch (e) {}
+
+  return result;
+}
+
+function getCliModels(forceRefresh = false) {
+  const now = Date.now();
+  if (!cachedModelPresets || forceRefresh || (now - modelPresetsCachedAt > 180000)) {
+    cachedModelPresets = fetchDynamicModelPresets();
+    modelPresetsCachedAt = now;
+  }
+  return cachedModelPresets;
+}
 
 // Helper: load config.yaml
 function loadConfig() {
@@ -350,19 +453,154 @@ function getHarnessHealth(forceRefresh = false) {
   return results;
 }
 
-// Harness Quota & Usage Check
-function getHarnessUsage() {
+// Harness Quota, Costs & Live Telemetry Check
+let cachedCostsData = null;
+let costsCachedAt = 0;
+
+function fetchCliCostsAndUsage(forceRefresh = false) {
+  const now = Date.now();
+  if (cachedCostsData && !forceRefresh && (now - costsCachedAt < 25000)) {
+    return cachedCostsData;
+  }
+
+  // 1. OmniRoute Costs & Tokens
+  let omniCost = {
+    available: false,
+    totalCost: '$0.00',
+    totalCostNum: 0,
+    totalTokensIn: 0,
+    totalTokensOut: 0,
+    totalTokens: 0,
+    totalTokensFormatted: '0 Tokens',
+    totalReqs: 0,
+    providers: []
+  };
+
+  try {
+    const raw = execSync('omniroute cost --period all 2>/dev/null', { encoding: 'utf8', timeout: 4000 });
+    const clean = raw.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+    let totalCostNum = 0;
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+    let totalReqs = 0;
+    const providers = [];
+
+    clean.split('\n').forEach(line => {
+      if (!line.includes('|')) return;
+      const parts = line.split('|').map(s => s.trim());
+      if (parts.length >= 6 && parts[1] && parts[1] !== 'Group' && !parts[1].startsWith('-')) {
+        const group = parts[1];
+        const reqsStr = parts[2].replace(/,/g, '');
+        const reqs = parseInt(reqsStr, 10) || 0;
+        const tokIn = parseTokenCount(parts[3]);
+        const tokOut = parseTokenCount(parts[4]);
+        const costStr = parts[5];
+        const costVal = parseFloat(costStr.replace('$', '')) || 0;
+
+        totalReqs += reqs;
+        totalTokensIn += tokIn;
+        totalTokensOut += tokOut;
+        totalCostNum += costVal;
+
+        providers.push({
+          group,
+          reqs: parts[2],
+          tokensIn: parts[3],
+          tokensOut: parts[4],
+          cost: costStr,
+          costNum: costVal
+        });
+      }
+    });
+
+    const totalTokens = totalTokensIn + totalTokensOut;
+    omniCost = {
+      available: true,
+      totalCost: `$${totalCostNum.toFixed(4)}`,
+      totalCostNum,
+      totalTokensIn,
+      totalTokensOut,
+      totalTokens,
+      totalTokensFormatted: totalTokens > 1000000 ? `${(totalTokens / 1000000).toFixed(1)}M Tokens` : `${Math.round(totalTokens / 1000)}k Tokens`,
+      totalReqs,
+      providers
+    };
+  } catch (err) {}
+
+  // 2. OpenCode Stats & Tokens
+  let opencodeStats = {
+    available: false,
+    totalTokens: 0,
+    totalTokensFormatted: '0 Tokens',
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheTokens: 0,
+    sessions: 0,
+    prompts: 0,
+    cost: '$0.00',
+    models: []
+  };
+
+  try {
+    const raw = execSync('opencode stats --cost --json 2>/dev/null', { encoding: 'utf8', timeout: 3500 });
+    const data = JSON.parse(raw);
+    const inTok = (data.tokens && data.tokens.input) || 0;
+    const outTok = (data.tokens && data.tokens.output) || 0;
+    const cacheTok = (data.tokens && data.tokens.cache && data.tokens.cache.read) || 0;
+    const total = inTok + outTok + cacheTok;
+
+    opencodeStats = {
+      available: true,
+      totalTokens: total,
+      totalTokensFormatted: total > 1000000 ? `${(total / 1000000).toFixed(1)}M Tokens` : `${Math.round(total / 1000)}k Tokens`,
+      inputTokens: inTok,
+      outputTokens: outTok,
+      cacheTokens: cacheTok,
+      sessions: data.sessions || 0,
+      prompts: data.prompts || 0,
+      cost: `$${data.cost || 0}`,
+      models: data.models || []
+    };
+  } catch (err) {}
+
+  // 3. Cline Config
+  let clineModel = 'stealth/space-bunny-alpha';
+  try {
+    const clineProvPath = path.join(os.homedir(), '.cline', 'data', 'settings', 'providers.json');
+    if (fs.existsSync(clineProvPath)) {
+      const pData = JSON.parse(fs.readFileSync(clineProvPath, 'utf8'));
+      if (pData.providers && pData.providers.cline && pData.providers.cline.settings && pData.providers.cline.settings.model) {
+        clineModel = pData.providers.cline.settings.model;
+      }
+    }
+  } catch (e) {}
+
+  // 4. CodeBuddy Config
+  let codebuddyModel = 'hy3';
+  try {
+    const cbPath = path.join(os.homedir(), '.codebuddy', 'settings.json');
+    if (fs.existsSync(cbPath)) {
+      const cbData = JSON.parse(fs.readFileSync(cbPath, 'utf8'));
+      if (cbData.model) codebuddyModel = cbData.model;
+    }
+  } catch (e) {}
+
   const usage = {
     claude_code: {
       id: 'claude_code',
       name: 'Claude Code',
       command: 'claude',
       available: false,
-      plan: 'API Key / FirstParty',
-      contextWindow: '1.000.000 Tokens',
-      remaining: '1M Kontextfenster aktiv',
-      cost: 'Pay-per-token',
-      badge: '1M Kontextfenster'
+      plan: 'OmniRoute Proxy (API Key)',
+      contextWindow: 'Dynamisch (OmniRoute)',
+      remaining: 'Pay-per-Token (Kein Budget-Limit)',
+      cost: omniCost.available ? `${omniCost.totalCost} (OmniRoute gesamt)` : 'Pay-per-Token',
+      tokensUsed: omniCost.totalTokens,
+      tokensFormatted: omniCost.totalTokensFormatted,
+      sessions: omniCost.totalReqs,
+      badge: '🟢 OmniRoute aktiv',
+      isOmniroute: true,
+      omnirouteProviders: omniCost.providers
     },
     codex: {
       id: 'codex',
@@ -381,11 +619,18 @@ function getHarnessUsage() {
       command: 'opencode',
       available: false,
       plan: 'Community Free Tier',
-      contextWindow: '128.000 Tokens',
-      remaining: 'Unbegrenzt (Free Tier)',
-      tokensUsed: 0,
-      cost: '$0.00',
-      badge: 'Unbegrenzt'
+      contextWindow: '128.000 - 200.000 Tokens',
+      remaining: opencodeStats.available ? `Unbegrenzt (${opencodeStats.totalTokensFormatted} genutzt)` : 'Unbegrenzt (Free Tier)',
+      tokensUsed: opencodeStats.totalTokens,
+      tokensFormatted: opencodeStats.totalTokensFormatted,
+      inputTokens: opencodeStats.inputTokens,
+      outputTokens: opencodeStats.outputTokens,
+      cacheTokens: opencodeStats.cacheTokens,
+      sessions: opencodeStats.sessions,
+      prompts: opencodeStats.prompts,
+      cost: '$0.00 (Free Tier)',
+      badge: opencodeStats.available ? `Unbegrenzt (${opencodeStats.totalTokensFormatted} genutzt)` : 'Unbegrenzt',
+      modelsUsed: opencodeStats.models
     },
     qoder: {
       id: 'qoder',
@@ -394,7 +639,8 @@ function getHarnessUsage() {
       available: false,
       plan: 'Account Credits',
       contextWindow: '128.000 Tokens',
-      remaining: 'Credits aktiv',
+      remaining: 'Credits aktiv (Qwen 3.8 Max/Flash)',
+      cost: 'Credits inklusive',
       badge: 'Credits aktiv'
     },
     freebuff: {
@@ -415,7 +661,7 @@ function getHarnessUsage() {
       available: false,
       plan: 'Tencent AI Free Tier',
       contextWindow: '128.000 Tokens',
-      remaining: 'Aktiv (Unmetered Models)',
+      remaining: `Aktiv (${codebuddyModel} / DeepSeek)`,
       cost: '$0.00',
       badge: 'Aktiv'
     },
@@ -426,7 +672,7 @@ function getHarnessUsage() {
       available: false,
       plan: 'Google AI Studio',
       contextWindow: '1.000.000 Tokens',
-      remaining: 'Developer Quota (15 RPM)',
+      remaining: 'Developer Quota (15 RPM / 1M Kontext)',
       cost: 'Free Tier',
       badge: 'Gemini Quota'
     },
@@ -437,7 +683,7 @@ function getHarnessUsage() {
       available: false,
       plan: 'Local / BYOK',
       contextWindow: '200.000 Tokens',
-      remaining: 'Lokale Ausführung',
+      remaining: `Modell: ${clineModel}`,
       cost: 'Eigenes Modell',
       badge: 'Bereit'
     }
@@ -459,32 +705,20 @@ function getHarnessUsage() {
     }
   });
 
-  // Query live OpenCode stats if available
-  try {
-    const raw = execSync("opencode stats --cost --json 2>/dev/null", { encoding: "utf8", timeout: 3000 });
-    const data = JSON.parse(raw);
-    if (data && data.tokens) {
-      const totalTokens = (data.tokens.input || 0) + (data.tokens.output || 0);
-      usage.opencode.tokensUsed = totalTokens;
-      usage.opencode.cost = `$${data.cost || 0}`;
-      usage.opencode.sessions = data.sessions || 0;
-      usage.opencode.remaining = `Unbegrenzt (${Math.round(totalTokens / 1000000 * 10) / 10}M Tokens genutzt)`;
-      usage.opencode.badge = `Unbegrenzt (${Math.round(totalTokens / 1000000 * 10) / 10}M genutzt)`;
-    }
-  } catch {}
+  cachedCostsData = {
+    usage,
+    omniroute: omniCost,
+    opencode: opencodeStats,
+    timestamp: now
+  };
+  costsCachedAt = now;
 
-  // Query Claude auth status
-  try {
-    const raw = execSync("claude auth status 2>/dev/null", { encoding: "utf8", timeout: 2000 });
-    const auth = JSON.parse(raw);
-    if (auth && auth.loggedIn) {
-      usage.claude_code.plan = auth.apiKeySource || auth.authMethod || 'API Key';
-      usage.claude_code.remaining = '1M Tokens Kontextfenster';
-      usage.claude_code.badge = '1M Token Fenster';
-    }
-  } catch {}
+  return cachedCostsData;
+}
 
-  return usage;
+function getHarnessUsage(forceRefresh = false) {
+  const data = fetchCliCostsAndUsage(forceRefresh);
+  return data.usage;
 }
 
 // --- REST API ENDPOINTS ---
@@ -621,11 +855,19 @@ app.post('/api/installer/install', (req, res) => {
 });
 
 app.get('/api/usage', (req, res) => {
-  res.json(getHarnessUsage());
+  const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+  res.json(getHarnessUsage(refresh));
+});
+
+app.get('/api/costs', (req, res) => {
+  const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+  const data = fetchCliCostsAndUsage(refresh);
+  res.json(data);
 });
 
 app.get('/api/model-presets', (req, res) => {
-  res.json(MODEL_PRESETS);
+  const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+  res.json(getCliModels(refresh));
 });
 
 app.get('/api/workspace', (req, res) => {

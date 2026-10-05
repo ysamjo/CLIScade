@@ -78,6 +78,9 @@ const dom = {
   statActiveProject: document.getElementById('stat-active-project'),
 
   // Harness Settings
+  refreshModelsBtn: document.getElementById('refresh-models-btn'),
+  modelsRefreshBanner: document.getElementById('models-refresh-banner'),
+  modelsRefreshText: document.getElementById('models-refresh-text'),
   addRouteBtn: document.getElementById('add-route-btn'),
   harnessConfigList: document.getElementById('harness-config-list'),
   saveSettingsBtn: document.getElementById('save-settings-btn'),
@@ -105,13 +108,18 @@ const dom = {
   newRouteName: document.getElementById('new-route-name'),
   confirmAddRouteBtn: document.getElementById('confirm-add-route-btn'),
 
-  // Usage & Quota
+  // Usage & Quota & Telemetry
   topUsageBtn: document.getElementById('top-usage-btn'),
   topUsageBadge: document.getElementById('top-usage-badge'),
   routeUsagePill: document.getElementById('route-usage-pill'),
   routeUsageText: document.getElementById('route-usage-text'),
   usageTableBody: document.getElementById('usage-table-body'),
   refreshUsageBtn: document.getElementById('refresh-usage-btn'),
+  statOmniCost: document.getElementById('stat-omni-cost'),
+  statOmniTokens: document.getElementById('stat-omni-tokens'),
+  statOpencodeTokens: document.getElementById('stat-opencode-tokens'),
+  omnirouteProvidersList: document.getElementById('omniroute-providers-list'),
+  opencodeModelsList: document.getElementById('opencode-models-list'),
 
   // Mobile & Remote
   sidebar: document.getElementById('sidebar'),
@@ -234,7 +242,7 @@ function switchSettingsSection(sectionId) {
   } else if (sectionId === 'diagnostics') {
     renderDiagnosticsTable();
   } else if (sectionId === 'usage') {
-    renderUsageTable();
+    renderUsageUI();
   } else if (sectionId === 'remote') {
     loadRemoteConfig();
   } else if (sectionId === 'schedules') {
@@ -491,12 +499,15 @@ function hydrateIcons(root) {
 }
 
 // --- MODEL PRESETS & STATUS ---
-async function loadModelPresets() {
+async function loadModelPresets(forceRefresh = false) {
   try {
-    const res = await fetch('/api/model-presets');
+    const url = forceRefresh ? '/api/model-presets?refresh=1' : '/api/model-presets';
+    const res = await fetch(url);
     state.modelPresets = await res.json();
+    return state.modelPresets;
   } catch (err) {
     console.error("Fehler beim Laden der Modell-Presets:", err);
+    return state.modelPresets;
   }
 }
 
@@ -1006,10 +1017,13 @@ async function loadSkills() {
 }
 
 // --- USAGE & QUOTA ---
-async function loadUsage() {
+async function loadUsage(forceRefresh = false) {
   try {
-    const res = await fetch('/api/usage');
-    state.usageData = await res.json();
+    const url = forceRefresh ? '/api/costs?refresh=1' : '/api/costs';
+    const res = await fetch(url);
+    const data = await res.json();
+    state.costsData = data;
+    state.usageData = data.usage || data;
     renderUsageUI();
   } catch (err) {
     console.error("Fehler beim Laden der Usage:", err);
@@ -1025,10 +1039,110 @@ function renderUsageUI() {
     dom.topUsageBadge.textContent = `${totalReady}/8 Bereit`;
   }
 
-  // 2. Route Usage Pill (Prompt area)
+  // 2. Telemetry Stats Grid
+  if (state.costsData) {
+    if (dom.statOmniCost && state.costsData.omniroute) {
+      dom.statOmniCost.textContent = state.costsData.omniroute.totalCost || '$0.00';
+    }
+    if (dom.statOmniTokens && state.costsData.omniroute) {
+      dom.statOmniTokens.textContent = state.costsData.omniroute.totalTokensFormatted || '0 Tokens';
+    }
+    if (dom.statOpencodeTokens && state.costsData.opencode) {
+      dom.statOpencodeTokens.textContent = state.costsData.opencode.totalTokensFormatted || '0 Tokens';
+    }
+
+    // 3. OmniRoute Providers Mini-Table
+    if (dom.omnirouteProvidersList && state.costsData.omniroute && state.costsData.omniroute.providers) {
+      const provs = state.costsData.omniroute.providers.slice(0, 10);
+      if (provs.length === 0) {
+        dom.omnirouteProvidersList.innerHTML = '<em>Keine Proxy-Aufrufe verzeichnet</em>';
+      } else {
+        let html = `
+          <div style="margin-bottom:6px; font-size:12px;">
+            <span><strong>Gesamt geroutet:</strong> ${state.costsData.omniroute.totalTokensFormatted}</span> · 
+            <span><strong>Anfragen:</strong> ${state.costsData.omniroute.totalReqs.toLocaleString()}</span> · 
+            <span><strong>Kosten:</strong> <strong style="color:var(--accent);">${state.costsData.omniroute.totalCost}</strong></span>
+          </div>
+          <table style="width:100%; border-collapse:collapse; margin-top:4px; font-size:11px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border-color); text-align:left; color:var(--text-muted);">
+                <th style="padding:4px 6px;">Provider / Gruppe</th>
+                <th style="padding:4px 6px;">Requests</th>
+                <th style="padding:4px 6px;">Tokens In</th>
+                <th style="padding:4px 6px;">Tokens Out</th>
+                <th style="padding:4px 6px;">Kosten (USD)</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        provs.forEach(p => {
+          html += `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+              <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(p.group)}</td>
+              <td style="padding:4px 6px; font-family:monospace;">${escapeHtml(p.reqs)}</td>
+              <td style="padding:4px 6px; font-family:monospace; color:#60a5fa;">${escapeHtml(p.tokensIn)}</td>
+              <td style="padding:4px 6px; font-family:monospace; color:#34d399;">${escapeHtml(p.tokensOut)}</td>
+              <td style="padding:4px 6px; font-weight:600; color:${p.costNum > 0 ? 'var(--accent)' : 'var(--text-muted)'};">${escapeHtml(p.cost)}</td>
+            </tr>
+          `;
+        });
+        html += `</tbody></table>`;
+        dom.omnirouteProvidersList.innerHTML = html;
+      }
+    }
+
+    // 4. OpenCode Telemetry Details
+    if (dom.opencodeModelsList && state.costsData.opencode) {
+      const oc = state.costsData.opencode;
+      const models = (oc.models || []).slice(0, 6);
+      let html = `
+        <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:8px; font-size:12px;">
+          <span><strong>Sessions:</strong> ${oc.sessions || 0}</span>
+          <span><strong>Prompts:</strong> ${oc.prompts || 0}</span>
+          <span><strong>Input Tokens:</strong> ${(oc.inputTokens || 0).toLocaleString()}</span>
+          <span><strong>Output Tokens:</strong> ${(oc.outputTokens || 0).toLocaleString()}</span>
+          <span><strong>Cache Read:</strong> ${(oc.cacheTokens || 0).toLocaleString()}</span>
+        </div>
+      `;
+      if (models.length > 0) {
+        html += `
+          <table style="width:100%; border-collapse:collapse; margin-top:4px; font-size:11px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border-color); text-align:left; color:var(--text-muted);">
+                <th style="padding:4px 6px;">Modell</th>
+                <th style="padding:4px 6px;">Provider</th>
+                <th style="padding:4px 6px;">Steps</th>
+                <th style="padding:4px 6px;">Input</th>
+                <th style="padding:4px 6px;">Output</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        models.forEach(m => {
+          const mid = m.model ? m.model.id : 'default';
+          const mprov = m.model ? m.model.providerID : 'opencode';
+          const inTok = m.tokens ? (m.tokens.input || 0).toLocaleString() : '0';
+          const outTok = m.tokens ? (m.tokens.output || 0).toLocaleString() : '0';
+          html += `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+              <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(mid)}</td>
+              <td style="padding:4px 6px; color:var(--text-muted);">${escapeHtml(mprov)}</td>
+              <td style="padding:4px 6px; font-family:monospace;">${m.steps || 0}</td>
+              <td style="padding:4px 6px; font-family:monospace; color:#60a5fa;">${inTok}</td>
+              <td style="padding:4px 6px; font-family:monospace; color:#34d399;">${outTok}</td>
+            </tr>
+          `;
+        });
+        html += `</tbody></table>`;
+      }
+      dom.opencodeModelsList.innerHTML = html;
+    }
+  }
+
+  // 5. Route Usage Pill (Prompt area)
   updateRouteUsagePill();
 
-  // 3. Settings Table
+  // 6. Settings Table
   renderUsageTable();
 }
 
@@ -1093,6 +1207,24 @@ function renderUsageTable() {
     const item = state.usageData[key];
     if (!item) return;
 
+    let quotaHtml = '';
+    if (key === 'claude_code') {
+      quotaHtml = `
+        <div><strong style="color:var(--text-main);">${escapeHtml(item.remaining || 'Pay-per-Token')}</strong></div>
+        <div style="font-size:11px; color:var(--text-muted);">${item.tokensFormatted ? escapeHtml(item.tokensFormatted) + ' geroutet' : ''}${item.cost ? ' · ' + escapeHtml(item.cost) : ''}</div>
+      `;
+    } else if (key === 'opencode') {
+      quotaHtml = `
+        <div><strong style="color:#10b981;">${escapeHtml(item.remaining || 'Unbegrenzt')}</strong></div>
+        <div style="font-size:11px; color:var(--text-muted);">${item.tokensFormatted ? escapeHtml(item.tokensFormatted) + ' erfasst' : ''}${item.sessions ? ` (${item.sessions} Sessions)` : ''}</div>
+      `;
+    } else {
+      quotaHtml = `
+        <div><strong>${escapeHtml(item.remaining || '-')}</strong></div>
+        ${item.tokensUsed ? `<div style="font-size:11px; color:var(--text-muted);">${item.tokensUsed.toLocaleString()} Tokens verbraucht${item.sessions ? ` (${item.sessions} Sessions)` : ''}</div>` : ''}
+      `;
+    }
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>
@@ -1102,15 +1234,14 @@ function renderUsageTable() {
         </div>
       </td>
       <td>
-        <span style="font-size:12px; color:var(--text-main);">${escapeHtml(item.plan)}</span>
-        ${item.cost ? `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.cost)}</div>` : ''}
+        <span style="font-size:12px; color:var(--text-main); font-weight:600;">${escapeHtml(item.plan)}</span>
+        ${item.cost ? `<div style="font-size:11px; color:${key === 'claude_code' ? 'var(--accent)' : 'var(--text-muted)'}; font-weight:500;">${escapeHtml(item.cost)}</div>` : ''}
       </td>
       <td>
         <strong style="color:var(--accent-hover);">${escapeHtml(item.contextWindow || '-')}</strong>
       </td>
       <td>
-        <div><strong>${escapeHtml(item.remaining || '-')}</strong></div>
-        ${item.tokensUsed ? `<div style="font-size:11px; color:var(--text-muted);">${item.tokensUsed.toLocaleString()} Tokens bisher verbraucht${item.sessions ? ` (${item.sessions} Sessions)` : ''}</div>` : ''}
+        ${quotaHtml}
       </td>
       <td>
         <span class="diagnostics-status-badge ${item.available ? 'online' : 'offline'}">
@@ -1172,7 +1303,33 @@ function setupEventListeners() {
     dom.routeUsagePill.addEventListener('click', () => openSettingsModal('usage'));
   }
   if (dom.refreshUsageBtn) {
-    dom.refreshUsageBtn.addEventListener('click', () => loadUsage());
+    dom.refreshUsageBtn.addEventListener('click', () => loadUsage(true));
+  }
+  if (dom.refreshModelsBtn) {
+    dom.refreshModelsBtn.addEventListener('click', async () => {
+      dom.refreshModelsBtn.disabled = true;
+      dom.refreshModelsBtn.textContent = 'Frage CLIs ab...';
+      try {
+        const presets = await loadModelPresets(true);
+        renderHarnessConfigList();
+        updateNewRouteModelOptions();
+        const openCodeCount = presets.opencode ? presets.opencode.length - 1 : 0;
+        const omniCount = presets.claude_code ? presets.claude_code.length - 1 : 0;
+        const qoderCount = presets.qoder ? presets.qoder.length - 1 : 0;
+        if (dom.modelsRefreshBanner && dom.modelsRefreshText) {
+          dom.modelsRefreshText.innerHTML = `✓ <strong>Modelle live aktualisiert:</strong> ${openCodeCount} OpenCode-Modelle, ${omniCount} OmniRoute-Modelle und ${qoderCount} Qoder-Modelle synchronisiert.`;
+          dom.modelsRefreshBanner.classList.remove('hidden');
+          setTimeout(() => {
+            if (dom.modelsRefreshBanner) dom.modelsRefreshBanner.classList.add('hidden');
+          }, 5000);
+        }
+      } catch (err) {
+        alert("Fehler beim Abrufen der Modelle: " + err.message);
+      } finally {
+        dom.refreshModelsBtn.disabled = false;
+        dom.refreshModelsBtn.textContent = 'Modelle aus CLIs neu laden';
+      }
+    });
   }
   if (dom.harnessOverride) {
     dom.harnessOverride.addEventListener('change', () => updateRouteUsagePill());

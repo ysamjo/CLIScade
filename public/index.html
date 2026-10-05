@@ -315,7 +315,14 @@
                 <h4>Harness-Reihenfolge & Modell-Auswahl</h4>
                 <p>Wähle für jedes Harness das gewünschte Modell per Dropdown. Sortiere die Priorität der Werkzeuge oder lege zusätzliche Routen an.</p>
               </div>
-              <button id="add-route-btn" class="btn btn-secondary">+ Route hinzufügen</button>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button id="refresh-models-btn" class="btn btn-secondary" title="Fragt live /models und CLI-APIs ab">Modelle aus CLIs neu laden</button>
+                <button id="add-route-btn" class="btn btn-secondary">+ Route hinzufügen</button>
+              </div>
+            </div>
+
+            <div id="models-refresh-banner" class="settings-card hidden" style="padding:10px 14px; margin-bottom:12px; background:rgba(99,102,241,0.08); border-color:var(--accent);">
+              <span id="models-refresh-text" style="font-size:12px; color:var(--text-main);"></span>
             </div>
 
             <div class="table-container">
@@ -420,14 +427,29 @@
               <button id="refresh-usage-btn" class="btn btn-secondary">Aktualisieren</button>
             </div>
 
+            <div class="status-grid" style="margin-bottom: 16px;">
+              <div class="status-stat">
+                <span class="stat-label">OmniRoute Live (Kosten)</span>
+                <span id="stat-omni-cost" class="stat-value mono" style="color:var(--accent);">$0.00</span>
+              </div>
+              <div class="status-stat">
+                <span class="stat-label">OmniRoute Tokens (Routing)</span>
+                <span id="stat-omni-tokens" class="stat-value mono">0 Tokens</span>
+              </div>
+              <div class="status-stat">
+                <span class="stat-label">OpenCode Telemetrie</span>
+                <span id="stat-opencode-tokens" class="stat-value mono" style="color:#10b981;">0 Tokens</span>
+              </div>
+            </div>
+
             <div class="diagnostics-table-container">
               <table class="diagnostics-table usage-table">
                 <thead>
                   <tr>
                     <th>Harness / Agent</th>
-                    <th>Abrechnung & Plan</th>
+                    <th>Abrechnung & Routing</th>
                     <th>Kontextfenster</th>
-                    <th>Verbleibendes Kontingent</th>
+                    <th>Verbrauchte Tokens / Kontingent</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -437,13 +459,36 @@
               </table>
             </div>
 
+            <!-- OMNIROUTE & OPENCODE DETAILS -->
+            <div class="settings-card" id="omniroute-details-card">
+              <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>OmniRoute Proxy & Kostenaufstellung (omniroute cost)</span>
+                <span id="omniroute-card-badge" class="order-badge" style="background:rgba(99,102,241,0.15); color:var(--accent);">Live CLI</span>
+              </h5>
+              <div id="omniroute-providers-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+
+            <div class="settings-card" id="opencode-details-card">
+              <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>OpenCode Telemetrie & Tokens (opencode stats --cost)</span>
+                <span id="opencode-card-badge" class="order-badge" style="background:rgba(16,185,129,0.15); color:#10b981;">Live CLI</span>
+              </h5>
+              <div id="opencode-models-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+
             <div class="settings-card">
-              <h5 class="card-subtitle">Informationen zu Kontingenten & Tokens</h5>
+              <h5 class="card-subtitle">Informationen zu Kontingenten & Abrechnung</h5>
               <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
-                • <strong>Claude Code / Antigravity</strong>: Bieten bis zu 1.000.000 Tokens Kontextfenster pro Prompt. Der verbleibende Kontext wird nach jedem Schritt transparent ausgewiesen.<br/>
-                • <strong>OpenCode / Freebuff / CodeBuddy</strong>: Nutzen im Standard unmetered/kostenfreie Modelle ohne striktes Token-Abrechnungslimit.<br/>
-                • <strong>Codex</strong>: Nutzt Ihre ChatGPT Plus/Pro Web-Session mit dynamischen Modell-Rate-Limits.<br/>
-                • <strong>Qoder</strong>: Verfügt über monatliche Account-Credits. Bei Erreichen des Limits erfolgt ein transparenter Hinweis.
+                • <strong>Claude Code</strong>: Routet über OmniRoute als Proxy mit API-Key (Pay-per-Token). Es gibt <strong>kein monatliches Abo-Budgetlimit</strong>; alle Tokens und USD-Kosten werden live über <code>omniroute cost</code> synchronisiert.<br/>
+                • <strong>Antigravity (AGY)</strong>: Bietet bis zu 1.000.000 Tokens Kontextfenster im Developer Quota (Google AI Studio, 15 RPM).<br/>
+                • <strong>OpenCode</strong>: Live erfasste Statistiken via <code>opencode stats --cost</code> mit transparentem Token- und Session-Verlauf.<br/>
+                • <strong>Freebuff / CodeBuddy</strong>: Nutzen standardmäßig unmetered / kostenfreie Community-Modelle ohne Abrechnungslimit.<br/>
+                • <strong>Codex</strong>: Nutzt Ihre ChatGPT Plus/Pro Web-Session (im OpenAI-Abonnement enthalten).<br/>
+                • <strong>Qoder / Cline</strong>: Verwenden Account-Credits bzw. konfigurierte Bring-Your-Own-Key / lokale Modelle.
               </p>
             </div>
           </div>
