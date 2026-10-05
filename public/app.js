@@ -10,6 +10,7 @@ let state = {
   modelPresets: {},
   modelTests: {},
   expandedProjects: new Set(),
+  showTasklessFolders: false,
   activeAgentsTab: 'rootDev',
   agentsData: null,
   usageData: null,
@@ -951,7 +952,30 @@ function renderProjectTree() {
     return;
   }
 
-  state.projects.forEach(p => {
+  const taskCount = new Map();
+  state.tasks.forEach(t => {
+    if (!t.projectPath) return;
+    taskCount.set(t.projectPath, (taskCount.get(t.projectPath) || 0) + 1);
+  });
+
+  // The sidebar is a task history, not a file browser: folders without tasks stay
+  // out of the way, and the current target folder remains visible so switching
+  // projects is still possible.
+  const hiddenTaskless = state.projects.filter(
+    p => !taskCount.get(p.path) && p.path !== state.activeProject
+  );
+  const visibleProjects = state.showTasklessFolders
+    ? state.projects
+    : state.projects.filter(p => taskCount.get(p.path) || p.path === state.activeProject);
+
+  if (visibleProjects.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'empty-task-hint';
+    hint.textContent = 'Noch kein Ordner mit Tasks.';
+    dom.projectTree.appendChild(hint);
+  }
+
+  visibleProjects.forEach(p => {
     const isExpanded = state.expandedProjects.has(p.path);
     const isActive = p.path === state.activeProject;
     const projectTasks = state.tasks.filter(t => t.projectPath === p.path);
@@ -1039,6 +1063,26 @@ function renderProjectTree() {
     node.appendChild(taskList);
     dom.projectTree.appendChild(node);
   });
+
+  if (!state.showTasklessFolders && hiddenTaskless.length > 0) {
+    const more = document.createElement('button');
+    more.className = 'tree-show-more';
+    more.textContent = `${hiddenTaskless.length} Ordner ohne Tasks ausgeblendet — einblenden`;
+    more.addEventListener('click', () => {
+      state.showTasklessFolders = true;
+      renderProjectTree();
+    });
+    dom.projectTree.appendChild(more);
+  } else if (state.showTasklessFolders && hiddenTaskless.length > 0) {
+    const less = document.createElement('button');
+    less.className = 'tree-show-more';
+    less.textContent = 'Nur Ordner mit Tasks zeigen';
+    less.addEventListener('click', () => {
+      state.showTasklessFolders = false;
+      renderProjectTree();
+    });
+    dom.projectTree.appendChild(less);
+  }
 }
 
 function toggleProjectExpand(projectPath) {

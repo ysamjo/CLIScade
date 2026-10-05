@@ -358,6 +358,24 @@ body {
   padding: 4px 8px;
 }
 
+.tree-show-more {
+  width: 100%;
+  margin: 6px 0 2px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-show-more:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
 .sidebar-nav {
   padding: 10px 12px;
   display: flex;
