@@ -670,6 +670,7 @@ body {
   font-size: 13px;
   color: #e5e7eb;
   overflow-y: auto;
+  overflow-anchor: none;
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;

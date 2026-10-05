@@ -487,13 +487,25 @@ function formatReasoningAndOutput(html) {
   return html;
 }
 
+// Auto-follow stays on until the reader scrolls away from the bottom; scrolling
+// back down re-arms it, so a running task never fights manual reading.
+let terminalFollowOutput = true;
+
+function scrollTerminalToBottom() {
+  if (!terminalFollowOutput) return;
+  dom.terminalBody.scrollTop = dom.terminalBody.scrollHeight;
+}
+
 function appendTerminalOutput(htmlContent) {
   const placeholder = dom.terminalBody.querySelector('.terminal-placeholder');
   if (placeholder) placeholder.remove();
 
   streamBuffer += htmlContent;
   dom.terminalBody.innerHTML = formatReasoningAndOutput(streamBuffer);
-  dom.terminalBody.scrollTop = dom.terminalBody.scrollHeight;
+  scrollTerminalToBottom();
+  // Replacing the whole content re-wraps every line, so the final height is only
+  // known after the next layout pass; pinning once leaves the view short.
+  requestAnimationFrame(scrollTerminalToBottom);
 }
 
 function setTerminalContent(htmlContent, title) {
@@ -502,6 +514,7 @@ function setTerminalContent(htmlContent, title) {
     dom.terminalSessionTitle.textContent = title;
   }
   dom.terminalBody.innerHTML = htmlContent ? formatReasoningAndOutput(htmlContent) : '<div class="terminal-placeholder">Keine Ausgabe für diesen Task vorhanden.</div>';
+  terminalFollowOutput = false;
   dom.terminalBody.scrollTop = 0;
 }
 
@@ -1755,9 +1768,15 @@ function setupEventListeners() {
   });
 
   // Terminal buttons
+  dom.terminalBody.addEventListener('scroll', () => {
+    const b = dom.terminalBody;
+    terminalFollowOutput = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
+  });
+
   if (dom.clearTerminalBtn) {
     dom.clearTerminalBtn.addEventListener('click', () => {
       streamBuffer = '';
+      terminalFollowOutput = true;
       dom.terminalBody.innerHTML = '<div class="terminal-placeholder">Ausgabe geleert. Bereit für neue Aufgaben.</div>';
     });
   }
@@ -1964,6 +1983,7 @@ function sendPrompt() {
   };
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    terminalFollowOutput = true;
     state.ws.send(JSON.stringify(payload));
     dom.promptInput.value = '';
     removeAttachedImage();
