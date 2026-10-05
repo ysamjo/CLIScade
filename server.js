@@ -488,6 +488,11 @@ const CLI_INSTALL_REGISTRY = {
   }
 };
 
+// Harnesses whose CLI has no headless/print flag and only renders a full-screen TUI.
+// Without a real TTY they abort immediately ("Terminal protocol transition failed")
+// and leave their screen-redraw bytes in the output pipe, so they cannot be dispatched.
+const TUI_ONLY_COMMANDS = new Set(['freebuff']);
+
 let healthCache = null;
 let healthCacheTime = 0;
 
@@ -1522,19 +1527,6 @@ function buildCliCommand(selectedRoute, fullPrompt, effectiveModel) {
     if (effectiveModel && effectiveModel !== 'Standard') {
       args.push('-m', effectiveModel);
     }
-  } else if (selectedRoute.command === 'freebuff' || selectedRoute.harness === 'freebuff') {
-    cmd = 'freebuff';
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      try {
-        const manicodeSettingsFile = path.join(process.env.HOME, '.config', 'manicode', 'settings.json');
-        if (fs.existsSync(manicodeSettingsFile)) {
-          const settings = JSON.parse(fs.readFileSync(manicodeSettingsFile, 'utf8'));
-          settings.freebuffModel = effectiveModel;
-          fs.writeFileSync(manicodeSettingsFile, JSON.stringify(settings, null, 2), 'utf8');
-        }
-      } catch (err) {}
-    }
-    args = ['--trust-agents'];
   } else if (selectedRoute.command === 'codebuddy' || selectedRoute.command === 'cbc' || selectedRoute.harness === 'codebuddy') {
     cmd = 'codebuddy';
     args = ['-p', '-y'];
@@ -1707,6 +1699,12 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     return callback(new Error(errText), '');
   }
 
+  if (TUI_ONLY_COMMANDS.has(selectedRoute.command)) {
+    const errText = `"${selectedRoute.command}" ist ein reines TUI-CLI ohne Headless-Modus und kann nicht automatisiert ausgeführt werden.`;
+    notify({ type: 'output', html: `<span style="color:#ef4444;">[Fehler: ${errText}]</span>\n` });
+    return callback(new Error(errText), '');
+  }
+
   const { cmd, args } = buildCliCommand(selectedRoute, fullPrompt, selectedRoute.model || 'Standard');
   let collectedOutput = '';
 
@@ -1717,13 +1715,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     });
     if (taskWsMap.get(taskRecord)) activeProcess = child;
 
-    const isFreebuff = (selectedRoute.command === 'freebuff' || selectedRoute.harness === 'freebuff');
-    if (isFreebuff && child.stdin) {
-      child.stdin.write(fullPrompt + '\n');
-      setTimeout(() => { try { child.stdin.end(); } catch {} }, 1000);
-    } else if (child.stdin) {
-      child.stdin.end();
-    }
+    if (child.stdin) child.stdin.end();
 
     child.stdout.on('data', (data) => {
       const text = data.toString();
@@ -1899,6 +1891,13 @@ function runDispatch(payload, ws, onComplete) {
       return tryRoute(routeIndex + 1, relayContext);
     }
 
+    if (TUI_ONLY_COMMANDS.has(selectedRoute.command)) {
+      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) ist ein reines TUI-CLI ohne Headless-Modus — ohne echtes Terminal (PTY) führt es keinen Auftrag aus.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
+      taskRecord.outputHtml += skipNotice;
+      notify({ type: 'output', raw: '', html: skipNotice });
+      return tryRoute(routeIndex + 1, relayContext);
+    }
+
     // Update taskRecord details
     taskRecord.harness = selectedRoute.name;
     taskRecord.command = selectedRoute.command;
@@ -1958,13 +1957,7 @@ function runDispatch(payload, ws, onComplete) {
       });
       if (ws) activeProcess = child;
 
-      const isFreebuff = (selectedRoute.command === 'freebuff' || selectedRoute.harness === 'freebuff');
-      if (isFreebuff && child.stdin) {
-        child.stdin.write(effectivePrompt + '\n');
-        setTimeout(() => { try { child.stdin.end(); } catch {} }, 1000);
-      } else if (child.stdin) {
-        child.stdin.end();
-      }
+      if (child.stdin) child.stdin.end();
 
       child.stdout.on('data', (data) => {
         const text = data.toString();
