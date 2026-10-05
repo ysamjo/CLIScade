@@ -1105,7 +1105,7 @@ app.post('/api/harness/test', (req, res) => {
   try {
     child = spawn(cmd, args, {
       cwd: workDir,
-      env: { ...process.env, FORCE_COLOR: '1' }
+      env: { ...process.env, FORCE_COLOR: '1', PWD: workDir }
     });
   } catch (err) {
     return finish({ ok: false, errorKind: 'unknown', error: err.message });
@@ -1873,7 +1873,9 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
   try {
     const child = spawn(cmd, args, {
       cwd: workingDir,
-      env: { ...process.env, FORCE_COLOR: '1' }
+      // CLIs like opencode derive their project directory from PWD, which would
+      // otherwise stay pointing at this server's own launch directory.
+      env: { ...process.env, FORCE_COLOR: '1', PWD: workingDir }
     });
     if (taskWsMap.get(taskRecord)) activeProcess = child;
 
@@ -2092,7 +2094,7 @@ function runDispatch(payload, ws, onComplete) {
     try {
       const child = spawn(cmd, args, {
         cwd: workingDir,
-        env: { ...process.env, FORCE_COLOR: '1' }
+        env: { ...process.env, FORCE_COLOR: '1', PWD: workingDir }
       });
       if (ws) activeProcess = child;
 
