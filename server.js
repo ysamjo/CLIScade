@@ -4,7 +4,7 @@ const { WebSocketServer } = require('ws');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, exec } = require('child_process');
 const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
@@ -157,82 +157,143 @@ function parseTokenCount(s) {
   return parseInt(s, 10) || 0;
 }
 
-function fetchDynamicModelPresets() {
+function execAsync(cmd, timeoutMs = 4500) {
+  return new Promise((resolve) => {
+    exec(cmd, { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+      if (err) resolve('');
+      else resolve(stdout || '');
+    });
+  });
+}
+
+async function fetchDynamicModelPresets() {
   const result = JSON.parse(JSON.stringify(DEFAULT_MODEL_PRESETS));
 
-  // 1. OpenCode: query live models via `opencode api GET /api/model`
+  // Run external CLI commands concurrently for maximum performance (OmniRoute uses presets)
+  const [opencodeRaw, qoderRaw] = await Promise.all([
+    execAsync('opencode api GET /api/model 2>/dev/null', 4000),
+    execAsync('qodercli --list-models 2>/dev/null', 4500)
+  ]);
+
+  // 1. OpenCode: query live models
   try {
-    const raw = execSync('opencode api GET /api/model', { encoding: 'utf8', timeout: 3500 });
-    const json = JSON.parse(raw);
-    const models = Array.isArray(json) ? json : (json.data || []);
-    if (models.length > 0) {
-      const list = [{ id: 'Standard', label: 'Standard / OpenCode Free Default' }];
+    if (opencodeRaw) {
+      const json = JSON.parse(opencodeRaw);
+      const models = Array.isArray(json) ? json : (json.data || []);
+      if (models.length > 0) {
+        const list = [{ id: 'Standard', label: 'Standard / OpenCode Free Default' }];
+        models.forEach(m => {
+          const id = m.id || m.modelID;
+          if (!id) return;
+          const name = m.name || id;
+          const prov = (m.settings && m.settings.provider) || m.providerID || '';
+          list.push({ id, label: prov ? `${name} (${prov})` : name });
+        });
+        result.opencode = list;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Qoder: query live models
+  try {
+    if (qoderRaw) {
+      const lines = qoderRaw.split('\n').map(l => l.trim()).filter(l => l && l !== 'MODEL' && !l.startsWith('-'));
+      if (lines.length > 0) {
+        const list = [{ id: 'Standard', label: 'Standard / Account Default' }];
+        lines.forEach(m => {
+          list.push({ id: m, label: m });
+        });
+        if (!lines.includes('claude-3-7-sonnet')) list.push({ id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet' });
+        if (!lines.includes('gpt-4o')) list.push({ id: 'gpt-4o', label: 'GPT-4o' });
+        result.qoder = list;
+      }
+    }
+  } catch (e) {}
+
+  // 4. Codex: dynamically inspect ~/.codex/models_cache.json & ~/.codex/config.toml
+  try {
+    const codexCachePath = path.join(os.homedir(), '.codex', 'models_cache.json');
+    const codexTomlPath = path.join(os.homedir(), '.codex', 'config.toml');
+    const codexList = [{ id: 'Standard', label: 'Standard / ChatGPT Plus/Pro Default' }];
+    
+    let configuredModel = null;
+    if (fs.existsSync(codexTomlPath)) {
+      const tomlText = fs.readFileSync(codexTomlPath, 'utf8');
+      const mMatch = tomlText.match(/model\s*=\s*["']([^"']+)["']/);
+      if (mMatch) {
+        configuredModel = mMatch[1];
+        codexList.push({ id: configuredModel, label: `${configuredModel} (Aktiv in config.toml)` });
+      }
+    }
+
+    if (fs.existsSync(codexCachePath)) {
+      const cacheData = JSON.parse(fs.readFileSync(codexCachePath, 'utf8'));
+      const models = Array.isArray(cacheData) ? cacheData : (cacheData.models || []);
       models.forEach(m => {
-        const id = m.id || m.modelID;
-        if (!id) return;
-        const name = m.name || id;
-        const prov = (m.settings && m.settings.provider) || m.providerID || '';
-        list.push({ id, label: prov ? `${name} (${prov})` : name });
+        const id = m.slug || m.id || m.model;
+        if (!id || id === configuredModel) return;
+        const name = m.display_name || m.name || id;
+        const desc = m.description ? ` (${m.description.slice(0, 35)}...)` : '';
+        codexList.push({ id, label: `${name}${desc}` });
       });
-      result.opencode = list;
     }
-  } catch (e) {}
 
-  // 2. Qoder: query live models via `qodercli --list-models`
-  try {
-    const raw = execSync('qodercli --list-models 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && l !== 'MODEL' && !l.startsWith('-'));
-    if (lines.length > 0) {
-      const list = [{ id: 'Standard', label: 'Standard / Account Default' }];
-      lines.forEach(m => {
-        list.push({ id: m, label: m });
-      });
-      if (!lines.includes('claude-3-7-sonnet')) list.push({ id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet' });
-      if (!lines.includes('gpt-4o')) list.push({ id: 'gpt-4o', label: 'GPT-4o' });
-      result.qoder = list;
-    }
-  } catch (e) {}
-
-  // 3. Claude Code / OmniRoute: query `omniroute models`
-  try {
-    const raw = execSync('omniroute models 2>/dev/null', { encoding: 'utf8', timeout: 3500 });
-    const clean = raw.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
-    const claudeList = [];
-    const otherList = [];
-    clean.split('\n').forEach(line => {
-      if (!line.includes('|')) return;
-      const parts = line.split('|').map(s => s.trim());
-      if (parts.length >= 3 && parts[1] && parts[1] !== 'Model ID' && !parts[1].startsWith('-')) {
-        const id = parts[1];
-        const prov = parts[2];
-        const item = { id, label: prov && prov !== '-' ? `${id} (${prov})` : id };
-        if (id.toLowerCase().includes('claude')) {
-          claudeList.push(item);
-        } else {
-          otherList.push(item);
-        }
+    const coreOpenAi = ['o3', 'o3-mini', 'o1', 'gpt-4.5-preview', 'gpt-4o', 'gpt-4o-mini', 'gpt-5'];
+    coreOpenAi.forEach(d => {
+      if (!codexList.some(m => m.id === d)) {
+        codexList.push({ id: d, label: d });
       }
     });
-
-    if (claudeList.length > 0 || otherList.length > 0) {
-      const list = [{ id: 'Standard', label: 'Standard / OmniRoute Default' }];
-      result.claude_code = list.concat(claudeList).concat(otherList);
-    }
+    result.codex = codexList;
   } catch (e) {}
 
-  // 4. Cline: inspect configured model from ~/.cline/data/settings/providers.json
+  // 5. Cline: inspect configured model from ~/.cline/data/settings/providers.json
   try {
     const clineProvPath = path.join(os.homedir(), '.cline', 'data', 'settings', 'providers.json');
     if (fs.existsSync(clineProvPath)) {
       const pData = JSON.parse(fs.readFileSync(clineProvPath, 'utf8'));
       const activeModel = pData.providers && pData.providers.cline && pData.providers.cline.settings && pData.providers.cline.settings.model;
       if (activeModel && !result.cline.some(m => m.id === activeModel)) {
-        result.cline.splice(1, 0, { id: activeModel, label: `${activeModel} (Aktiv konfiguriert)` });
+        result.cline.splice(1, 0, { id: activeModel, label: `${activeModel} (Aktiv in providers.json)` });
       }
     }
   } catch (e) {}
 
-  // 5. CodeBuddy: inspect configured model from ~/.codebuddy/settings.json
+  // 6. Antigravity CLI: inspect Google AI Studio & Gemini live presets
+  try {
+    const agyList = [{ id: 'Standard', label: 'Standard (Google AI Studio Default)' }];
+    const agyStatePath = path.join(os.homedir(), '.gemini', 'antigravity', 'antigravity_state.pbtxt');
+    if (fs.existsSync(agyStatePath)) {
+      const pbtxt = fs.readFileSync(agyStatePath, 'utf8');
+      const match = pbtxt.match(/last_selected_agent_model:\s*([^\r\n]+)/);
+      if (match && !match[1].includes('PLACEHOLDER')) {
+        agyList.push({ id: match[1].trim(), label: `${match[1].trim()} (Aktiv im CLI State)` });
+      }
+    }
+    const geminiModels = [
+      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Thinking & Reasoning)' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Deep Code & Architecture)' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Schnell & Günstig)' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Kompakt)' }
+    ];
+    geminiModels.forEach(gm => {
+      if (!agyList.some(m => m.id === gm.id)) agyList.push(gm);
+    });
+    result.antigravity_cli = agyList;
+  } catch (e) {}
+
+  // 7. Freebuff: inspect ~/.config/manicode/settings.json
+  try {
+    const manicodePath = path.join(os.homedir(), '.config', 'manicode', 'settings.json');
+    if (fs.existsSync(manicodePath)) {
+      const mData = JSON.parse(fs.readFileSync(manicodePath, 'utf8'));
+      if (mData.freebuffModel && !result.freebuff.some(m => m.id === mData.freebuffModel)) {
+        result.freebuff.splice(1, 0, { id: mData.freebuffModel, label: `${mData.freebuffModel} (Aktiv in manicode settings)` });
+      }
+    }
+  } catch (e) {}
+
+  // 8. CodeBuddy: inspect configured model from ~/.codebuddy/settings.json
   try {
     const cbPath = path.join(os.homedir(), '.codebuddy', 'settings.json');
     if (fs.existsSync(cbPath)) {
@@ -246,11 +307,27 @@ function fetchDynamicModelPresets() {
   return result;
 }
 
-function getCliModels(forceRefresh = false) {
-  const now = Date.now();
-  if (!cachedModelPresets || forceRefresh || (now - modelPresetsCachedAt > 180000)) {
-    cachedModelPresets = fetchDynamicModelPresets();
-    modelPresetsCachedAt = now;
+let pendingDynamicModelFetch = null;
+
+// Lazy loader: ONLY queries CLIs when forceRefresh is true (e.g. user in settings tab)!
+async function getCliModels(forceRefresh = false) {
+  if (!cachedModelPresets) {
+    cachedModelPresets = JSON.parse(JSON.stringify(DEFAULT_MODEL_PRESETS));
+  }
+  if (forceRefresh) {
+    if (!pendingDynamicModelFetch) {
+      pendingDynamicModelFetch = (async () => {
+        try {
+          const fresh = await fetchDynamicModelPresets();
+          cachedModelPresets = fresh;
+          modelPresetsCachedAt = Date.now();
+          return fresh;
+        } finally {
+          pendingDynamicModelFetch = null;
+        }
+      })();
+    }
+    return await pendingDynamicModelFetch;
   }
   return cachedModelPresets;
 }
@@ -866,9 +943,10 @@ app.get('/api/costs', (req, res) => {
   res.json(data);
 });
 
-app.get('/api/model-presets', (req, res) => {
+app.get('/api/model-presets', async (req, res) => {
   const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
-  res.json(getCliModels(refresh));
+  const models = await getCliModels(refresh);
+  res.json(models);
 });
 
 app.get('/api/workspace', (req, res) => {

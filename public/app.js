@@ -258,6 +258,7 @@ function switchSettingsSection(sectionId) {
     }
   } else if (sectionId === 'harnesses') {
     renderHarnessConfigList();
+    refreshHarnessModelsOnTabOpen();
   } else if (sectionId === 'agents') {
     renderAgentsEditor();
   } else if (sectionId === 'diagnostics') {
@@ -532,6 +533,69 @@ async function loadModelPresets(forceRefresh = false) {
     console.error("Fehler beim Laden der Modell-Presets:", err);
     return state.modelPresets;
   }
+}
+
+let lastHarnessModelRefresh = 0;
+let refreshModelsPromise = null;
+
+async function refreshHarnessModelsOnTabOpen(force = false) {
+  const now = Date.now();
+  if (refreshModelsPromise) {
+    return refreshModelsPromise;
+  }
+  // If refreshed within the last 30 seconds and not a manual button click, skip to avoid repeating CLI queries
+  if (!force && (now - lastHarnessModelRefresh < 30000)) {
+    return state.modelPresets;
+  }
+
+  lastHarnessModelRefresh = now;
+
+  refreshModelsPromise = (async () => {
+    if (dom.refreshModelsBtn) {
+      dom.refreshModelsBtn.disabled = true;
+      dom.refreshModelsBtn.textContent = 'Frage CLIs ab...';
+    }
+    if (dom.modelsRefreshBanner && dom.modelsRefreshText) {
+      dom.modelsRefreshText.innerHTML = `⏳ <em>Lese Modelle dynamisch aus CLIs (OpenCode, Codex, Qoder)...</em>`;
+      dom.modelsRefreshBanner.classList.remove('hidden');
+    }
+
+    try {
+      const presets = await loadModelPresets(true);
+      renderHarnessConfigList();
+      updateNewRouteModelOptions();
+
+      const openCodeCount = presets.opencode ? presets.opencode.length - 1 : 0;
+      const qoderCount = presets.qoder ? presets.qoder.length - 1 : 0;
+      const codexCount = presets.codex ? presets.codex.length - 1 : 0;
+
+      if (dom.modelsRefreshBanner && dom.modelsRefreshText) {
+        dom.modelsRefreshText.innerHTML = `✓ <strong>Modelle live synchronisiert:</strong> ${openCodeCount} OpenCode-, ${codexCount} Codex- & ${qoderCount} Qoder-Modelle erkannt.`;
+        dom.modelsRefreshBanner.classList.remove('hidden');
+        setTimeout(() => {
+          if (dom.modelsRefreshBanner) dom.modelsRefreshBanner.classList.add('hidden');
+        }, 5000);
+      }
+      return presets;
+    } catch (err) {
+      console.error("Fehler beim Abrufen der Modelle:", err);
+      if (dom.modelsRefreshBanner && dom.modelsRefreshText) {
+        dom.modelsRefreshText.innerHTML = `⚠️ <em>Modelle konnten nicht aktualisiert werden: ${escapeHtml(err.message)}</em>`;
+        setTimeout(() => {
+          if (dom.modelsRefreshBanner) dom.modelsRefreshBanner.classList.add('hidden');
+        }, 4000);
+      }
+      return state.modelPresets;
+    } finally {
+      refreshModelsPromise = null;
+      if (dom.refreshModelsBtn) {
+        dom.refreshModelsBtn.disabled = false;
+        dom.refreshModelsBtn.textContent = 'Modelle aus CLIs neu laden';
+      }
+    }
+  })();
+
+  return refreshModelsPromise;
 }
 
 async function loadStatus() {
@@ -1443,29 +1507,8 @@ function setupEventListeners() {
     dom.refreshUsageBtn.addEventListener('click', () => loadUsage(true));
   }
   if (dom.refreshModelsBtn) {
-    dom.refreshModelsBtn.addEventListener('click', async () => {
-      dom.refreshModelsBtn.disabled = true;
-      dom.refreshModelsBtn.textContent = 'Frage CLIs ab...';
-      try {
-        const presets = await loadModelPresets(true);
-        renderHarnessConfigList();
-        updateNewRouteModelOptions();
-        const openCodeCount = presets.opencode ? presets.opencode.length - 1 : 0;
-        const omniCount = presets.claude_code ? presets.claude_code.length - 1 : 0;
-        const qoderCount = presets.qoder ? presets.qoder.length - 1 : 0;
-        if (dom.modelsRefreshBanner && dom.modelsRefreshText) {
-          dom.modelsRefreshText.innerHTML = `✓ <strong>Modelle live aktualisiert:</strong> ${openCodeCount} OpenCode-Modelle, ${omniCount} OmniRoute-Modelle und ${qoderCount} Qoder-Modelle synchronisiert.`;
-          dom.modelsRefreshBanner.classList.remove('hidden');
-          setTimeout(() => {
-            if (dom.modelsRefreshBanner) dom.modelsRefreshBanner.classList.add('hidden');
-          }, 5000);
-        }
-      } catch (err) {
-        alert("Fehler beim Abrufen der Modelle: " + err.message);
-      } finally {
-        dom.refreshModelsBtn.disabled = false;
-        dom.refreshModelsBtn.textContent = 'Modelle aus CLIs neu laden';
-      }
+    dom.refreshModelsBtn.addEventListener('click', () => {
+      refreshHarnessModelsOnTabOpen(true);
     });
   }
   if (dom.harnessOverride) {
