@@ -26,9 +26,7 @@ let state = {
 // DOM Elements
 const dom = {
   // Navigation / Quick triggers
-  openSettingsBtn: document.getElementById('open-settings-btn'),
   topOpenSettingsBtn: document.getElementById('top-open-settings-btn'),
-  sidebarQuickSettingsBtn: document.getElementById('sidebar-quick-settings-btn'),
 
   // Root Directory & Tree
   rootDirDisplay: document.getElementById('root-dir-display'),
@@ -183,7 +181,6 @@ const dom = {
 
   // 1-Click Installer Modal
   openInstallerBtn: document.getElementById('open-installer-btn'),
-  settingsOpenInstallerBtn: document.getElementById('settings-open-installer-btn'),
   installerBadgeCount: document.getElementById('installer-badge-count'),
   installerModal: document.getElementById('installer-modal'),
   closeInstallerModalBtn: document.getElementById('close-installer-modal-btn'),
@@ -1373,13 +1370,28 @@ async function loadUsage(forceRefresh = false) {
   }
 }
 
+function shortTokenCount(n) {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} Mrd`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} Mio`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
+  return String(n);
+}
+
 function renderUsageUI() {
   if (!state.usageData) return;
 
-  // 1. Top Bar Badge
+  // 1. Top Bar Badge — spend and tokens. How many CLIs are installed already shows
+  // in the sidebar footer, so repeating it here under "Usage" said something else.
   if (dom.topUsageBadge) {
-    const totalReady = Object.values(state.usageData).filter(u => u.available).length;
-    dom.topUsageBadge.textContent = `${totalReady}/8 Bereit`;
+    const omni = state.costsData && state.costsData.omniroute;
+    const open = state.costsData && state.costsData.opencode;
+    if (omni || open) {
+      const tokens = (omni && omni.totalTokens || 0) + (open && open.totalTokens || 0);
+      const cost = (omni && omni.totalCostNum) || 0;
+      dom.topUsageBadge.textContent = `$${cost.toFixed(2)} · ${shortTokenCount(tokens)} Tok`;
+    } else {
+      dom.topUsageBadge.textContent = 'keine Daten';
+    }
   }
 
   // 2. Telemetry Stats Grid
@@ -1618,14 +1630,8 @@ function setupEventListeners() {
   dom.newTaskTopBtn.addEventListener('click', startNewTaskInProject);
 
   // Settings Dialog Openers
-  if (dom.openSettingsBtn) {
-    dom.openSettingsBtn.addEventListener('click', () => openSettingsModal('harnesses'));
-  }
   if (dom.topOpenSettingsBtn) {
     dom.topOpenSettingsBtn.addEventListener('click', () => openSettingsModal('workspace'));
-  }
-  if (dom.sidebarQuickSettingsBtn) {
-    dom.sidebarQuickSettingsBtn.addEventListener('click', () => openSettingsModal('workspace'));
   }
   if (dom.rootDirDisplay) {
     dom.rootDirDisplay.addEventListener('click', () => openSettingsModal('workspace'));
@@ -1680,9 +1686,6 @@ function setupEventListeners() {
   // 1-Click Installer Listeners
   if (dom.openInstallerBtn) {
     dom.openInstallerBtn.addEventListener('click', () => openInstallerModal());
-  }
-  if (dom.settingsOpenInstallerBtn) {
-    dom.settingsOpenInstallerBtn.addEventListener('click', () => openInstallerModal());
   }
   if (dom.closeInstallerModalBtn) {
     dom.closeInstallerModalBtn.addEventListener('click', closeInstallerModal);

@@ -425,10 +425,6 @@ body {
   margin-bottom: 0 !important;
 }
 
-.sidebar-footer .settings-trigger-btn {
-  margin-bottom: 0 !important;
-}
-
 .footer-title {
   font-size: 10px;
   font-weight: 700;
@@ -1683,30 +1679,6 @@ kbd {
   color: var(--text-muted);
   padding: 2px 6px;
   border-radius: 10px;
-}
-
-.settings-trigger-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 9px 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  color: var(--text-main);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-bottom: 12px;
-}
-
-.settings-trigger-btn:hover {
-  background: var(--accent-light);
-  border-color: var(--accent);
-  color: #fff;
 }
 
 .btn-settings-top {

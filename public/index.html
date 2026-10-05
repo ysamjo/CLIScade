@@ -28,7 +28,6 @@
           <span class="logo-icon" data-icon="logo"></span>
           <span class="logo-text">Harness Studio</span>
         </div>
-        <button id="sidebar-quick-settings-btn" class="icon-btn" title="Einstellungen öffnen (Cmd+,)" data-icon="settings"></button>
       </div>
 
       <!-- WORKSPACE INFO BAR -->
@@ -63,12 +62,8 @@
           <span>1-Klick CLI-Installation</span>
           <span id="installer-badge-count" class="count-pill">8 Bereit</span>
         </button>
-        <button id="open-settings-btn" class="settings-trigger-btn">
-          <span class="gear-icon" data-icon="settings"></span>
-          <span>Einstellungen & Konfiguration</span>
-        </button>
         <div class="footer-title">LOKALE HARNESSES</div>
-        <div id="harness-status-pills" class="status-pills" title="Klicken für 1-Klick Installations-Dialog">
+        <div id="harness-status-pills" class="status-pills" title="Klicken für Harness-Diagnose in den Einstellungen">
           <!-- Dynamically populated -->
         </div>
       </div>
@@ -86,7 +81,7 @@
           <button id="new-task-top-btn" class="btn btn-outline-sm" title="Frische Task-Session starten">+ Neuer Task</button>
         </div>
         <div class="top-bar-actions">
-          <button id="top-usage-btn" class="btn btn-usage-top" title="Verbleibende Usage & Kontingente">
+          <button id="top-usage-btn" class="btn btn-usage-top" title="Kosten & Token-Verbrauch öffnen">
             <span data-icon="chart"></span> <span class="btn-text-label">Usage:</span> <strong id="top-usage-badge">Lade...</strong>
           </button>
           <button id="top-open-settings-btn" class="btn btn-settings-top" title="Einstellungen öffnen">
@@ -414,15 +409,6 @@
             <div class="settings-section-header">
               <h4>Lokale Harness-Diagnose & Systemstatus</h4>
               <p>Status aller 8 auf diesem Mac erkannten Code-Agenten und CLI-Binaries.</p>
-            </div>
-
-            <!-- 1-CLICK INSTALLER PROMO CARD -->
-            <div class="settings-card installer-promo-card" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px; background:linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12)); border:1px solid rgba(168, 85, 247, 0.35);">
-              <div>
-                <strong style="font-size:14px; color:#fff;">1-Klick CLI-Installations-Center</strong>
-                <p style="font-size:12px; color:var(--text-muted); margin:4px 0 0 0;">Installiere, repariere oder aktualisiere alle 8 Harness-CLIs vollautomatisch mit einem einzigen Klick.</p>
-              </div>
-              <button id="settings-open-installer-btn" class="btn btn-primary" style="white-space:nowrap;">Installations-Dialog öffnen</button>
             </div>
 
             <div class="diagnostics-table-container">
