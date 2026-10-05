@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#090a0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Harness Studio</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- MOBILE DRAWER BACKDROP -->
+    <div id="mobile-drawer-overlay" class="mobile-drawer-overlay"></div>
+
+    <!-- SIDEBAR (PROJECTS & TASKS EXPLORER) -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">⚡</span>
+          <span class="logo-text">Harness Studio</span>
+        </div>
+        <button id="sidebar-quick-settings-btn" class="icon-btn" title="Einstellungen öffnen (Cmd+,)">⚙️</button>
+      </div>
+
+      <!-- WORKSPACE INFO BAR -->
+      <div class="sidebar-workspace-bar">
+        <div class="workspace-pill-group">
+          <div id="root-dir-display" class="workspace-root-badge" title="Root-Ordner in Einstellungen ändern">
+            📁 <span id="root-dir-text">Developer</span>
+          </div>
+          <div id="root-agents-badge" class="workspace-agents-badge" title="Übergeordnete Richtlinien in Einstellungen öffnen">
+            <span class="dot-green"></span>
+            <span id="root-agents-text">📜 AGENTS.md (8.7 KB)</span>
+          </div>
+        </div>
+        <button id="refresh-tree-btn" class="icon-btn" title="Projekte & Tasks neu laden">🔄</button>
+      </div>
+
+      <!-- PROJECTS & TASKS TREE VIEW -->
+      <div class="sidebar-section projects-section">
+        <div class="section-title-row">
+          <span class="section-title">PROJEKTE & TASKS</span>
+          <span id="projects-count-badge" class="count-badge">0</span>
+        </div>
+        <div id="project-tree" class="project-tree">
+          <!-- Dynamically populated with subfolders and indented tasks -->
+        </div>
+      </div>
+
+      <!-- SIDEBAR FOOTER: SETTINGS TRIGGER & HARNESS STATUS -->
+      <div class="sidebar-footer">
+        <button id="open-installer-btn" class="installer-trigger-btn" title="1-Klick Installations-Center für alle 8 CLIs öffnen">
+          <span class="bolt-icon">⚡</span>
+          <span>1-Klick CLI-Installation</span>
+          <span id="installer-badge-count" class="count-pill">8 Bereit</span>
+        </button>
+        <button id="open-settings-btn" class="settings-trigger-btn">
+          <span class="gear-icon">⚙️</span>
+          <span>Einstellungen & Konfiguration</span>
+        </button>
+        <div class="footer-title">LOKALE HARNESSES</div>
+        <div id="harness-status-pills" class="status-pills" title="Klicken für 1-Klick Installations-Dialog">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN STUDIO WORKSPACE -->
+    <main class="main-content">
+      <!-- TOP STATUS BAR -->
+      <header class="top-bar">
+        <div class="active-project-badge">
+          <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen">☰</button>
+          <span class="badge-label">Aktives Projekt:</span>
+          <span id="current-project-name" class="badge-value">Lade...</span>
+          <span id="current-project-path" class="badge-path"></span>
+          <button id="new-task-top-btn" class="btn btn-outline-sm" title="Frische Task-Session starten">+ Neuer Task</button>
+        </div>
+        <div class="top-bar-actions">
+          <button id="top-usage-btn" class="btn btn-usage-top" title="Verbleibende Usage & Kontingente">
+            <span class="btn-text-label">📊 Usage:</span> <strong id="top-usage-badge">Lade...</strong>
+          </button>
+          <button id="top-open-settings-btn" class="btn btn-settings-top" title="Einstellungen öffnen">
+            <span>⚙️</span> <span class="btn-text-label">Einstellungen</span>
+          </button>
+          <span id="connection-status" class="status-indicator connected">Verbunden</span>
+        </div>
+      </header>
+
+      <!-- STUDIO (CHAT, ROUTING & LIVE TERMINAL) -->
+      <section id="tab-studio" class="tab-pane active">
+        <div class="studio-container">
+          <!-- LIVE EXECUTION BANNER -->
+          <div id="active-routing-card" class="routing-card hidden">
+            <div class="routing-card-header">
+              <span class="pulse-dot"></span>
+              <span id="route-harness-title">Routing läuft...</span>
+              <span id="route-model-title" class="pill-badge">Modell</span>
+              <span id="route-agents-badge" class="pill-badge pill-agents">📜 AGENTS.md</span>
+              <button id="cancel-run-btn" class="btn btn-danger-sm">Abbrechen</button>
+            </div>
+          </div>
+
+          <!-- TERMINAL OUTPUT -->
+          <div class="terminal-wrapper">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <span id="terminal-session-title" class="terminal-title">Live-Ausgabe</span>
+              <div class="terminal-actions">
+                <button id="clear-terminal-btn" class="btn-text">Leeren</button>
+                <button id="copy-terminal-btn" class="btn-text">Kopieren</button>
+              </div>
+            </div>
+            <div id="terminal-body" class="terminal-body">
+              <div class="terminal-placeholder">
+                Wähle links ein Projekt aus und gib unten eine Aufgabe ein. Das Studio routet automatisch nach deiner festgelegten Priorität.
+              </div>
+            </div>
+          </div>
+
+          <!-- PROMPT INPUT BAR -->
+          <div class="prompt-box">
+            <div class="prompt-controls">
+              <div class="select-group">
+                <label for="harness-override">Routing:</label>
+                <select id="harness-override" class="custom-select">
+                  <option value="auto">⚡ Auto-Route (nach Prioritätskette)</option>
+                  <option value="consensus">🤝 Konsens-Modus (Dual-Agent Debatte)</option>
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+              <div class="prompt-context-badges">
+                <span class="context-pill" id="agents-context-pill" title="Klicken, um AGENTS.md in den Einstellungen zu öffnen">
+                  📜 Kontext: <strong id="agents-context-text">Developer/AGENTS.md aktiv</strong>
+                </span>
+                <span class="context-pill usage-pill" id="route-usage-pill" title="Klicken, um Kontingente in den Einstellungen anzuzeigen">
+                  📊 Verbleibend: <strong id="route-usage-text">Lade...</strong>
+                </span>
+                <div class="active-project-hint">
+                  <span>Zielordner: <strong id="prompt-target-folder">-</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- MULTIMODAL IMAGE PREVIEW TRAY -->
+            <div id="image-preview-tray" class="image-preview-tray hidden">
+              <div class="image-preview-item">
+                <img id="preview-thumbnail" src="" alt="Vorschau" />
+                <span id="preview-filename" class="preview-filename">bild.png</span>
+                <button id="remove-image-btn" class="btn-remove-image" title="Bild entfernen">✕</button>
+              </div>
+            </div>
+
+            <div class="prompt-input-row">
+              <input type="file" id="image-upload-input" accept="image/*" style="display:none;" />
+              <textarea id="prompt-input" rows="1" placeholder="Beschreibe deine Aufgabe für den Code-Agenten... (Enter zum Absenden, Shift+Enter für neue Zeile)"></textarea>
+              <div class="prompt-btn-group">
+                <div class="prompt-btn-group-left">
+                  <button id="image-upload-btn" class="btn btn-image-upload" title="Bild oder Screenshot anfügen (Multimodal: Kamera / Galerie / Datei)">
+                    <span class="img-btn-icon">📷</span>
+                  </button>
+                  <button id="voice-input-btn" class="btn btn-voice" title="Befehl per Sprache diktieren (Web Speech API)">
+                    <span class="mic-icon">🎙️</span>
+                  </button>
+                </div>
+                <button id="send-prompt-btn" class="btn btn-primary">
+                  <span>Ausführen</span> ➔
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- EINSTELLUNGSDIALOG (SETTINGS MODAL DIALOG) -->
+  <!-- ========================================== -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="settings-modal-dialog">
+      <!-- SETTINGS HEADER -->
+      <div class="settings-dialog-header">
+        <div class="settings-dialog-title">
+          <span class="settings-dialog-icon">⚙️</span>
+          <div>
+            <h3>Einstellungen & Konfiguration</h3>
+            <span class="settings-dialog-subtitle">Arbeitsbereich, Harness-Routing, Modelle & Richtlinien</span>
+          </div>
+        </div>
+        <button id="close-settings-modal-btn" class="icon-btn-close" title="Schließen (Esc)">✕</button>
+      </div>
+
+      <!-- SETTINGS BODY WITH TWO PANES -->
+      <div class="settings-dialog-body">
+        <!-- LEFT: SETTINGS CATEGORIES NAVIGATION -->
+        <nav class="settings-sidebar-nav">
+          <button class="settings-nav-item active" data-section="workspace">
+            <span class="item-icon">📁</span>
+            <div class="item-text">
+              <span class="item-title">Arbeitsbereich & Ordner</span>
+              <span class="item-desc">Root-Pfad & Projekte</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="harnesses">
+            <span class="item-icon">⚡</span>
+            <div class="item-text">
+              <span class="item-title">Harness & Modelle</span>
+              <span class="item-desc">Prioritäten & Dropdowns</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="agents">
+            <span class="item-icon">📜</span>
+            <div class="item-text">
+              <span class="item-title">AGENTS.md Richtlinien</span>
+              <span class="item-desc">Globale & Projekt-Regeln</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="skills">
+            <span class="item-icon">🧩</span>
+            <div class="item-text">
+              <span class="item-title">Skills & MCP-Plugins</span>
+              <span class="item-desc">Zentrale Werkzeuge</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="usage">
+            <span class="item-icon">📊</span>
+            <div class="item-text">
+              <span class="item-title">Usage & Kontingente</span>
+              <span class="item-desc">Verbleibende Limits & Kosten</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="diagnostics">
+            <span class="item-icon">🩺</span>
+            <div class="item-text">
+              <span class="item-title">CLI-Diagnose & Status</span>
+              <span class="item-desc">Health-Check der 8 CLIs</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="remote">
+            <span class="item-icon">🌐</span>
+            <div class="item-text">
+              <span class="item-title">Fernzugriff & Mobile</span>
+              <span class="item-desc">PWA, Tailscale & Telegram</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="schedules">
+            <span class="item-icon">⏱️</span>
+            <div class="item-text">
+              <span class="item-title">Geplante Tasks (Cron)</span>
+              <span class="item-desc">Automatische Hintergrund-Jobs</span>
+            </div>
+          </button>
+        </nav>
+
+        <!-- RIGHT: SETTINGS CONTENT SECTIONS -->
+        <div class="settings-content-pane">
+          <!-- SECTION 1: WORKSPACE & FOLDERS -->
+          <div id="settings-sec-workspace" class="settings-section active">
+            <div class="settings-section-header">
+              <h4>Arbeitsbereich & Projekt-Ordner</h4>
+              <p>Lege fest, welches übergeordnete Verzeichnis als Projekt-Root dient. Alle Unterordner werden automatisch gescannt.</p>
+            </div>
+
+            <div class="settings-card">
+              <div class="form-group">
+                <label for="settings-root-input">Root-Verzeichnis auf deinem Mac:</label>
+                <div class="input-with-button">
+                  <input type="text" id="settings-root-input" placeholder="/Users/family/Developer" spellcheck="false" />
+                  <button id="settings-save-root-btn" class="btn btn-primary">Übernehmen & Scannen</button>
+                </div>
+                <div class="quick-paths-row">
+                  <span class="quick-label">Schnellwahl:</span>
+                  <button id="quick-path-dev-btn" class="quick-path-btn">📁 ~/Developer</button>
+                  <button id="quick-path-home-btn" class="quick-path-btn">🏠 Home (~)</button>
+                </div>
+              </div>
+              <div id="settings-root-feedback" class="feedback-text"></div>
+            </div>
+
+            <div class="settings-card">
+              <h5 class="card-subtitle">Aktueller Workspace-Status</h5>
+              <div class="status-grid">
+                <div class="status-stat">
+                  <span class="stat-label">Root-Ordner</span>
+                  <span id="stat-root-path" class="stat-value mono">/Users/family/Developer</span>
+                </div>
+                <div class="status-stat">
+                  <span class="stat-label">Gefundene Projekte</span>
+                  <span id="stat-projects-count" class="stat-value">0</span>
+                </div>
+                <div class="status-stat">
+                  <span class="stat-label">Aktives Projekt</span>
+                  <span id="stat-active-project" class="stat-value mono">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 2: HARNESSES & MODEL PRIORITIES -->
+          <div id="settings-sec-harnesses" class="settings-section">
+            <div class="settings-section-header-row">
+              <div class="settings-section-header">
+                <h4>Harness-Reihenfolge & Modell-Auswahl</h4>
+                <p>Wähle für jedes Harness das gewünschte Modell per Dropdown. Sortiere die Priorität der Werkzeuge oder lege zusätzliche Routen an.</p>
+              </div>
+              <button id="add-route-btn" class="btn btn-secondary">+ Route hinzufügen</button>
+            </div>
+
+            <div class="table-container">
+              <div class="harness-table-header">
+                <span class="col-order">Prio</span>
+                <span class="col-active">Aktiv</span>
+                <span class="col-name">Routen-Name</span>
+                <span class="col-cmd">Harness</span>
+                <span class="col-model">Modell (Dropdown)</span>
+                <span class="col-actions">Reihenfolge / Aktionen</span>
+              </div>
+              <div id="harness-config-list" class="harness-table-body">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <div class="settings-card-footer">
+              <button id="save-settings-btn" class="btn btn-primary">Prioritäten & Modelle speichern</button>
+              <span id="settings-save-feedback" class="feedback-text"></span>
+            </div>
+          </div>
+
+          <!-- SECTION 3: AGENTS.MD EDITOR -->
+          <div id="settings-sec-agents" class="settings-section">
+            <div class="settings-section-header">
+              <h4>Entwickler-Richtlinien (AGENTS.md)</h4>
+              <p>Zentrale Richtlinien werden vor jedem Prompt automatisch hierarchisch an die Agenten übergeben.</p>
+            </div>
+
+            <!-- SUB-TABS FOR AGENTS.MD -->
+            <div class="agents-tabs">
+              <button class="agents-tab-btn active" data-target="rootDev">📁 Developer/AGENTS.md (Übergeordnet)</button>
+              <button class="agents-tab-btn" data-target="project">📦 Projekt/AGENTS.md (Aktives Projekt)</button>
+              <button class="agents-tab-btn" data-target="global">⚙️ Global (~/.harness-dispatch/AGENTS.md)</button>
+            </div>
+
+            <div class="editor-file-path" id="editor-file-path-display">Lade Pfad...</div>
+
+            <div class="editor-wrapper">
+              <textarea id="agents-md-editor" class="code-editor" spellcheck="false"></textarea>
+            </div>
+
+            <div class="settings-card-footer">
+              <button id="save-agents-btn" class="btn btn-primary">Richtlinien-Datei speichern</button>
+              <span id="agents-save-feedback" class="feedback-text"></span>
+            </div>
+          </div>
+
+          <!-- SECTION 4: SKILLS & MCP-PLUGINS -->
+          <div id="settings-sec-skills" class="settings-section">
+            <div class="settings-section-header">
+              <h4>Installierte Skills & MCP-Plugins</h4>
+              <p>Zentrale Übersicht deiner installierten Werkzeuge. Einmal installiert – von allen Harnesses automatisch geteilt.</p>
+            </div>
+
+            <div id="skills-grid" class="skills-grid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- SECTION 5: CLI DIAGNOSTICS & HEALTH -->
+          <div id="settings-sec-diagnostics" class="settings-section">
+            <div class="settings-section-header">
+              <h4>Lokale Harness-Diagnose & Systemstatus</h4>
+              <p>Status aller 8 auf diesem Mac erkannten Code-Agenten und CLI-Binaries.</p>
+            </div>
+
+            <!-- 1-CLICK INSTALLER PROMO CARD -->
+            <div class="settings-card installer-promo-card" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px; background:linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12)); border:1px solid rgba(168, 85, 247, 0.35);">
+              <div>
+                <strong style="font-size:14px; color:#fff;">⚡ 1-Klick CLI-Installations-Center</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:4px 0 0 0;">Installiere, repariere oder aktualisiere alle 8 Harness-CLIs vollautomatisch mit einem einzigen Klick.</p>
+              </div>
+              <button id="settings-open-installer-btn" class="btn btn-primary" style="white-space:nowrap;">⚡ Installations-Dialog öffnen</button>
+            </div>
+
+            <div class="diagnostics-table-container">
+              <table class="diagnostics-table">
+                <thead>
+                  <tr>
+                    <th>Agent / Harness</th>
+                    <th>CLI-Befehl</th>
+                    <th>Status</th>
+                    <th>Pfad & Info</th>
+                    <th style="text-align:right;">1-Klick Aktion</th>
+                  </tr>
+                </thead>
+                <tbody id="diagnostics-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION 6: USAGE & QUOTA -->
+          <div id="settings-sec-usage" class="settings-section">
+            <div class="settings-section-header-row">
+              <div class="settings-section-header">
+                <h4>Verbleibende Usage & Kontingente</h4>
+                <p>Echtzeit-Übersicht deiner Kontingente, Rest-Tokens und Abrechnungsmodelle der 8 Code-Agenten.</p>
+              </div>
+              <button id="refresh-usage-btn" class="btn btn-secondary">🔄 Aktualisieren</button>
+            </div>
+
+            <div class="diagnostics-table-container">
+              <table class="diagnostics-table usage-table">
+                <thead>
+                  <tr>
+                    <th>Harness / Agent</th>
+                    <th>Abrechnung & Plan</th>
+                    <th>Kontextfenster</th>
+                    <th>Verbleibendes Kontingent</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="usage-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+
+            <div class="settings-card">
+              <h5 class="card-subtitle">Informationen zu Kontingenten & Tokens</h5>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
+                • <strong>Claude Code / Antigravity</strong>: Bieten bis zu 1.000.000 Tokens Kontextfenster pro Prompt. Der verbleibende Kontext wird nach jedem Schritt transparent ausgewiesen.<br/>
+                • <strong>OpenCode / Freebuff / CodeBuddy</strong>: Nutzen im Standard unmetered/kostenfreie Modelle ohne striktes Token-Abrechnungslimit.<br/>
+                • <strong>Codex</strong>: Nutzt Ihre ChatGPT Plus/Pro Web-Session mit dynamischen Modell-Rate-Limits.<br/>
+                • <strong>Qoder</strong>: Verfügt über monatliche Account-Credits. Bei Erreichen des Limits erfolgt ein transparenter Hinweis.
+              </p>
+            </div>
+          </div>
+
+          <!-- SECTION 7: REMOTE ACCESS, TAILSCALE & TELEGRAM -->
+          <div id="settings-sec-remote" class="settings-section">
+            <div class="settings-section-header">
+              <h4>Befehle & Zugriff von unterwegs</h4>
+              <p>Steuere Harness Studio von deinem Smartphone – im lokalen WLAN, weltweit verschlüsselt über Tailscale oder via Telegram Bot.</p>
+            </div>
+
+            <!-- CARD 1: PWA & WLAN -->
+            <div class="settings-card">
+              <div class="card-header-with-badge">
+                <h5 class="card-subtitle">📱 Mobile Web-App (PWA) im WLAN</h5>
+                <span class="diagnostics-status-badge online"><span class="dot"></span> Bereit</span>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
+                Öffne diesen Link auf deinem Smartphone (im selben WLAN). Tippe im mobilen Browser auf <em>"Zum Startbildschirm hinzufügen"</em> oder <em>"App installieren"</em>, um Harness Studio als echte Vollbild-App mit Sprach-Diktat zu nutzen.
+              </p>
+              <div class="remote-qr-row">
+                <div id="remote-qr-code" class="remote-qr-box">
+                  <!-- Dynamically rendered SVG QR Code -->
+                </div>
+                <div class="remote-url-info">
+                  <label style="font-size:11px; color:var(--text-dim);">Lokale Web-App Adresse:</label>
+                  <div class="input-with-button">
+                    <input type="text" id="remote-lan-url" readonly value="http://192.168.178.169:3000" />
+                    <button id="copy-lan-url-btn" class="btn btn-secondary">Kopieren</button>
+                  </div>
+                  <span class="settings-tip" style="margin-top:6px; display:block;">💡 Kamera deines Handys auf den QR-Code richten, um die App sofort zu öffnen.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- CARD 2: TAILSCALE -->
+            <div class="settings-card">
+              <div class="card-header-with-badge">
+                <h5 class="card-subtitle">🌍 Weltweiter Fernzugriff via Tailscale</h5>
+                <span id="tailscale-status-badge" class="diagnostics-status-badge offline"><span class="dot"></span> VPN einrichten</span>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
+                Mit <strong>Tailscale</strong> (kostenloses Mesh-VPN) kannst du die Web-App von überall auf der Welt (auch im 4G/5G-Mobilfunknetz) sicher öffnen, ohne Portfreigaben im Router.
+              </p>
+              <div class="settings-subcard">
+                <div style="font-size:12px; line-height:1.6;">
+                  1. Installiere Tailscale auf deinem Mac (z. B. via <a href="https://tailscale.com" target="_blank" style="color:var(--accent);">tailscale.com</a> oder Mac App Store).<br/>
+                  2. Installiere Tailscale auf deinem Smartphone und melde dich mit demselben Account an.<br/>
+                  3. Öffne im mobilen Browser die Tailscale-IP deines Macs: <code id="tailscale-url-preview">http://100.x.y.z:3000</code>.
+                </div>
+              </div>
+            </div>
+
+            <!-- CARD 3: TELEGRAM BOT -->
+            <div class="settings-card">
+              <div class="card-header-with-badge">
+                <h5 class="card-subtitle">🤖 Telegram Bot für Befehle von unterwegs (Ohne VPN)</h5>
+                <span id="telegram-bot-badge" class="diagnostics-status-badge offline"><span class="dot"></span> Inaktiv</span>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
+                Der Telegram-Bot benötigt <strong>kein VPN und keine Portfreigaben</strong>. Sende Befehle, wähle Projekte per Knopfdruck oder führe Prompts einfach per Chatnachricht von unterwegs aus.
+              </p>
+              <div class="settings-form-row">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-main);">
+                  <input type="checkbox" id="telegram-bot-enable" />
+                  Telegram Bot aktivieren
+                </label>
+              </div>
+              <div class="settings-form-group">
+                <label for="telegram-token-input">Bot Token (von <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent);">@BotFather</a>):</label>
+                <input type="password" id="telegram-token-input" class="custom-select" style="width:100%; font-family:var(--font-mono); font-size:12px;" placeholder="z. B. 123456789:ABCdefGHIjklMNO..." />
+              </div>
+              <div class="settings-form-group">
+                <label for="telegram-user-input">Erlaubte Telegram User-ID (optional, Schutz vor Fremdzugriff):</label>
+                <input type="text" id="telegram-user-input" class="custom-select" style="width:100%; font-family:var(--font-mono); font-size:12px;" placeholder="Leer lassen für automatische Kopplung beim ersten /start" />
+                <span class="settings-field-hint" style="font-size:11px; color:var(--text-dim); display:block; margin-top:4px;">Tipp: Wenn leer, koppelt sich der erste Benutzer, der dem Bot <code>/start</code> sendet, automatisch als Admin.</span>
+              </div>
+              <div class="settings-action-row" style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                <button id="save-telegram-btn" class="btn btn-primary">Bot-Einstellungen speichern</button>
+                <button id="test-telegram-btn" class="btn btn-secondary">Test-Nachricht senden</button>
+                <span id="telegram-feedback" class="settings-feedback"></span>
+              </div>
+              <div class="settings-subcard" style="margin-top:10px;">
+                <div style="font-size:11px; color:var(--text-muted); line-height:1.6;">
+                  <strong>Unterstützte Telegram-Befehle:</strong><br/>
+                  • <code>/projects</code> – Zeigt alle Repositories zum einfachen Anklicken<br/>
+                  • <code>/harness</code> – Wählt Claude Code, Codex, OpenCode, Qoder, etc.<br/>
+                  • <code>/usage</code> – Zeigt verbleibende Token & Kontingente<br/>
+                  • <code>/run &lt;Aufgabe&gt;</code> – Führt den Prompt aus und sendet die Ergebnisse<br/>
+                  • <em>Jede Textnachricht</em> – Wird automatisch als Prompt ausgeführt!
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 8: SCHEDULED TASKS & CRON -->
+            <div id="settings-sec-schedules" class="settings-section">
+              <div class="settings-section-header">
+                <h4>⏱️ Geplante Hintergrund-Tasks (Cron & Scheduler)</h4>
+                <p>Lasse wiederkehrende Aufgaben wie Code-Audits, Tests, Linter oder Refactorings zeitgesteuert und vollautomatisch im Hintergrund auf deinem Mac ausführen.</p>
+              </div>
+
+              <!-- CREATE NEW SCHEDULE -->
+              <div class="settings-card">
+                <h5 class="card-subtitle">Neuen automatisierten Task anlegen</h5>
+                <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:12px;">
+                  <div class="form-group">
+                    <label for="sched-name-input">Bezeichnung / Name:</label>
+                    <input type="text" id="sched-name-input" class="custom-select" style="width:100%;" placeholder="z. B. Täglicher Code-Audit & Linter" />
+                  </div>
+                  <div class="form-group">
+                    <label for="sched-project-select">Zielprojekt:</label>
+                    <select id="sched-project-select" class="custom-select" style="width:100%;">
+                      <!-- Dynamically populated -->
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="sched-interval-select">Ausführungs-Intervall:</label>
+                    <select id="sched-interval-select" class="custom-select" style="width:100%;">
+                      <option value="every_15_mins">Alle 15 Minuten</option>
+                      <option value="hourly">Stündlich</option>
+                      <option value="every_6_hours">Alle 6 Stunden</option>
+                      <option value="daily_02_00" selected>Täglich um 02:00 Uhr nachts</option>
+                      <option value="daily_08_00">Täglich morgens um 08:00 Uhr</option>
+                      <option value="weekly_monday">Wöchentlich (Montags 08:00 Uhr)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="sched-harness-select">Harness-Routing:</label>
+                    <select id="sched-harness-select" class="custom-select" style="width:100%;">
+                      <option value="auto">⚡ Auto-Route (Prioritätskette)</option>
+                      <option value="consensus">🤝 Konsens-Modus (Dual-Agent)</option>
+                      <!-- Populated dynamically with available harnesses -->
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label for="sched-prompt-input">Aufgabe / Prompt:</label>
+                  <textarea id="sched-prompt-input" rows="2" style="width:100%; background:var(--bg-card); border:1px solid var(--border-color); border-radius:8px; color:#fff; padding:8px 12px; font-family:var(--font-sans); font-size:13px;" placeholder="z. B. Führe alle Tests aus, behebe Warnungen und formatiere geänderte Dateien mit dem Linter."></textarea>
+                </div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                    <input type="checkbox" id="sched-telegram-notify" checked style="accent-color:var(--accent); width:16px; height:16px;" />
+                    <span>Ergebnis per Telegram-Nachricht melden</span>
+                  </label>
+                  <button id="add-schedule-btn" class="btn btn-primary">➕ Task einplanen</button>
+                </div>
+              </div>
+
+              <!-- SCHEDULED JOBS LIST -->
+              <div class="settings-card">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                  <h5 class="card-subtitle" style="margin:0;">Aktive Hintergrund-Jobs</h5>
+                  <button id="refresh-schedules-btn" class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">🔄 Aktualisieren</button>
+                </div>
+                <div class="table-container">
+                  <table class="schedules-table" style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <thead>
+                      <tr style="text-align:left; border-bottom:1px solid var(--border-color); color:var(--text-muted); font-size:11px; text-transform:uppercase;">
+                        <th style="padding:8px 10px;">Status</th>
+                        <th style="padding:8px 10px;">Job & Aufgabe</th>
+                        <th style="padding:8px 10px;">Projekt</th>
+                        <th style="padding:8px 10px;">Intervall</th>
+                        <th style="padding:8px 10px;">Letzter Lauf</th>
+                        <th style="padding:8px 10px; text-align:right;">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody id="schedules-table-body">
+                      <!-- Populated dynamically -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS FOOTER -->
+      <div class="settings-dialog-footer">
+        <span class="settings-dialog-tip">Tipp: Mit <kbd>Esc</kbd> kannst du diesen Dialog jederzeit schließen.</span>
+        <button id="close-settings-footer-btn" class="btn btn-secondary">Fertig / Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: ADD ROUTE -->
+  <!-- ========================================== -->
+  <div id="add-route-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Neue Route zur Prioritätenliste hinzufügen</h3>
+        <button id="close-route-modal-btn" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="new-route-harness">Harness:</label>
+          <select id="new-route-harness" class="custom-select">
+            <option value="claude_code">Claude Code (claude)</option>
+            <option value="codex">Codex (codex)</option>
+            <option value="cline">Cline (cline)</option>
+            <option value="opencode">OpenCode (opencode)</option>
+            <option value="antigravity_cli">Antigravity (agy)</option>
+            <option value="qoder">Qoder (qodercli)</option>
+            <option value="freebuff">Freebuff (freebuff)</option>
+            <option value="codebuddy">CodeBuddy (codebuddy)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="new-route-model">Modell:</label>
+          <select id="new-route-model" class="custom-select">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="new-route-name">Routen-Bezeichnung:</label>
+          <input type="text" id="new-route-name" placeholder="z. B. claude_sonnet_prio1" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="confirm-add-route-btn" class="btn btn-primary">Zur Prio-Liste hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: 1-KLICK CLI INSTALLATIONS-DIALOG    -->
+  <!-- ========================================== -->
+  <div id="installer-modal" class="modal-overlay hidden">
+    <div class="installer-modal-dialog">
+      <!-- HEADER -->
+      <div class="installer-modal-header">
+        <div class="installer-title-group">
+          <span class="installer-header-icon">⚡</span>
+          <div>
+            <h3>1-Klick CLI Installations-Center</h3>
+            <span class="installer-subtitle">Installiere, repariere oder aktualisiere alle 8 Harness-CLIs mit einem einzigen Klick</span>
+          </div>
+        </div>
+        <div class="installer-header-actions">
+          <button id="install-all-missing-btn" class="btn btn-primary">
+            <span>🚀 Alle fehlenden CLIs installieren</span>
+          </button>
+          <button id="close-installer-modal-btn" class="icon-btn-close" title="Schließen (Esc)">✕</button>
+        </div>
+      </div>
+
+      <!-- SUMMARY BAR -->
+      <div class="installer-summary-bar">
+        <div class="installer-summary-pills">
+          <span class="summary-pill total">
+            <span>📦</span> <strong>8</strong> CLIs
+          </span>
+          <span id="summary-pill-installed" class="summary-pill installed">
+            <span class="dot-green"></span> <strong id="summary-installed-count">8</strong> Bereit
+          </span>
+          <span id="summary-pill-missing" class="summary-pill missing">
+            <span class="dot-orange"></span> <strong id="summary-missing-count">0</strong> Fehlen
+          </span>
+        </div>
+        <div class="installer-summary-actions">
+          <button id="refresh-installer-status-btn" class="btn btn-secondary-sm">🔄 Neu prüfen</button>
+        </div>
+      </div>
+
+      <!-- LIVE TERMINAL CONSOLE -->
+      <div id="installer-console-wrapper" class="installer-console-wrapper hidden">
+        <div class="installer-console-header">
+          <div class="terminal-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <span id="installer-console-title" class="installer-console-title">Live Installations-Protokoll</span>
+          <div class="installer-console-actions">
+            <button id="clear-installer-console-btn" class="btn-text">Leeren</button>
+            <button id="hide-installer-console-btn" class="btn-text">✕ Ausblenden</button>
+          </div>
+        </div>
+        <pre id="installer-console-body" class="installer-console-body"></pre>
+      </div>
+
+      <!-- CARDS GRID -->
+      <div class="installer-modal-body">
+        <div id="installer-cards-grid" class="installer-cards-grid">
+          <!-- Dynamically populated cards for all 8 CLIs -->
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="installer-modal-footer">
+        <span class="installer-footer-hint">
+          💡 Alle CLIs werden global bzw. in <code>~/.local/bin</code> installiert und stehen sofort ohne Neustart zur Verfügung.
+        </span>
+        <button id="close-installer-footer-btn" class="btn btn-secondary">Fertig / Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
