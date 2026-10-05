@@ -107,11 +107,11 @@ const DEFAULT_MODEL_PRESETS = {
   ],
   opencode: [
     { id: 'Standard', label: 'Standard (fledge-alpha-free)' },
-    { id: 'fledge-alpha-free', label: 'Fledge Alpha (Free Tier)' },
-    { id: 'ling-3.1-flash-free', label: 'Ling 3.1 Flash (Free Tier)' },
-    { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
-    { id: 'space-bunny-free', label: 'Space Bunny (Free Tier)' },
-    { id: 'deepseek-ai/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' }
+    { id: 'opencode/fledge-alpha-free', label: 'Fledge Alpha (Free Tier)' },
+    { id: 'opencode/ling-3.1-flash-free', label: 'Ling 3.1 Flash (Free Tier)' },
+    { id: 'anthropic/claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+    { id: 'opencode/space-bunny-free', label: 'Space Bunny (Free Tier)' },
+    { id: 'nvidia/deepseek-ai/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' }
   ],
   antigravity_cli: [
     { id: 'Standard', label: 'Standard (Google AI Studio)' },
