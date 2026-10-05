@@ -224,7 +224,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g @anthropic-ai/claude-code',
     description: 'Offizielle Agentic Terminal-CLI von Anthropic (Sonnet 3.7 & Opus 4.6)',
     category: 'Frontier Agent',
-    icon: '🟣',
+    iconKey: 'claude_code_cli',
     docsUrl: 'https://docs.anthropic.com/claude/docs/claude-code'
   },
   codex_cli: {
@@ -235,7 +235,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g @openai/codex',
     description: 'Offizielle OpenAI Codex Coding-CLI für o3, o3-mini & GPT-4.5',
     category: 'Frontier Agent',
-    icon: '🟢',
+    iconKey: 'codex_cli',
     docsUrl: 'https://openai.com'
   },
   cline_cli: {
@@ -246,7 +246,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g cline',
     description: 'Autonome Open-Source Coding-CLI mit Diff-Editing & Tool-Unterstützung',
     category: 'Autonomous Agent',
-    icon: '🤖',
+    iconKey: 'cline_cli',
     docsUrl: 'https://github.com/cline/cline'
   },
   opencode_cli: {
@@ -257,7 +257,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g opencode-ai || (curl -fsSL https://opencode.ai/install.sh | bash)',
     description: 'Open-Source KI-Coding Agent für Terminal und IDE-Workflows',
     category: 'Open Source',
-    icon: '⚡',
+    iconKey: 'opencode_cli',
     docsUrl: 'https://opencode.ai'
   },
   antigravity_cli: {
@@ -268,7 +268,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g @google/antigravity || ln -sf ~/.gemini/antigravity/bin/agy ~/.local/bin/agy',
     description: 'Google Antigravity autonomous agent framework & CLI',
     category: 'DeepMind Agent',
-    icon: '🚀',
+    iconKey: 'antigravity_cli',
     docsUrl: 'https://gemini.google.com'
   },
   qoder_cli: {
@@ -280,7 +280,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g @qoder/cli',
     description: 'Enterprise AI Agent CLI mit Qwen 3.8 Coding Modellen',
     category: 'Enterprise Agent',
-    icon: '🔷',
+    iconKey: 'qoder_cli',
     docsUrl: 'https://qoder.ai'
   },
   freebuff_cli: {
@@ -291,7 +291,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g freebuff',
     description: 'Agentic Harness für Multi-Context Refactorings & Space-Bunny-Modelle',
     category: 'Specialized',
-    icon: '🐰',
+    iconKey: 'freebuff_cli',
     docsUrl: 'https://github.com/freebuff/freebuff'
   },
   codebuddy_cli: {
@@ -302,7 +302,7 @@ const CLI_INSTALL_REGISTRY = {
     installCmd: 'npm install -g codebuddy-cli',
     description: 'CodeBuddy CLI für DeepSeek v3/v4 & Coding Assistants',
     category: 'Specialized',
-    icon: '👥',
+    iconKey: 'codebuddy_cli',
     docsUrl: 'https://codebuddy.ca'
   }
 };
@@ -362,7 +362,7 @@ function getHarnessUsage() {
       contextWindow: '1.000.000 Tokens',
       remaining: '1M Kontextfenster aktiv',
       cost: 'Pay-per-token',
-      badge: '🟢 1M Kontextfenster'
+      badge: '1M Kontextfenster'
     },
     codex: {
       id: 'codex',
@@ -373,7 +373,7 @@ function getHarnessUsage() {
       contextWindow: '200.000 Tokens',
       remaining: 'ChatGPT Abonnement aktiv',
       cost: 'Im Abo enthalten',
-      badge: '🟢 ChatGPT Session'
+      badge: 'ChatGPT Session'
     },
     opencode: {
       id: 'opencode',
@@ -385,7 +385,7 @@ function getHarnessUsage() {
       remaining: 'Unbegrenzt (Free Tier)',
       tokensUsed: 0,
       cost: '$0.00',
-      badge: '🟢 Unbegrenzt'
+      badge: 'Unbegrenzt'
     },
     qoder: {
       id: 'qoder',
@@ -395,7 +395,7 @@ function getHarnessUsage() {
       plan: 'Account Credits',
       contextWindow: '128.000 Tokens',
       remaining: 'Credits aktiv',
-      badge: '🟢 Credits aktiv'
+      badge: 'Credits aktiv'
     },
     freebuff: {
       id: 'freebuff',
@@ -406,7 +406,7 @@ function getHarnessUsage() {
       contextWindow: '128.000 Tokens',
       remaining: 'Unbegrenzt (GLM 5.3 / Space Bunny)',
       cost: '$0.00',
-      badge: '🟢 Unbegrenzt'
+      badge: 'Unbegrenzt'
     },
     codebuddy: {
       id: 'codebuddy',
@@ -417,7 +417,7 @@ function getHarnessUsage() {
       contextWindow: '128.000 Tokens',
       remaining: 'Aktiv (Unmetered Models)',
       cost: '$0.00',
-      badge: '🟢 Aktiv'
+      badge: 'Aktiv'
     },
     antigravity_cli: {
       id: 'antigravity_cli',
@@ -428,7 +428,7 @@ function getHarnessUsage() {
       contextWindow: '1.000.000 Tokens',
       remaining: 'Developer Quota (15 RPM)',
       cost: 'Free Tier',
-      badge: '🟢 Gemini Quota'
+      badge: 'Gemini Quota'
     },
     cline: {
       id: 'cline',
@@ -439,7 +439,7 @@ function getHarnessUsage() {
       contextWindow: '200.000 Tokens',
       remaining: 'Lokale Ausführung',
       cost: 'Eigenes Modell',
-      badge: '🟢 Bereit'
+      badge: 'Bereit'
     }
   };
 
@@ -469,7 +469,7 @@ function getHarnessUsage() {
       usage.opencode.cost = `$${data.cost || 0}`;
       usage.opencode.sessions = data.sessions || 0;
       usage.opencode.remaining = `Unbegrenzt (${Math.round(totalTokens / 1000000 * 10) / 10}M Tokens genutzt)`;
-      usage.opencode.badge = `🟢 Unbegrenzt (${Math.round(totalTokens / 1000000 * 10) / 10}M genutzt)`;
+      usage.opencode.badge = `Unbegrenzt (${Math.round(totalTokens / 1000000 * 10) / 10}M genutzt)`;
     }
   } catch {}
 
@@ -480,7 +480,7 @@ function getHarnessUsage() {
     if (auth && auth.loggedIn) {
       usage.claude_code.plan = auth.apiKeySource || auth.authMethod || 'API Key';
       usage.claude_code.remaining = '1M Tokens Kontextfenster';
-      usage.claude_code.badge = '🟢 1M Token Fenster';
+      usage.claude_code.badge = '1M Token Fenster';
     }
   } catch {}
 
@@ -527,7 +527,7 @@ function executeCliInstall(toolId, onOutput, onDone) {
     env: {
       ...process.env,
       FORCE_COLOR: '1',
-      PATH: `/Users/family/.local/bin:/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}`
+      PATH: `${process.env.HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}`
     }
   });
 
@@ -546,10 +546,10 @@ function executeCliInstall(toolId, onOutput, onDone) {
     invalidateHarnessHealthCache();
     const updated = checkSingleCliHealth(meta);
     if (code === 0 && updated.available) {
-      if (onOutput) onOutput(`\n✅ ${meta.name} erfolgreich installiert! (${updated.version || 'bereit'} in ${updated.path})\n`);
+      if (onOutput) onOutput(`\n[Erfolg] ${meta.name} erfolgreich installiert! (${updated.version || 'bereit'} in ${updated.path})\n`);
       if (onDone) onDone(null, updated);
     } else {
-      if (onOutput) onOutput(`\n⚠️ Installation von ${meta.name} beendet mit Code ${code}.\n`);
+      if (onOutput) onOutput(`\n[Hinweis] Installation von ${meta.name} beendet mit Code ${code}.\n`);
       if (onDone) onDone(new Error(`Exit-Code ${code}`), updated);
     }
   });
@@ -901,6 +901,9 @@ app.post('/api/schedules/:id/run', (req, res) => {
 
 // Active running process tracking
 let activeProcess = null;
+// WS-Zuordnung pro Task (nicht persistiert): "Abbrechen" trifft nur UI-Läufe,
+// geplante Hintergrund-Jobs (ws = null) werden nie überschrieben.
+const taskWsMap = new WeakMap();
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -912,9 +915,10 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-function broadcastToClients(msg) {
+function broadcastToClients(msg, excludeWs) {
   const json = typeof msg === 'string' ? msg : JSON.stringify(msg);
   wss.clients.forEach(client => {
+    if (client === excludeWs) return; // Sender bekommt Nachricht nicht doppelt
     if (client.readyState === 1) { // OPEN
       try { client.send(json); } catch {}
     }
@@ -1028,8 +1032,10 @@ function runConsensusDispatch(payload, ws, onComplete) {
   const notify = (obj) => {
     if (ws && ws.readyState === 1) {
       try { ws.send(JSON.stringify(obj)); } catch {}
+      broadcastToClients(obj, ws); // an alle anderen, Sender nicht doppelt
+    } else {
+      broadcastToClients(obj);
     }
-    broadcastToClients(obj);
   };
 
   const { prompt, imagePath, projectPath } = payload;
@@ -1069,6 +1075,7 @@ function runConsensusDispatch(payload, ws, onComplete) {
   const tasksData = loadTasksData();
   tasksData.tasks.unshift(taskRecord);
   saveTasksData(tasksData);
+  if (ws) taskWsMap.set(taskRecord, ws);
 
   notify({ type: 'task_created', task: taskRecord });
   notify({
@@ -1084,7 +1091,7 @@ function runConsensusDispatch(payload, ws, onComplete) {
   });
 
   const banner = `<div class="consensus-banner">
-    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">🤝 KONSENS-MODUS AKTIV</div>
+    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">KONSENS-MODUS AKTIV</div>
     <div style="font-size:12px; color:var(--text-muted);">
       Zwei Engines arbeiten zusammen: <strong>${escapeHtml(routeA.name)}</strong> & <strong>${escapeHtml(routeB.name)}</strong>.<br/>
       Phase 1 & 2 erarbeiten eigenständige Ansätze → Phase 3 debattiert und synthetisiert die finale Lösung.
@@ -1109,19 +1116,19 @@ function runConsensusDispatch(payload, ws, onComplete) {
   }
 
   // Phase 1: Route A
-  const p1Header = `<div class="consensus-phase phase-a">🔵 <strong>Phase 1:</strong> ${escapeHtml(routeA.name)} erarbeitet Lösungsansatz A...</div>\n`;
+  const p1Header = `<div class="consensus-phase phase-a"><strong>Phase 1:</strong> ${escapeHtml(routeA.name)} erarbeitet Lösungsansatz A...</div>\n`;
   taskRecord.outputHtml += p1Header;
   notify({ type: 'output', html: p1Header });
 
   executeSingleRun(routeA, `[Phase 1 Entwurf] ${promptA}`, workingDir, notify, taskRecord, (errA, outputA) => {
     // Phase 2: Route B
-    const p2Header = `\n<div class="consensus-phase phase-b">🟣 <strong>Phase 2:</strong> ${escapeHtml(routeB.name)} erarbeitet alternativen Lösungsansatz B...</div>\n`;
+    const p2Header = `\n<div class="consensus-phase phase-b"><strong>Phase 2:</strong> ${escapeHtml(routeB.name)} erarbeitet alternativen Lösungsansatz B...</div>\n`;
     taskRecord.outputHtml += p2Header;
     notify({ type: 'output', html: p2Header });
 
     executeSingleRun(routeB, `[Phase 2 Alternativ-Entwurf] ${promptB}`, workingDir, notify, taskRecord, (errB, outputB) => {
       // Phase 3: Synthesis & Implementation
-      const p3Header = `\n<div class="consensus-phase phase-debate">✨ <strong>Phase 3 (Debatte & Synthese):</strong> Gemeinsame Prüfung & Erarbeitung der perfekten Konsens-Lösung...</div>\n`;
+      const p3Header = `\n<div class="consensus-phase phase-debate"><strong>Phase 3 (Debatte & Synthese):</strong> Gemeinsame Prüfung & Erarbeitung der perfekten Konsens-Lösung...</div>\n`;
       taskRecord.outputHtml += p3Header;
       notify({ type: 'output', html: p3Header });
 
@@ -1145,7 +1152,7 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
 
       executeSingleRun(routeA, synthesisPrompt, workingDir, notify, taskRecord, (errFinal, outputFinal) => {
         taskRecord.status = 'completed';
-        const finishBanner = `\n<div class="consensus-phase phase-done">✅ <strong>Konsens erfolgreich erzielt!</strong> Die gemeinsame Lösung wurde im Projekt angewendet.</div>\n`;
+        const finishBanner = `\n<div class="consensus-phase phase-done"><strong>Konsens erfolgreich erzielt!</strong> Die gemeinsame Lösung wurde im Projekt angewendet.</div>\n`;
         taskRecord.outputHtml += finishBanner;
         notify({ type: 'output', html: finishBanner });
 
@@ -1186,7 +1193,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
       cwd: workingDir,
       env: { ...process.env, FORCE_COLOR: '1' }
     });
-    activeProcess = child;
+    if (taskWsMap.get(taskRecord)) activeProcess = child;
 
     const isFreebuff = (selectedRoute.command === 'freebuff' || selectedRoute.harness === 'freebuff');
     if (isFreebuff && child.stdin) {
@@ -1213,16 +1220,15 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     });
 
     child.on('close', (code) => {
-      activeProcess = null;
+      if (activeProcess === child) activeProcess = null;
       callback(null, collectedOutput);
     });
 
     child.on('error', (err) => {
-      activeProcess = null;
+      if (activeProcess === child) activeProcess = null;
       callback(err, collectedOutput);
     });
   } catch (err) {
-    activeProcess = null;
     callback(err, '');
   }
 }
@@ -1232,8 +1238,10 @@ function runDispatch(payload, ws, onComplete) {
   const notify = (obj) => {
     if (ws && ws.readyState === 1) {
       try { ws.send(JSON.stringify(obj)); } catch {}
+      broadcastToClients(obj, ws); // an alle anderen, Sender nicht doppelt
+    } else {
+      broadcastToClients(obj);
     }
-    broadcastToClients(obj);
   };
 
   const { prompt, harnessOverride, modelOverride, projectPath, imagePath } = payload;
@@ -1330,6 +1338,7 @@ function runDispatch(payload, ws, onComplete) {
 
   tasksData.tasks.unshift(taskRecord);
   saveTasksData(tasksData);
+  if (ws) taskWsMap.set(taskRecord, ws);
 
   notify({ type: 'task_created', task: taskRecord });
 
@@ -1362,7 +1371,7 @@ function runDispatch(payload, ws, onComplete) {
     }
 
     if (!isInstalled) {
-      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">⚠️ <strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) nicht im System-PATH gefunden.<br/>⚡ <em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
+      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) nicht im System-PATH gefunden.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
       taskRecord.outputHtml += skipNotice;
       notify({ type: 'output', raw: '', html: skipNotice });
       return tryRoute(routeIndex + 1);
@@ -1403,7 +1412,7 @@ function runDispatch(payload, ws, onComplete) {
         cwd: workingDir,
         env: { ...process.env, FORCE_COLOR: '1' }
       });
-      activeProcess = child;
+      if (ws) activeProcess = child;
 
       const isFreebuff = (selectedRoute.command === 'freebuff' || selectedRoute.harness === 'freebuff');
       if (isFreebuff && child.stdin) {
@@ -1428,11 +1437,11 @@ function runDispatch(payload, ws, onComplete) {
       });
 
       child.on('close', (code) => {
-        activeProcess = null;
+        if (activeProcess === child) activeProcess = null;
 
         // If failed and more routes exist, auto-fallback to next!
         if (code !== 0 && routeIndex + 1 < candidateRoutes.length) {
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">⚠️ <strong>${escapeHtml(selectedRoute.name)}</strong> wurde mit Fehlercode ${code} beendet.<br/>⚡ <em>Starte automatisches Weiter-Routing zum nächsten Harness (#${routeIndex + 2})...</em></div>\n`;
+          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> wurde mit Fehlercode ${code} beendet.<br/><em>Starte automatisches Weiter-Routing zum nächsten Harness (#${routeIndex + 2})...</em></div>\n`;
           taskRecord.outputHtml += fallbackNotice;
           notify({ type: 'output', raw: '', html: fallbackNotice });
           return tryRoute(routeIndex + 1);
@@ -1510,9 +1519,9 @@ function runDispatch(payload, ws, onComplete) {
       });
 
       child.on('error', (err) => {
-        activeProcess = null;
+        if (activeProcess === child) activeProcess = null;
         if (routeIndex + 1 < candidateRoutes.length) {
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">⚠️ Fehler beim Starten von <strong>${escapeHtml(selectedRoute.name)}</strong>: ${escapeHtml(err.message)}.<br/>⚡ <em>Starte automatisches Weiter-Routing zum nächsten Harness...</em></div>\n`;
+          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">Fehler beim Starten von <strong>${escapeHtml(selectedRoute.name)}</strong>: ${escapeHtml(err.message)}.<br/><em>Starte automatisches Weiter-Routing zum nächsten Harness...</em></div>\n`;
           taskRecord.outputHtml += fallbackNotice;
           notify({ type: 'output', raw: '', html: fallbackNotice });
           return tryRoute(routeIndex + 1);

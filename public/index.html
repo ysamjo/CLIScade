@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#090a0f">
+  <meta name="theme-color" content="#0a0c12">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Harness Studio</title>
@@ -13,7 +13,8 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="/icons.js"></script>
 </head>
 <body>
   <div class="app-layout">
@@ -24,24 +25,24 @@
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <span class="logo-icon">⚡</span>
+          <span class="logo-icon" data-icon="logo"></span>
           <span class="logo-text">Harness Studio</span>
         </div>
-        <button id="sidebar-quick-settings-btn" class="icon-btn" title="Einstellungen öffnen (Cmd+,)">⚙️</button>
+        <button id="sidebar-quick-settings-btn" class="icon-btn" title="Einstellungen öffnen (Cmd+,)" data-icon="settings"></button>
       </div>
 
       <!-- WORKSPACE INFO BAR -->
       <div class="sidebar-workspace-bar">
         <div class="workspace-pill-group">
           <div id="root-dir-display" class="workspace-root-badge" title="Root-Ordner in Einstellungen ändern">
-            📁 <span id="root-dir-text">Developer</span>
+            <span data-icon="folder"></span> <span id="root-dir-text">Developer</span>
           </div>
           <div id="root-agents-badge" class="workspace-agents-badge" title="Übergeordnete Richtlinien in Einstellungen öffnen">
             <span class="dot-green"></span>
-            <span id="root-agents-text">📜 AGENTS.md (8.7 KB)</span>
+            <span id="root-agents-text">AGENTS.md (8.7 KB)</span>
           </div>
         </div>
-        <button id="refresh-tree-btn" class="icon-btn" title="Projekte & Tasks neu laden">🔄</button>
+        <button id="refresh-tree-btn" class="icon-btn" title="Projekte & Tasks neu laden" data-icon="refresh"></button>
       </div>
 
       <!-- PROJECTS & TASKS TREE VIEW -->
@@ -58,12 +59,12 @@
       <!-- SIDEBAR FOOTER: SETTINGS TRIGGER & HARNESS STATUS -->
       <div class="sidebar-footer">
         <button id="open-installer-btn" class="installer-trigger-btn" title="1-Klick Installations-Center für alle 8 CLIs öffnen">
-          <span class="bolt-icon">⚡</span>
+          <span class="bolt-icon" data-icon="bolt"></span>
           <span>1-Klick CLI-Installation</span>
           <span id="installer-badge-count" class="count-pill">8 Bereit</span>
         </button>
         <button id="open-settings-btn" class="settings-trigger-btn">
-          <span class="gear-icon">⚙️</span>
+          <span class="gear-icon" data-icon="settings"></span>
           <span>Einstellungen & Konfiguration</span>
         </button>
         <div class="footer-title">LOKALE HARNESSES</div>
@@ -78,7 +79,7 @@
       <!-- TOP STATUS BAR -->
       <header class="top-bar">
         <div class="active-project-badge">
-          <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen">☰</button>
+          <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
           <span class="badge-label">Aktives Projekt:</span>
           <span id="current-project-name" class="badge-value">Lade...</span>
           <span id="current-project-path" class="badge-path"></span>
@@ -86,10 +87,10 @@
         </div>
         <div class="top-bar-actions">
           <button id="top-usage-btn" class="btn btn-usage-top" title="Verbleibende Usage & Kontingente">
-            <span class="btn-text-label">📊 Usage:</span> <strong id="top-usage-badge">Lade...</strong>
+            <span data-icon="chart"></span> <span class="btn-text-label">Usage:</span> <strong id="top-usage-badge">Lade...</strong>
           </button>
           <button id="top-open-settings-btn" class="btn btn-settings-top" title="Einstellungen öffnen">
-            <span>⚙️</span> <span class="btn-text-label">Einstellungen</span>
+            <span data-icon="settings"></span> <span class="btn-text-label">Einstellungen</span>
           </button>
           <span id="connection-status" class="status-indicator connected">Verbunden</span>
         </div>
@@ -104,7 +105,7 @@
               <span class="pulse-dot"></span>
               <span id="route-harness-title">Routing läuft...</span>
               <span id="route-model-title" class="pill-badge">Modell</span>
-              <span id="route-agents-badge" class="pill-badge pill-agents">📜 AGENTS.md</span>
+              <span id="route-agents-badge" class="pill-badge pill-agents">AGENTS.md</span>
               <button id="cancel-run-btn" class="btn btn-danger-sm">Abbrechen</button>
             </div>
           </div>
@@ -136,17 +137,17 @@
               <div class="select-group">
                 <label for="harness-override">Routing:</label>
                 <select id="harness-override" class="custom-select">
-                  <option value="auto">⚡ Auto-Route (nach Prioritätskette)</option>
-                  <option value="consensus">🤝 Konsens-Modus (Dual-Agent Debatte)</option>
+                  <option value="auto">Auto-Route (Prioritätskette)</option>
+                  <option value="consensus">Konsens-Modus (Dual-Agent)</option>
                   <!-- Populated dynamically -->
                 </select>
               </div>
               <div class="prompt-context-badges">
                 <span class="context-pill" id="agents-context-pill" title="Klicken, um AGENTS.md in den Einstellungen zu öffnen">
-                  📜 Kontext: <strong id="agents-context-text">Developer/AGENTS.md aktiv</strong>
+                  Kontext: <strong id="agents-context-text">Developer/AGENTS.md aktiv</strong>
                 </span>
                 <span class="context-pill usage-pill" id="route-usage-pill" title="Klicken, um Kontingente in den Einstellungen anzuzeigen">
-                  📊 Verbleibend: <strong id="route-usage-text">Lade...</strong>
+                  Verbleibend: <strong id="route-usage-text">Lade...</strong>
                 </span>
                 <div class="active-project-hint">
                   <span>Zielordner: <strong id="prompt-target-folder">-</strong></span>
@@ -159,7 +160,7 @@
               <div class="image-preview-item">
                 <img id="preview-thumbnail" src="" alt="Vorschau" />
                 <span id="preview-filename" class="preview-filename">bild.png</span>
-                <button id="remove-image-btn" class="btn-remove-image" title="Bild entfernen">✕</button>
+                <button id="remove-image-btn" class="btn-remove-image" title="Bild entfernen" data-icon="x"></button>
               </div>
             </div>
 
@@ -168,15 +169,13 @@
               <textarea id="prompt-input" rows="1" placeholder="Beschreibe deine Aufgabe für den Code-Agenten... (Enter zum Absenden, Shift+Enter für neue Zeile)"></textarea>
               <div class="prompt-btn-group">
                 <div class="prompt-btn-group-left">
-                  <button id="image-upload-btn" class="btn btn-image-upload" title="Bild oder Screenshot anfügen (Multimodal: Kamera / Galerie / Datei)">
-                    <span class="img-btn-icon">📷</span>
+                  <button id="image-upload-btn" class="btn btn-image-upload" title="Bild oder Screenshot anfügen (Multimodal: Kamera / Galerie / Datei)" data-icon="camera">
                   </button>
-                  <button id="voice-input-btn" class="btn btn-voice" title="Befehl per Sprache diktieren (Web Speech API)">
-                    <span class="mic-icon">🎙️</span>
+                  <button id="voice-input-btn" class="btn btn-voice" title="Befehl per Sprache diktieren (Web Speech API)" data-icon="mic">
                   </button>
                 </div>
                 <button id="send-prompt-btn" class="btn btn-primary">
-                  <span>Ausführen</span> ➔
+                  <span>Ausführen</span> <span data-icon="send"></span>
                 </button>
               </div>
             </div>
@@ -194,13 +193,13 @@
       <!-- SETTINGS HEADER -->
       <div class="settings-dialog-header">
         <div class="settings-dialog-title">
-          <span class="settings-dialog-icon">⚙️</span>
+          <span class="settings-dialog-icon" data-icon="settings"></span>
           <div>
             <h3>Einstellungen & Konfiguration</h3>
             <span class="settings-dialog-subtitle">Arbeitsbereich, Harness-Routing, Modelle & Richtlinien</span>
           </div>
         </div>
-        <button id="close-settings-modal-btn" class="icon-btn-close" title="Schließen (Esc)">✕</button>
+        <button id="close-settings-modal-btn" class="icon-btn-close" title="Schließen (Esc)" data-icon="x"></button>
       </div>
 
       <!-- SETTINGS BODY WITH TWO PANES -->
@@ -208,56 +207,56 @@
         <!-- LEFT: SETTINGS CATEGORIES NAVIGATION -->
         <nav class="settings-sidebar-nav">
           <button class="settings-nav-item active" data-section="workspace">
-            <span class="item-icon">📁</span>
+            <span class="item-icon" data-icon="folder"></span>
             <div class="item-text">
               <span class="item-title">Arbeitsbereich & Ordner</span>
               <span class="item-desc">Root-Pfad & Projekte</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="harnesses">
-            <span class="item-icon">⚡</span>
+            <span class="item-icon" data-icon="bolt"></span>
             <div class="item-text">
               <span class="item-title">Harness & Modelle</span>
               <span class="item-desc">Prioritäten & Dropdowns</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="agents">
-            <span class="item-icon">📜</span>
+            <span class="item-icon" data-icon="file"></span>
             <div class="item-text">
               <span class="item-title">AGENTS.md Richtlinien</span>
               <span class="item-desc">Globale & Projekt-Regeln</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="skills">
-            <span class="item-icon">🧩</span>
+            <span class="item-icon" data-icon="puzzle"></span>
             <div class="item-text">
               <span class="item-title">Skills & MCP-Plugins</span>
               <span class="item-desc">Zentrale Werkzeuge</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="usage">
-            <span class="item-icon">📊</span>
+            <span class="item-icon" data-icon="chart"></span>
             <div class="item-text">
               <span class="item-title">Usage & Kontingente</span>
               <span class="item-desc">Verbleibende Limits & Kosten</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="diagnostics">
-            <span class="item-icon">🩺</span>
+            <span class="item-icon" data-icon="heart"></span>
             <div class="item-text">
               <span class="item-title">CLI-Diagnose & Status</span>
               <span class="item-desc">Health-Check der 8 CLIs</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="remote">
-            <span class="item-icon">🌐</span>
+            <span class="item-icon" data-icon="globe"></span>
             <div class="item-text">
               <span class="item-title">Fernzugriff & Mobile</span>
               <span class="item-desc">PWA, Tailscale & Telegram</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="schedules">
-            <span class="item-icon">⏱️</span>
+            <span class="item-icon" data-icon="clock"></span>
             <div class="item-text">
               <span class="item-title">Geplante Tasks (Cron)</span>
               <span class="item-desc">Automatische Hintergrund-Jobs</span>
@@ -283,8 +282,8 @@
                 </div>
                 <div class="quick-paths-row">
                   <span class="quick-label">Schnellwahl:</span>
-                  <button id="quick-path-dev-btn" class="quick-path-btn">📁 ~/Developer</button>
-                  <button id="quick-path-home-btn" class="quick-path-btn">🏠 Home (~)</button>
+                  <button id="quick-path-dev-btn" class="quick-path-btn">~/Developer</button>
+                  <button id="quick-path-home-btn" class="quick-path-btn">Home (~)</button>
                 </div>
               </div>
               <div id="settings-root-feedback" class="feedback-text"></div>
@@ -348,9 +347,9 @@
 
             <!-- SUB-TABS FOR AGENTS.MD -->
             <div class="agents-tabs">
-              <button class="agents-tab-btn active" data-target="rootDev">📁 Developer/AGENTS.md (Übergeordnet)</button>
-              <button class="agents-tab-btn" data-target="project">📦 Projekt/AGENTS.md (Aktives Projekt)</button>
-              <button class="agents-tab-btn" data-target="global">⚙️ Global (~/.harness-dispatch/AGENTS.md)</button>
+              <button class="agents-tab-btn active" data-target="rootDev">Developer/AGENTS.md (Übergeordnet)</button>
+              <button class="agents-tab-btn" data-target="project">Projekt/AGENTS.md (Aktives Projekt)</button>
+              <button class="agents-tab-btn" data-target="global">Global (~/.harness-dispatch/AGENTS.md)</button>
             </div>
 
             <div class="editor-file-path" id="editor-file-path-display">Lade Pfad...</div>
@@ -387,10 +386,10 @@
             <!-- 1-CLICK INSTALLER PROMO CARD -->
             <div class="settings-card installer-promo-card" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px; background:linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12)); border:1px solid rgba(168, 85, 247, 0.35);">
               <div>
-                <strong style="font-size:14px; color:#fff;">⚡ 1-Klick CLI-Installations-Center</strong>
+                <strong style="font-size:14px; color:#fff;">1-Klick CLI-Installations-Center</strong>
                 <p style="font-size:12px; color:var(--text-muted); margin:4px 0 0 0;">Installiere, repariere oder aktualisiere alle 8 Harness-CLIs vollautomatisch mit einem einzigen Klick.</p>
               </div>
-              <button id="settings-open-installer-btn" class="btn btn-primary" style="white-space:nowrap;">⚡ Installations-Dialog öffnen</button>
+              <button id="settings-open-installer-btn" class="btn btn-primary" style="white-space:nowrap;">Installations-Dialog öffnen</button>
             </div>
 
             <div class="diagnostics-table-container">
@@ -418,7 +417,7 @@
                 <h4>Verbleibende Usage & Kontingente</h4>
                 <p>Echtzeit-Übersicht deiner Kontingente, Rest-Tokens und Abrechnungsmodelle der 8 Code-Agenten.</p>
               </div>
-              <button id="refresh-usage-btn" class="btn btn-secondary">🔄 Aktualisieren</button>
+              <button id="refresh-usage-btn" class="btn btn-secondary">Aktualisieren</button>
             </div>
 
             <div class="diagnostics-table-container">
@@ -475,7 +474,7 @@
                     <input type="text" id="remote-lan-url" readonly value="http://192.168.178.169:3000" />
                     <button id="copy-lan-url-btn" class="btn btn-secondary">Kopieren</button>
                   </div>
-                  <span class="settings-tip" style="margin-top:6px; display:block;">💡 Kamera deines Handys auf den QR-Code richten, um die App sofort zu öffnen.</span>
+                  <span class="settings-tip" style="margin-top:6px; display:block;">Tipp: Kamera deines Handys auf den QR-Code richten, um die App sofort zu öffnen.</span>
                 </div>
               </div>
             </div>
@@ -501,7 +500,7 @@
             <!-- CARD 3: TELEGRAM BOT -->
             <div class="settings-card">
               <div class="card-header-with-badge">
-                <h5 class="card-subtitle">🤖 Telegram Bot für Befehle von unterwegs (Ohne VPN)</h5>
+                <h5 class="card-subtitle">Telegram Bot für Befehle von unterwegs (Ohne VPN)</h5>
                 <span id="telegram-bot-badge" class="diagnostics-status-badge offline"><span class="dot"></span> Inaktiv</span>
               </div>
               <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
@@ -542,7 +541,7 @@
             <!-- SECTION 8: SCHEDULED TASKS & CRON -->
             <div id="settings-sec-schedules" class="settings-section">
               <div class="settings-section-header">
-                <h4>⏱️ Geplante Hintergrund-Tasks (Cron & Scheduler)</h4>
+                <h4>Geplante Hintergrund-Tasks (Cron & Scheduler)</h4>
                 <p>Lasse wiederkehrende Aufgaben wie Code-Audits, Tests, Linter oder Refactorings zeitgesteuert und vollautomatisch im Hintergrund auf deinem Mac ausführen.</p>
               </div>
 
@@ -574,8 +573,8 @@
                   <div class="form-group">
                     <label for="sched-harness-select">Harness-Routing:</label>
                     <select id="sched-harness-select" class="custom-select" style="width:100%;">
-                      <option value="auto">⚡ Auto-Route (Prioritätskette)</option>
-                      <option value="consensus">🤝 Konsens-Modus (Dual-Agent)</option>
+                      <option value="auto">Auto-Route (Prioritätskette)</option>
+                      <option value="consensus">Konsens-Modus (Dual-Agent)</option>
                       <!-- Populated dynamically with available harnesses -->
                     </select>
                   </div>
@@ -599,7 +598,7 @@
               <div class="settings-card">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
                   <h5 class="card-subtitle" style="margin:0;">Aktive Hintergrund-Jobs</h5>
-                  <button id="refresh-schedules-btn" class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">🔄 Aktualisieren</button>
+                  <button id="refresh-schedules-btn" class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">Aktualisieren</button>
                 </div>
                 <div class="table-container">
                   <table class="schedules-table" style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -639,7 +638,7 @@
     <div class="modal-card">
       <div class="modal-header">
         <h3>Neue Route zur Prioritätenliste hinzufügen</h3>
-        <button id="close-route-modal-btn" class="icon-btn">✕</button>
+        <button id="close-route-modal-btn" class="icon-btn" data-icon="x"></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -680,7 +679,7 @@
       <!-- HEADER -->
       <div class="installer-modal-header">
         <div class="installer-title-group">
-          <span class="installer-header-icon">⚡</span>
+          <span class="installer-header-icon" data-icon="bolt"></span>
           <div>
             <h3>1-Klick CLI Installations-Center</h3>
             <span class="installer-subtitle">Installiere, repariere oder aktualisiere alle 8 Harness-CLIs mit einem einzigen Klick</span>
@@ -688,9 +687,9 @@
         </div>
         <div class="installer-header-actions">
           <button id="install-all-missing-btn" class="btn btn-primary">
-            <span>🚀 Alle fehlenden CLIs installieren</span>
+            <span>Alle fehlenden CLIs installieren</span>
           </button>
-          <button id="close-installer-modal-btn" class="icon-btn-close" title="Schließen (Esc)">✕</button>
+          <button id="close-installer-modal-btn" class="icon-btn-close" title="Schließen (Esc)" data-icon="x"></button>
         </div>
       </div>
 
@@ -698,7 +697,7 @@
       <div class="installer-summary-bar">
         <div class="installer-summary-pills">
           <span class="summary-pill total">
-            <span>📦</span> <strong>8</strong> CLIs
+            <span data-icon="box"></span> <strong>8</strong> CLIs
           </span>
           <span id="summary-pill-installed" class="summary-pill installed">
             <span class="dot-green"></span> <strong id="summary-installed-count">8</strong> Bereit
@@ -708,7 +707,7 @@
           </span>
         </div>
         <div class="installer-summary-actions">
-          <button id="refresh-installer-status-btn" class="btn btn-secondary-sm">🔄 Neu prüfen</button>
+          <button id="refresh-installer-status-btn" class="btn btn-secondary-sm">Neu prüfen</button>
         </div>
       </div>
 
@@ -723,7 +722,7 @@
           <span id="installer-console-title" class="installer-console-title">Live Installations-Protokoll</span>
           <div class="installer-console-actions">
             <button id="clear-installer-console-btn" class="btn-text">Leeren</button>
-            <button id="hide-installer-console-btn" class="btn-text">✕ Ausblenden</button>
+            <button id="hide-installer-console-btn" class="btn-text">Ausblenden</button>
           </div>
         </div>
         <pre id="installer-console-body" class="installer-console-body"></pre>
@@ -739,7 +738,7 @@
       <!-- FOOTER -->
       <div class="installer-modal-footer">
         <span class="installer-footer-hint">
-          💡 Alle CLIs werden global bzw. in <code>~/.local/bin</code> installiert und stehen sofort ohne Neustart zur Verfügung.
+          Alle CLIs werden global bzw. in <code>~/.local/bin</code> installiert und stehen sofort ohne Neustart zur Verfügung.
         </span>
         <button id="close-installer-footer-btn" class="btn btn-secondary">Fertig / Schließen</button>
       </div>

@@ -173,18 +173,31 @@ const dom = {
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
+  hydrateIcons();
+  // Re-hydrate nur neue Knoten (nicht bei jedem Terminal-Chunk das ganze Dokument)
+  const iconObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        if (node.hasAttribute && node.hasAttribute('data-icon')) hydrateIcons(node.parentNode || node);
+        hydrateIcons(node);
+      });
+    }
+  });
+  iconObserver.observe(document.body, { childList: true, subtree: true });
   setupWebSocket();
   setupEventListeners();
 
-  await loadModelPresets();
-  await loadStatus();
-  await loadWorkspace();
-  await loadAgentsMd();
-  await loadSkills();
-  await loadUsage();
-  await loadRemoteConfig();
-  await loadSchedules();
-  await loadInstallerStatus();
+  // Load workspace immediately so projects appear in < 30ms!
+  loadWorkspace();
+  loadModelPresets();
+  loadStatus();
+  loadAgentsMd();
+  loadSkills();
+  loadUsage();
+  loadRemoteConfig();
+  loadSchedules();
+  loadInstallerStatus();
 });
 
 // --- SETTINGS MODAL CONTROLS ---
@@ -240,7 +253,7 @@ function renderDiagnosticsTable() {
       <td><code>${escapeHtml(h.cmd)}</code></td>
       <td>
         <span class="diagnostics-status-badge ${h.available ? 'online' : 'offline'}">
-          <span class="dot"></span> ${h.available ? '✓ Bereit' : '✕ Nicht gefunden'}
+          <span class="dot"></span> ${h.available ? 'Bereit' : 'Nicht gefunden'}
         </span>
       </td>
       <td style="color:var(--text-muted); font-size:11px;">
@@ -248,7 +261,7 @@ function renderDiagnosticsTable() {
       </td>
       <td style="text-align:right;">
         <button class="btn btn-secondary-sm" onclick="openInstallerModal('${h.id}')" style="padding:4px 9px; font-size:11px; white-space:nowrap;">
-          ${h.available ? '🔄 Neu installieren' : '⚡ 1-Klick Install'}
+          ${h.available ? 'Neu installieren' : '1-Klick Install'}
         </button>
       </td>
     `;
@@ -303,11 +316,13 @@ function setupWebSocket() {
       dom.routeHarnessTitle.textContent = `Ausführung mit: ${data.harness} (${data.command})`;
       dom.routeModelTitle.textContent = data.model || 'Standard';
       if (dom.routeAgentsBadge) {
-        dom.routeAgentsBadge.textContent = '📜 ' + (data.agentsInfo || 'AGENTS.md aktiv');
+        dom.routeAgentsBadge.textContent = (data.agentsInfo || 'AGENTS.md aktiv');
       }
       state.isRunning = true;
       dom.sendPromptBtn.disabled = true;
-      dom.sendPromptBtn.innerHTML = '<span>Läuft...</span>';
+      dom.sendPromptBtn.innerHTML = '<span>Läuft…</span>';
+      if (dom.imageUploadBtn) dom.imageUploadBtn.disabled = true;
+      if (dom.voiceInputBtn) dom.voiceInputBtn.disabled = true;
       dom.terminalSessionTitle.textContent = `Live: ${data.harness} [${data.model || 'Standard'}]`;
     } else if (data.type === 'output') {
       appendTerminalOutput(data.html || data.raw);
@@ -321,7 +336,9 @@ function setupWebSocket() {
     } else if (data.type === 'done' || data.type === 'error') {
       state.isRunning = false;
       dom.sendPromptBtn.disabled = false;
-      dom.sendPromptBtn.innerHTML = '<span>Ausführen</span> ➔';
+      dom.sendPromptBtn.innerHTML = `<span>Ausführen</span> ${typeof icon === 'function' ? icon('send') : ''}`;
+      if (dom.imageUploadBtn) dom.imageUploadBtn.disabled = false;
+      if (dom.voiceInputBtn) dom.voiceInputBtn.disabled = false;
       dom.activeRoutingCard.classList.add('hidden');
 
       if (state.activeTaskId) {
@@ -344,7 +361,7 @@ function setupWebSocket() {
       state.installingTools.add(data.toolId);
       if (dom.installerConsoleWrapper) dom.installerConsoleWrapper.classList.remove('hidden');
       if (dom.installerConsoleTitle) dom.installerConsoleTitle.textContent = `Installation: ${data.name || data.toolId}`;
-      appendInstallerConsoleOutput(`\n----------------------------------------\n▶ [Start] Installation von ${data.name || data.toolId}...\n----------------------------------------\n`);
+      appendInstallerConsoleOutput(`\n----------------------------------------\n[Start] Installation von ${data.name || data.toolId}...\n----------------------------------------\n`);
       renderInstallerCards(state.installerTools);
     } else if (data.type === 'install_output') {
       if (dom.installerConsoleWrapper) dom.installerConsoleWrapper.classList.remove('hidden');
@@ -356,35 +373,121 @@ function setupWebSocket() {
     } else if (data.type === 'install_done') {
       state.installingTools.delete(data.toolId);
       if (data.err) {
-        appendInstallerConsoleOutput(`\n✕ [Fehler] Installation beendet mit Fehler: ${data.err}\n`);
+        appendInstallerConsoleOutput(`\n[Fehler] Installation beendet mit Fehler: ${data.err}\n`);
       } else {
-        appendInstallerConsoleOutput(`\n✅ [Erfolg] ${data.toolId} erfolgreich bereitgestellt!\n`);
+        appendInstallerConsoleOutput(`\n[Erfolg] ${data.toolId} erfolgreich bereitgestellt!\n`);
       }
       loadInstallerStatus();
     } else if (data.type === 'install_all_done') {
       state.isInstallingAll = false;
       state.installingTools.clear();
-      appendInstallerConsoleOutput(`\n========================================\n🎉 [Fertig] ${data.message || 'Alle Installationen abgeschlossen!'}\n========================================\n`);
+      appendInstallerConsoleOutput(`\n========================================\n[Fertig] ${data.message || 'Alle Installationen abgeschlossen!'}\n========================================\n`);
       loadInstallerStatus(true);
     }
   };
 }
 
-// --- TERMINAL HELPERS ---
+// --- TERMINAL HELPERS & REASONING FORMATTER ---
+let streamBuffer = '';
+
+function formatReasoningAndOutput(html) {
+  if (!html) return '';
+
+  // 1. Explicit closed think tags (both raw <think> and escaped &lt;think&gt;)
+  const explicitThinkRegex = /(?:<think>|&lt;think&gt;)([\s\S]*?)(?:<\/think>|&lt;\/think&gt;)/gi;
+  if (explicitThinkRegex.test(html)) {
+    return html.replace(explicitThinkRegex, (match, thinkText) => {
+      const clean = thinkText.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").trim();
+      return '<details class="reasoning-drawer" open>' +
+        '<summary class="reasoning-summary">' +
+          '<div class="reasoning-summary-left">' +
+            '<span class="reasoning-icon">🧠</span>' +
+            '<span class="reasoning-label">Gedankengang (Reasoning)</span>' +
+            '<span class="reasoning-pill">Denkprozess</span>' +
+          '</div>' +
+          '<span class="reasoning-hint">Klicken zum Einklappen</span>' +
+        '</summary>' +
+        '<div class="reasoning-content">' + clean + '</div>' +
+      '</details>';
+    });
+  }
+
+  // 2. Open think tag (check if followed by double line break separating reasoning from final output)
+  const openThinkMatch = html.match(/(?:<think>|&lt;think&gt;)([\s\S]*)$/i);
+  if (openThinkMatch) {
+    const before = html.substring(0, openThinkMatch.index);
+    const allAfter = openThinkMatch[1];
+    const splitMatch = allAfter.match(/(?:<br\s*\/?>\s*){2,}|\n\s*\n/i);
+    if (splitMatch) {
+      const thought = allAfter.substring(0, splitMatch.index).replace(/&quot;/g, '"').replace(/&#x27;/g, "'").trim();
+      const answer = allAfter.substring(splitMatch.index + splitMatch[0].length).trim();
+      return before +
+        '<details class="reasoning-drawer" open>' +
+          '<summary class="reasoning-summary">' +
+            '<div class="reasoning-summary-left">' +
+              '<span class="reasoning-icon">🧠</span>' +
+              '<span class="reasoning-label">Gedankengang (Reasoning)</span>' +
+              '<span class="reasoning-pill">Denkprozess</span>' +
+            '</div>' +
+            '<span class="reasoning-hint">Klicken zum Einklappen</span>' +
+          '</summary>' +
+          '<div class="reasoning-content">' + thought + '</div>' +
+        '</details>' +
+        '<div class="model-output-block">' + answer + '</div>';
+    } else {
+      // Actively streaming live thinking
+      return before +
+        '<details class="reasoning-drawer is-streaming" open>' +
+          '<summary class="reasoning-summary">' +
+            '<div class="reasoning-summary-left">' +
+              '<span class="reasoning-icon pulse-brain">🧠</span>' +
+              '<span class="reasoning-label">Gedankengang (Reasoning)...</span>' +
+              '<span class="reasoning-pill streaming-pill">Denkt nach...</span>' +
+            '</div>' +
+            '<span class="reasoning-hint">Live</span>' +
+          '</summary>' +
+          '<div class="reasoning-content">' + allAfter + '</div>' +
+        '</details>';
+    }
+  }
+
+  return html;
+}
+
 function appendTerminalOutput(htmlContent) {
   const placeholder = dom.terminalBody.querySelector('.terminal-placeholder');
   if (placeholder) placeholder.remove();
 
-  dom.terminalBody.innerHTML += htmlContent;
+  streamBuffer += htmlContent;
+  dom.terminalBody.innerHTML = formatReasoningAndOutput(streamBuffer);
   dom.terminalBody.scrollTop = dom.terminalBody.scrollHeight;
 }
 
 function setTerminalContent(htmlContent, title) {
+  streamBuffer = htmlContent || '';
   if (title) {
     dom.terminalSessionTitle.textContent = title;
   }
-  dom.terminalBody.innerHTML = htmlContent || '<div class="terminal-placeholder">Keine Ausgabe für diesen Task vorhanden.</div>';
+  dom.terminalBody.innerHTML = htmlContent ? formatReasoningAndOutput(htmlContent) : '<div class="terminal-placeholder">Keine Ausgabe für diesen Task vorhanden.</div>';
   dom.terminalBody.scrollTop = 0;
+}
+
+// --- SVG ICON HYDRATION ---
+function hydrateIcons(root) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-icon]').forEach(el => {
+    if (el.dataset.iconHydrated) return;
+    const name = el.getAttribute('data-icon');
+    if (typeof icon === 'function' && window.ICONS && window.ICONS[name]) {
+      el.insertAdjacentHTML('afterbegin', icon(name));
+      el.dataset.iconHydrated = '1';
+    } else if (typeof window.icon === 'function') {
+      try {
+        el.insertAdjacentHTML('afterbegin', window.icon(name));
+        el.dataset.iconHydrated = '1';
+      } catch {}
+    }
+  });
 }
 
 // --- MODEL PRESETS & STATUS ---
@@ -427,8 +530,8 @@ function renderHarnessStatusPills() {
 
 function renderHarnessOverrideSelect() {
   dom.harnessOverride.innerHTML = `
-    <option value="auto">⚡ Auto-Route (nach Prioritätskette)</option>
-    <option value="consensus">🤝 Konsens-Modus (Dual-Agent Debatte)</option>
+    <option value="auto">Auto-Route (Prioritätskette)</option>
+    <option value="consensus">Konsens-Modus (Dual-Agent)</option>
   `;
   state.clis.forEach(c => {
     if (c.enabled !== false) {
@@ -494,9 +597,9 @@ function renderHarnessConfigList() {
         </div>
       </div>
       <div class="row-actions">
-        <button class="btn-arrow" data-dir="up" data-idx="${index}" title="Nach oben" ${index === 0 ? 'disabled' : ''}>▲</button>
-        <button class="btn-arrow" data-dir="down" data-idx="${index}" title="Nach unten" ${index === state.clis.length - 1 ? 'disabled' : ''}>▼</button>
-        <button class="btn-delete-row" data-idx="${index}" title="Route entfernen">✕</button>
+        <button class="btn-arrow" data-dir="up" data-idx="${index}" title="Nach oben" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn-arrow" data-dir="down" data-idx="${index}" title="Nach unten" ${index === state.clis.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn-delete-row" data-idx="${index}" title="Route entfernen">×</button>
       </div>
     `;
 
@@ -623,15 +726,15 @@ function updateWorkspaceUI() {
   dom.promptTargetFolder.textContent = current.name;
 
   if (dom.rootAgentsText) {
-    dom.rootAgentsText.textContent = `📜 AGENTS.md (8.7 KB aktiv)`;
+    dom.rootAgentsText.textContent = `AGENTS.md aktiv`;
   }
 
   if (dom.agentsContextText) {
     const hasProjAgents = current && current.hasAgentsMd;
     if (hasProjAgents) {
-      dom.agentsContextText.textContent = `Developer/AGENTS.md (8.7 KB) + ${current.name}/AGENTS.md`;
+      dom.agentsContextText.textContent = `Global + ${current.name}/AGENTS.md`;
     } else {
-      dom.agentsContextText.textContent = `Developer/AGENTS.md (8.7 KB übergeordnet aktiv)`;
+      dom.agentsContextText.textContent = `Global aktiv`;
     }
   }
 
@@ -665,8 +768,8 @@ function renderProjectTree() {
     const header = document.createElement('div');
     header.className = 'project-header';
     header.innerHTML = `
-      <span class="toggle-arrow">${isExpanded ? '▼' : '▶'}</span>
-      <span class="folder-icon">📁</span>
+      <span class="toggle-arrow">${isExpanded ? '▾' : '▸'}</span>
+      <span class="folder-icon" data-icon="folder"></span>
       <span class="project-title" title="${escapeHtml(p.path)}">${escapeHtml(p.name)}</span>
       ${p.hasAgentsMd ? '<span class="badge-tag">AGENTS</span>' : ''}
       <button class="add-task-btn" title="Neuen Task in '${escapeHtml(p.name)}' starten">＋</button>
@@ -686,7 +789,7 @@ function renderProjectTree() {
         taskItem.dataset.taskId = task.id;
 
         const timeStr = formatTimestamp(task.timestamp);
-        const statusIcon = task.status === 'completed' ? '✓' : (task.status === 'running' ? '⚡' : '✕');
+        const statusIcon = task.status === 'completed' ? '●' : (task.status === 'running' ? '◐' : '○');
 
         let usageMeta = '';
         if (task.usage && task.usage.totalTokens) {
@@ -854,17 +957,17 @@ function renderAgentsEditor() {
 
     if (btn.dataset.target === 'rootDev' && state.agentsData.rootDev) {
       const kb = Math.round((state.agentsData.rootDev.size || 0) / 1024 * 10) / 10;
-      btn.textContent = `📁 Developer/AGENTS.md (${kb} KB, Übergeordnet)`;
+      btn.textContent = `Developer/AGENTS.md (${kb} KB, Übergeordnet)`;
     } else if (btn.dataset.target === 'project' && state.agentsData.project) {
       if (state.agentsData.project.exists) {
         const kb = Math.round((state.agentsData.project.size || 0) / 1024 * 10) / 10;
-        btn.textContent = `📦 Projekt/AGENTS.md (${kb} KB aktiv)`;
+        btn.textContent = `Projekt/AGENTS.md (${kb} KB aktiv)`;
       } else {
-        btn.textContent = `📦 Projekt/AGENTS.md (Keine Datei)`;
+        btn.textContent = `Projekt/AGENTS.md (Keine Datei)`;
       }
     } else if (btn.dataset.target === 'global' && state.agentsData.global) {
       const kb = Math.round((state.agentsData.global.size || 0) / 1024 * 10) / 10;
-      btn.textContent = `⚙️ Global (~/.harness-dispatch/AGENTS.md, ${kb} KB)`;
+      btn.textContent = `Global (~/.harness-dispatch/AGENTS.md, ${kb} KB)`;
     }
   });
 
@@ -891,7 +994,7 @@ async function loadSkills() {
       const card = document.createElement('div');
       card.className = 'skill-card';
       card.innerHTML = `
-        <div class="skill-title">📦 ${escapeHtml(s.name)}</div>
+        <div class="skill-title">${escapeHtml(s.name)}</div>
         <div class="skill-desc">Plugin: ${escapeHtml(s.plugin)}</div>
         <div class="skill-desc" style="font-size:10px;">${escapeHtml(s.path)}</div>
       `;
@@ -935,7 +1038,7 @@ function updateRouteUsagePill() {
   const currentSelection = dom.harnessOverride ? dom.harnessOverride.value : 'auto';
 
   if (currentSelection === 'consensus') {
-    dom.routeUsageText.textContent = '🤝 Dual-Engine Konsens';
+    dom.routeUsageText.textContent = 'Dual-Engine Konsens';
     if (dom.routeUsagePill) {
       dom.routeUsagePill.title = 'Konsens-Modus: Zwei KI-Engines debattieren und erzeugen die optimale Synthese.';
     }
@@ -1185,6 +1288,7 @@ function setupEventListeners() {
   // Terminal buttons
   if (dom.clearTerminalBtn) {
     dom.clearTerminalBtn.addEventListener('click', () => {
+      streamBuffer = '';
       dom.terminalBody.innerHTML = '<div class="terminal-placeholder">Ausgabe geleert. Bereit für neue Aufgaben.</div>';
     });
   }
@@ -1208,7 +1312,7 @@ function setupEventListeners() {
           body: JSON.stringify({ clis: state.clis })
         });
         if (res.ok) {
-          dom.settingsSaveFeedback.textContent = '✓ Gespeichert in ~/.harness-dispatch/config.yaml!';
+          dom.settingsSaveFeedback.textContent = 'Gespeichert in ~/.harness-dispatch/config.yaml!';
           renderHarnessOverrideSelect();
         } else {
           dom.settingsSaveFeedback.textContent = 'Fehler beim Speichern!';
@@ -1253,7 +1357,7 @@ function setupEventListeners() {
             state.agentsData[target].content = dom.agentsMdEditor.value;
             state.agentsData[target].exists = true;
           }
-          dom.agentsSaveFeedback.textContent = '✓ Gespeichert!';
+          dom.agentsSaveFeedback.textContent = 'Gespeichert!';
           loadAgentsMd();
         } else {
           dom.agentsSaveFeedback.textContent = 'Fehler beim Speichern!';
@@ -1347,7 +1451,7 @@ async function saveRootDirectory(newRoot) {
     renderProjectTree();
     loadAgentsMd();
     if (dom.settingsRootFeedback) {
-      dom.settingsRootFeedback.textContent = `✓ Root-Verzeichnis übernommen (${state.projects.length} Projekte gefunden)`;
+      dom.settingsRootFeedback.textContent = `Root-Verzeichnis übernommen (${state.projects.length} Projekte gefunden)`;
       setTimeout(() => dom.settingsRootFeedback.textContent = '', 3000);
     }
   } catch (err) {
@@ -1424,7 +1528,7 @@ async function loadRemoteConfig() {
     if (dom.tailscaleStatusBadge) {
       if (data.tailscaleUrl) {
         dom.tailscaleStatusBadge.className = 'diagnostics-status-badge online';
-        dom.tailscaleStatusBadge.innerHTML = `<span class="dot"></span> ✓ Aktiv (${escapeHtml(data.tailscaleIp)})`;
+        dom.tailscaleStatusBadge.innerHTML = `<span class="dot"></span> Aktiv (${escapeHtml(data.tailscaleIp)})`;
         if (dom.tailscaleUrlPreview) dom.tailscaleUrlPreview.textContent = data.tailscaleUrl;
       } else {
         dom.tailscaleStatusBadge.className = 'diagnostics-status-badge offline';
@@ -1500,7 +1604,7 @@ async function saveTelegramSettings() {
     });
     const result = await res.json();
     if (result.success) {
-      dom.telegramFeedback.textContent = '✓ Gespeichert!';
+      dom.telegramFeedback.textContent = 'Gespeichert!';
       dom.telegramFeedback.style.color = 'var(--success)';
       await loadRemoteConfig();
       setTimeout(() => { if (dom.telegramFeedback) dom.telegramFeedback.textContent = ''; }, 3000);
@@ -1526,11 +1630,11 @@ async function testTelegramSettings() {
     });
     const result = await res.json();
     if (result.success) {
-      dom.telegramFeedback.textContent = `✓ ${result.message}`;
+      dom.telegramFeedback.textContent = `${result.message}`;
       dom.telegramFeedback.style.color = 'var(--success)';
       await loadRemoteConfig();
     } else {
-      dom.telegramFeedback.textContent = `✕ ${result.error || 'Test fehlgeschlagen'}`;
+      dom.telegramFeedback.textContent = `${result.error || 'Test fehlgeschlagen'}`;
       dom.telegramFeedback.style.color = 'var(--danger)';
     }
   } catch (err) {
@@ -1570,7 +1674,7 @@ function setupMobileAndVoice() {
     dom.copyLanUrlBtn.addEventListener('click', () => {
       navigator.clipboard.writeText(dom.remoteLanUrl.value).then(() => {
         const orig = dom.copyLanUrlBtn.textContent;
-        dom.copyLanUrlBtn.textContent = '✓ Kopiert!';
+        dom.copyLanUrlBtn.textContent = 'Kopiert!';
         setTimeout(() => dom.copyLanUrlBtn.textContent = orig, 2000);
       });
     });
@@ -1749,7 +1853,7 @@ function populateScheduleProjectOptions() {
   if (state.activeProject) {
     const opt = document.createElement('option');
     opt.value = state.activeProject;
-    opt.textContent = `📁 ${getProjectBaseName(state.activeProject)} (Aktives Projekt)`;
+    opt.textContent = `${getProjectBaseName(state.activeProject)} (Aktives Projekt)`;
     dom.schedProjectSelect.appendChild(opt);
   }
 
@@ -1758,15 +1862,15 @@ function populateScheduleProjectOptions() {
     if (p.path !== state.activeProject) {
       const opt = document.createElement('option');
       opt.value = p.path;
-      opt.textContent = `📁 ${p.name}`;
+      opt.textContent = `${p.name}`;
       dom.schedProjectSelect.appendChild(opt);
     }
   });
 
   if (dom.schedProjectSelect.children.length === 0) {
     const opt = document.createElement('option');
-    opt.value = state.rootDirectory || '/Users/family/Developer';
-    opt.textContent = `📁 Standard (${state.rootDirectory ? getProjectBaseName(state.rootDirectory) : 'Developer'})`;
+    opt.value = state.rootDirectory || '';
+    opt.textContent = `Standard (${state.rootDirectory ? getProjectBaseName(state.rootDirectory) : 'Developer'})`;
     dom.schedProjectSelect.appendChild(opt);
   }
 }
@@ -1774,8 +1878,8 @@ function populateScheduleProjectOptions() {
 function populateScheduleHarnessOptions() {
   if (!dom.schedHarnessSelect) return;
   dom.schedHarnessSelect.innerHTML = `
-    <option value="auto">⚡ Auto-Route (Prioritätskette)</option>
-    <option value="consensus">🤝 Konsens-Modus (Dual-Agent)</option>
+    <option value="auto">Auto-Route (Prioritätskette)</option>
+    <option value="consensus">Konsens-Modus (Dual-Agent)</option>
   `;
   state.clis.forEach(c => {
     if (c.enabled !== false) {
@@ -1806,7 +1910,7 @@ function renderSchedulesTable() {
     const tr = document.createElement('tr');
     const isRunning = job.lastStatus === 'running';
     const isFailed = job.lastStatus === 'failed';
-    const statusIcon = isRunning ? '⏳' : (isFailed ? '⚠️' : '✅');
+    const statusIcon = isRunning ? '◐' : (isFailed ? '○' : '●');
     const statusClass = job.enabled ? 'active' : 'paused';
     const statusText = job.enabled ? (isRunning ? 'Läuft...' : 'Aktiv') : 'Pausiert';
 
@@ -1823,22 +1927,22 @@ function renderSchedulesTable() {
       <td style="padding:10px;">
         <strong>${escapeHtml(job.name)}</strong>
         <div style="font-size:11px; color:var(--text-muted); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(job.prompt)}">
-          💬 ${escapeHtml(job.prompt)}
+          ${escapeHtml(job.prompt)}
         </div>
       </td>
-      <td style="padding:10px; font-family:var(--font-mono); font-size:12px;">
-        📁 ${escapeHtml(job.projectName || getProjectBaseName(job.projectPath))}
+      <td style="padding:10px; font-family:var(--font-sans); font-size:12px;">
+        ${escapeHtml(job.projectName || getProjectBaseName(job.projectPath))}
       </td>
       <td style="padding:10px; color:var(--text-muted); font-size:12px;">
-        ⏱️ ${formatIntervalName(job.interval)}
+        ${formatIntervalName(job.interval)}
       </td>
       <td style="padding:10px; font-size:12px; color:var(--text-dim);">
         ${lastRunStr}
       </td>
       <td style="padding:10px; text-align:right;">
         <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-          <button class="sched-action-btn run-sched-now-btn" data-id="${job.id}" title="Job sofort jetzt ausführen">⚡ Jetzt starten</button>
-          <button class="sched-action-btn sched-delete-btn delete-sched-btn" data-id="${job.id}" title="Job löschen">🗑️</button>
+          <button class="sched-action-btn run-sched-now-btn" data-id="${job.id}" title="Job sofort jetzt ausführen">Jetzt starten</button>
+          <button class="sched-action-btn sched-delete-btn delete-sched-btn" data-id="${job.id}" title="Job löschen">Löschen</button>
         </div>
       </td>
     `;
@@ -1922,23 +2026,23 @@ async function runScheduleNow(id) {
 // ==========================================
 // 1-CLICK CLI INSTALLER FUNCTIONS
 // ==========================================
-const CLI_ICONS = {
-  claude_code_cli: '🟣',
-  claude: '🟣',
-  codex_cli: '🟢',
-  codex: '🟢',
-  cline_cli: '🤖',
-  cline: '🤖',
-  opencode_cli: '⚡',
-  opencode: '⚡',
-  antigravity_cli: '🚀',
-  agy: '🚀',
-  qoder_cli: '🔷',
-  qodercli: '🔷',
-  freebuff_cli: '🐰',
-  freebuff: '🐰',
-  codebuddy_cli: '👥',
-  codebuddy: '👥'
+const CLI_ICON_KEYS = {
+  claude_code_cli: 'claude_code_cli',
+  claude: 'claude_code_cli',
+  codex_cli: 'codex_cli',
+  codex: 'codex_cli',
+  cline_cli: 'cline_cli',
+  cline: 'cline_cli',
+  opencode_cli: 'opencode_cli',
+  opencode: 'opencode_cli',
+  antigravity_cli: 'antigravity_cli',
+  agy: 'antigravity_cli',
+  qoder_cli: 'qoder_cli',
+  qodercli: 'qoder_cli',
+  freebuff_cli: 'freebuff_cli',
+  freebuff: 'freebuff_cli',
+  codebuddy_cli: 'codebuddy_cli',
+  codebuddy: 'codebuddy_cli'
 };
 
 async function openInstallerModal(focusToolId = null) {
@@ -1991,10 +2095,10 @@ async function loadInstallerStatus(forceRefresh = false) {
     if (dom.installAllMissingBtn) {
       if (data.missing === 0) {
         dom.installAllMissingBtn.disabled = true;
-        dom.installAllMissingBtn.innerHTML = '<span>✓ Alle 8 CLIs bereit</span>';
+        dom.installAllMissingBtn.innerHTML = '<span>Alle 8 CLIs bereit</span>';
       } else {
         dom.installAllMissingBtn.disabled = state.isInstallingAll;
-        dom.installAllMissingBtn.innerHTML = `<span>🚀 Alle ${data.missing} fehlenden CLIs installieren</span>`;
+        dom.installAllMissingBtn.innerHTML = `<span>Alle ${data.missing} fehlenden CLIs installieren</span>`;
       }
     }
 
@@ -2011,6 +2115,7 @@ async function loadInstallerStatus(forceRefresh = false) {
   }
 }
 
+// Harness-Monogramme kommen aus icons.js (HARNESS_META)
 function renderInstallerCards(tools) {
   if (!dom.installerCardsGrid) return;
   dom.installerCardsGrid.innerHTML = '';
@@ -2020,48 +2125,49 @@ function renderInstallerCards(tools) {
     const isReady = tool.available && !isInstalling;
     const isMissing = !tool.available && !isInstalling;
 
-    const icon = tool.icon || CLI_ICONS[tool.id] || CLI_ICONS[tool.cmd] || '⚡';
+    const mono = (typeof harnessIcon === 'function') ? harnessIcon(CLI_ICON_KEYS[tool.id] || tool.id || tool.cmd, 34) : '';
     const card = document.createElement('div');
     card.id = `installer-card-${tool.id}`;
     card.className = `installer-card ${isInstalling ? 'is-installing' : (isReady ? 'is-installed' : 'is-missing')}`;
 
     let statusBadge = '';
     if (isInstalling) {
-      statusBadge = '<span class="installer-card-badge status-busy">⏳ Installiert...</span>';
+      statusBadge = '<span class="installer-card-badge status-busy">Installiert…</span>';
     } else if (isReady) {
-      statusBadge = '<span class="installer-card-badge status-ok">✓ Bereit</span>';
+      statusBadge = '<span class="installer-card-badge status-ok">Bereit</span>';
     } else {
-      statusBadge = '<span class="installer-card-badge status-missing">✕ Fehlt</span>';
+      statusBadge = '<span class="installer-card-badge status-missing">Fehlt</span>';
     }
 
     let actionButton = '';
     if (isInstalling) {
       actionButton = `
         <button class="btn-card-install secondary" disabled>
-          <span>⏳ Wird installiert...</span>
+          <span>Wird installiert…</span>
         </button>
       `;
     } else if (isMissing) {
       actionButton = `
         <button class="btn-card-install primary" onclick="installCli('${tool.id}')">
-          <span>⚡ 1-Klick Installieren</span>
+          <span>1-Klick Installieren</span>
         </button>
       `;
     } else {
       actionButton = `
         <button class="btn-card-install secondary" onclick="installCli('${tool.id}')">
-          <span>🔄 Neu installieren / Update</span>
+          <span>Neu installieren / Update</span>
         </button>
       `;
     }
 
-    const shortPath = tool.path ? tool.path.replace('/Users/family', '~') : '–';
+    const homePrefix = (state.rootDirectory || '').split('/').slice(0, 3).join('/');
+    const shortPath = tool.path ? tool.path.replace(homePrefix, '~') : '–';
     const shortPkg = tool.package || tool.cmd;
 
     card.innerHTML = `
       <div class="installer-card-top">
         <div class="installer-card-meta">
-          <div class="installer-card-icon">${icon}</div>
+          <div class="installer-card-icon">${mono}</div>
           <div>
             <div class="installer-card-name">${escapeHtml(tool.name)}</div>
             <code class="installer-card-cmd">${escapeHtml(tool.cmd)}</code>
@@ -2119,12 +2225,12 @@ async function installCli(toolId) {
     });
     const data = await res.json();
     if (!res.ok) {
-      appendInstallerConsoleOutput(`✕ Fehler: ${data.error || 'Serverfehler'}\n`);
+      appendInstallerConsoleOutput(`Fehler: ${data.error || 'Serverfehler'}\n`);
       state.installingTools.delete(toolId);
       renderInstallerCards(state.installerTools);
     }
   } catch (err) {
-    appendInstallerConsoleOutput(`✕ Verbindungsfehler: ${err.message}\n`);
+    appendInstallerConsoleOutput(`Verbindungsfehler: ${err.message}\n`);
     state.installingTools.delete(toolId);
     renderInstallerCards(state.installerTools);
   }
@@ -2140,7 +2246,7 @@ async function installAllMissing() {
   state.isInstallingAll = true;
   if (dom.installAllMissingBtn) {
     dom.installAllMissingBtn.disabled = true;
-    dom.installAllMissingBtn.innerHTML = '<span>⏳ Batch-Installation läuft...</span>';
+    dom.installAllMissingBtn.innerHTML = '<span>Batch-Installation läuft…</span>';
   }
 
   if (dom.installerConsoleWrapper) {
@@ -2150,7 +2256,7 @@ async function installAllMissing() {
     }
   }
 
-  appendInstallerConsoleOutput(`\n🚀 [Batch-Installer] Starte sequenzielle Installation von ${missing.length} CLIs: ${missing.map(m => m.name).join(', ')}...\n\n`);
+  appendInstallerConsoleOutput(`\n[Batch-Installer] Starte sequenzielle Installation von ${missing.length} CLIs: ${missing.map(m => m.name).join(', ')}...\n\n`);
 
   try {
     const res = await fetch('/api/installer/install', {
@@ -2160,12 +2266,12 @@ async function installAllMissing() {
     });
     const data = await res.json();
     if (!res.ok) {
-      appendInstallerConsoleOutput(`✕ Fehler beim Start: ${data.error || 'Serverfehler'}\n`);
+      appendInstallerConsoleOutput(`Fehler beim Start: ${data.error || 'Serverfehler'}\n`);
       state.isInstallingAll = false;
       loadInstallerStatus();
     }
   } catch (err) {
-    appendInstallerConsoleOutput(`✕ Verbindungsfehler: ${err.message}\n`);
+    appendInstallerConsoleOutput(`Verbindungsfehler: ${err.message}\n`);
     state.isInstallingAll = false;
     loadInstallerStatus();
   }
