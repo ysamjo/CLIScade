@@ -268,6 +268,7 @@ test('parallel: zwei Projekte ueberlappen, statt aufeinander zu warten', async (
 });
 
 test('parallel: derselbe Ordner laeuft nie doppelt', async () => {
+  await waitForParServer();
   parConfig([
     { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
     { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
@@ -323,6 +324,7 @@ test('parallel: derselbe Harness arbeitet nie in zwei Ordnern', async () => {
 });
 
 test('parallel: die Kappe haelt weitere Laeufe zurueck', async () => {
+  await waitForParServer();
   parConfig([
     { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
     { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
@@ -343,6 +345,7 @@ test('parallel: die Kappe haelt weitere Laeufe zurueck', async () => {
 });
 
 test('parallel: die Kappe ist ein Schalter in den Einstellungen', async () => {
+  await waitForParServer();
   const clis = [
     { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
     { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
@@ -352,6 +355,8 @@ test('parallel: die Kappe ist ein Schalter in den Einstellungen', async () => {
 
   await httpPost('/api/config', { clis, dispatch: { max_concurrent: 4 } });
   assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 4, 'der Speichern-Knopf muss die Kappe übernehmen');
+  assert.strictEqual((await httpJson('/api/status')).dispatch.max_concurrent, 4,
+    'die Einstellungen lesen die Kappe aus dem Status — sonst zeigt das Feld beim nächsten Öffnen einen alten Wert');
 
   await httpPost('/api/config', { clis, dispatch: { max_concurrent: 0 } });
   assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 1, 'null würde jeden Auftrag festsetzen');
@@ -360,6 +365,7 @@ test('parallel: die Kappe ist ein Schalter in den Einstellungen', async () => {
 });
 
 test('parallel: Abbrechen trifft nur den eigenen Task', async () => {
+  await waitForParServer();
   parConfig([
     { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
     { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
@@ -385,6 +391,31 @@ test('parallel: Abbrechen trifft nur den eigenen Task', async () => {
   assert.strictEqual(other.exitCode, 0, 'der andere Lauf darf der Abbruch nicht etwas angehen:\n' + trail);
   assert.ok(messages.some((m) => m.type === 'output' && m.taskId === other.taskId && /FERTIG/.test(m.html || '')),
     'die Ausgabe des anderen Laufs muss bei seinem Task landen:\n' + trail);
+});
+
+test('parallel: die Ausgabe eines tickenden Laufs bleibt Zeile fuer Zeile', async () => {
+  await waitForParServer();
+  parConfig([
+    { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
+    { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
+  ]);
+
+  const messages = await runMany([
+    { prompt: 'erster Auftrag', projectPath: parProjectA, harnessOverride: 'Takt A' }
+  ]);
+
+  // ansi-to-html 0.7.2 haelt in stream:true den Zeilenzaehler: der dritte Umbruch bringt
+  // drei <br/>-Marken. Ein tickender Lauf fuellt die Konsole mit Leerraum.
+  const frames = messages.filter((m) => m.type === 'output' && (m.raw || '').length);
+  const roh = frames.map((f) => f.raw).join('');
+  const html = frames.map((f) => f.html).join('');
+  const zeilen = (roh.match(/\n/g) || []).length;
+  const umbrueche = (html.match(/<br\s*\/?>/g) || []).length;
+
+  assert.ok(zeilen > 20, 'der Takt muss genug Zeilen liefern:\n' + roh.slice(0, 200));
+  assert.strictEqual(umbrueche, zeilen,
+    `jede Zeile bekommt genau einen Umbruch: ${umbrueche} <br/> fuer ${zeilen} Zeilenvorschuebe`);
+  assert.doesNotMatch(html, /(<br\s*\/?>\s*){3,}/, 'die Zeilen stapeln nicht zu Leerraum:\n' + html.slice(0, 400));
 });
 
 test('chain: eine Route die nichts mehr schreibt, wird getoetet und die Kette laeuft weiter', async () => {

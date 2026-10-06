@@ -25,21 +25,25 @@ try {
   console.error('[PTY] node-pty konnte nicht geladen werden, interaktives Terminal deaktiviert:', err.message);
 }
 
-const ansiConverter = new Convert({
-  newline: true,
-  escapeXML: true,
-  stream: true,
-  colors: {
-    0: '#000000',
-    1: '#c2625c',
-    2: '#4f9d7f',
-    3: '#b98a45',
-    4: '#7d8ba5',
-    5: '#9a8cc0',
-    6: '#7fa3ad',
-    7: '#d9dce3'
-  }
-});
+const ANSI_COLORS = {
+  0: '#000000',
+  1: '#c2625c',
+  2: '#4f9d7f',
+  3: '#b98a45',
+  4: '#7d8ba5',
+  5: '#9a8cc0',
+  6: '#7fa3ad',
+  7: '#d9dce3'
+};
+
+// ansi-to-html 0.7.2 haelt in stream:true plus den Zeilenzaehler zuruck: jeder weitere
+// Umbruch bringt eine <br/>-Marke mehr. Ein tickender Haufen Output stapelt damit die
+// Konsole voll Leerraum. Also Umbrüche literal durchlaufen lassen und selbst setzen.
+// Der Konverter gehoert pro Lauf: zwei parallele Laeufe duerfen keinen Farbzustand teilen.
+function makeChunkRenderer() {
+  const converter = new Convert({ newline: false, escapeXML: true, stream: true, colors: ANSI_COLORS });
+  return (text) => converter.toHtml(text).replace(/\n/g, '<br/>');
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -910,7 +914,8 @@ function getHarnessUsage(forceRefresh = false) {
 app.get('/api/status', (req, res) => {
   const health = getHarnessHealth();
   const config = loadConfig();
-  res.json({ health, clis: config.clis || [] });
+  // Die Kappe gehört mit zum Status, sonst zeigen die Einstellungen einen alten Wert.
+  res.json({ health, clis: config.clis || [], dispatch: config.dispatch || { max_concurrent: DEFAULT_MAX_CONCURRENT } });
 });
 
 // 1-Click Installer Status API
@@ -1000,9 +1005,10 @@ app.post('/api/installer/install', (req, res) => {
       }
       const item = missing[idx++];
       broadcastToClients({ type: 'install_start', toolId: item.id, name: item.name });
+      const renderChunk = makeChunkRenderer();
       executeCliInstall(
         item.id,
-        (text) => broadcastToClients({ type: 'install_output', toolId: item.id, text, html: ansiConverter.toHtml(text) }),
+        (text) => broadcastToClients({ type: 'install_output', toolId: item.id, text, html: renderChunk(text) }),
         (err, updated) => {
           broadcastToClients({ type: 'install_done', toolId: item.id, err: err ? err.message : null, updated });
           setTimeout(runNext, 500);
@@ -1020,10 +1026,11 @@ app.post('/api/installer/install', (req, res) => {
   const meta = CLI_INSTALL_REGISTRY[id];
   broadcastToClients({ type: 'install_start', toolId: id, name: meta.name });
 
+  const renderInstallChunk = makeChunkRenderer();
   executeCliInstall(
     id,
     (text) => {
-      broadcastToClients({ type: 'install_output', toolId: id, text, html: ansiConverter.toHtml(text) });
+      broadcastToClients({ type: 'install_output', toolId: id, text, html: renderInstallChunk(text) });
     },
     (err, updated) => {
       broadcastToClients({
@@ -2372,6 +2379,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
 
   const { cmd, args } = buildCliCommand(selectedRoute, fullPrompt, selectedRoute.model || 'Standard');
   let collectedOutput = '';
+  const renderChunk = makeChunkRenderer();
 
   try {
     const child = spawn(cmd, args, {
@@ -2398,7 +2406,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     child.stdout.on('data', (data) => {
       const text = data.toString();
       collectedOutput += text;
-      const html = ansiConverter.toHtml(text);
+      const html = renderChunk(text);
       taskRecord.outputHtml += html;
       notify({ type: 'output', raw: text, html });
     });
@@ -2406,7 +2414,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     child.stderr.on('data', (data) => {
       const text = data.toString();
       collectedOutput += text;
-      const html = `<span style="color:var(--warning)">${ansiConverter.toHtml(text)}</span>`;
+      const html = `<span style="color:var(--warning)">${renderChunk(text)}</span>`;
       taskRecord.outputHtml += html;
       notify({ type: 'output', raw: text, html });
     });
@@ -2598,6 +2606,7 @@ function runDispatch(entry) {
     const { cmd, args } = buildCliCommand(selectedRoute, effectivePrompt, effectiveModel);
     let currentRunRawOutput = '';
     let watchdogIdleMs = null;
+    const renderChunk = makeChunkRenderer();
 
     try {
       const child = spawn(cmd, args, {
@@ -2621,7 +2630,7 @@ function runDispatch(entry) {
       child.stdout.on('data', (data) => {
         const text = data.toString();
         currentRunRawOutput += text;
-        const html = ansiConverter.toHtml(text);
+        const html = renderChunk(text);
         taskRecord.outputHtml += html;
         notify({ type: 'output', raw: text, html });
       });
@@ -2629,7 +2638,7 @@ function runDispatch(entry) {
       child.stderr.on('data', (data) => {
         const text = data.toString();
         currentRunRawOutput += text;
-        const html = `<span style="color:var(--warning)">${ansiConverter.toHtml(text)}</span>`;
+        const html = `<span style="color:var(--warning)">${renderChunk(text)}</span>`;
         taskRecord.outputHtml += html;
         notify({ type: 'output', raw: text, html });
       });
