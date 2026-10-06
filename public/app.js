@@ -418,8 +418,8 @@ function setupWebSocket() {
       loadUsage();
 
       if (data.message) {
-        const color = data.type === 'error' ? '#ef4444' : '#10b981';
-        appendTerminalOutput(`\n<div style="color:${color}; font-weight:bold; margin-top:10px;">[${escapeHtml(data.message)}]</div>\n`);
+        const color = data.type === 'error' ? 'var(--danger)' : 'var(--success)';
+        appendTerminalOutput(`\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`);
       }
     } else if (data.type === 'install_start') {
       state.installingTools.add(data.toolId);
@@ -564,13 +564,13 @@ function setupInteractiveTerminal() {
     convertEol: false,
     cursorBlink: true,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-    fontSize: 13,
+    fontSize: 12.5,
     scrollback: 5000,
     theme: {
-      background: '#0a0c12',
-      foreground: '#eef0f6',
-      cursor: '#6366f1',
-      selectionBackground: 'rgba(99, 102, 241, 0.35)'
+      background: '#0b0c10',
+      foreground: '#d9dce3',
+      cursor: '#7d8ba5',
+      selectionBackground: 'rgba(125, 139, 165, 0.28)'
     }
   });
 
@@ -814,7 +814,7 @@ async function refreshHarnessModelsOnTabOpen(force = false) {
       dom.refreshModelsBtn.textContent = 'Frage CLIs ab...';
     }
     if (dom.modelsRefreshBanner && dom.modelsRefreshText) {
-      dom.modelsRefreshText.innerHTML = `⏳ <em>Lese Modelle dynamisch aus CLIs (OpenCode, Codex, Qoder)...</em>`;
+      dom.modelsRefreshText.innerHTML = `<em>Lese Modelle dynamisch aus CLIs (OpenCode, Codex, Qoder)...</em>`;
       dom.modelsRefreshBanner.classList.remove('hidden');
     }
 
@@ -1265,7 +1265,7 @@ function renderProjectTree() {
       let usageMeta = '';
       if (task.usage && task.usage.totalTokens) {
         const tokK = Math.round(task.usage.totalTokens / 100) / 10;
-        usageMeta = ` · <span style="color:#10b981; font-weight:600;">${tokK}k Tok</span>`;
+        usageMeta = ` · <span style="color:var(--text-main);">${tokK}k Tok</span>`;
         if (task.usage.remainingPercent !== undefined) {
           usageMeta += ` <span style="color:var(--text-dim); font-size:10px;">(${task.usage.remainingPercent}% frei)</span>`;
         }
@@ -1501,14 +1501,14 @@ async function loadSkills(filterQuery = '') {
       const card = document.createElement('div');
       card.className = 'skill-card';
       
-      const harnessesHtml = (s.activeHarnesses || []).map(h => 
-        `<span class="badge" style="background:rgba(59,130,246,0.12); color:#60a5fa; font-size:10px; padding:2px 6px; border:1px solid rgba(59,130,246,0.25); white-space:nowrap;">${escapeHtml(h.name)}</span>`
+      const harnessesHtml = (s.activeHarnesses || []).map(h =>
+        `<span class="badge" style="color:var(--text-muted); font-size:10px; padding:1px 6px; border:1px solid var(--border-color); white-space:nowrap;">${escapeHtml(h.name)}</span>`
       ).join(' ');
 
       card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-          <div class="skill-title" style="font-size:14px; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
-            <span style="color:var(--accent); font-size:15px;">🧩</span> ${escapeHtml(s.displayName || s.name)}
+          <div class="skill-title" style="font-size:12.5px; font-weight:600; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+            ${escapeHtml(s.displayName || s.name)}
           </div>
           <span class="badge ${s.isFullySynced ? 'badge-success' : 'badge-accent'}" style="font-size:10px; padding:2px 6px; white-space:nowrap;">
             ${s.isFullySynced ? '✓ Alle 8 CLIs' : `${(s.activeHarnesses || []).length}/8 CLIs`}
@@ -1562,10 +1562,10 @@ async function handleInstallSkill() {
   const feedback = dom.skillInstallFeedback;
   if (!feedback) return;
   feedback.style.display = 'block';
-  feedback.style.background = 'rgba(59,130,246,0.15)';
-  feedback.style.border = '1px solid rgba(59,130,246,0.3)';
-  feedback.style.color = '#60a5fa';
-  feedback.textContent = '⏳ Installiere Skill und verteile per Symlink auf alle 8 Harnesses...';
+  feedback.style.background = 'var(--bg-secondary)';
+  feedback.style.border = '1px solid var(--border-color)';
+  feedback.style.color = 'var(--text-main)';
+  feedback.textContent = 'Installiere Skill und verteile per Symlink auf alle 8 Harnesses...';
 
   const payload = {
     mode: isGit ? 'git' : 'custom',
@@ -1584,10 +1584,8 @@ async function handleInstallSkill() {
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Fehler beim Installieren');
 
-    feedback.style.background = 'rgba(34,197,94,0.15)';
-    feedback.style.border = '1px solid rgba(34,197,94,0.3)';
-    feedback.style.color = '#4ade80';
-    feedback.textContent = `✅ ${data.message}`;
+    feedback.style.color = 'var(--success)';
+    feedback.textContent = data.message;
 
     state.skillsData = data.sync;
     await loadSkills();
@@ -1602,10 +1600,8 @@ async function handleInstallSkill() {
       if (dom.skillCustomContent) dom.skillCustomContent.value = '';
     }, 1200);
   } catch (err) {
-    feedback.style.background = 'rgba(239,68,68,0.15)';
-    feedback.style.border = '1px solid rgba(239,68,68,0.3)';
-    feedback.style.color = '#f87171';
-    feedback.textContent = `✕ ${err.message}`;
+    feedback.style.color = 'var(--danger)';
+    feedback.textContent = err.message;
   }
 }
 
@@ -1667,8 +1663,8 @@ function renderUsageUI() {
             <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
               <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(p.group)}</td>
               <td style="padding:4px 6px; font-family:monospace;">${escapeHtml(p.reqs)}</td>
-              <td style="padding:4px 6px; font-family:monospace; color:#60a5fa;">${escapeHtml(p.tokensIn)}</td>
-              <td style="padding:4px 6px; font-family:monospace; color:#34d399;">${escapeHtml(p.tokensOut)}</td>
+              <td style="padding:4px 6px; font-family:var(--font-mono); color:var(--text-main);">${escapeHtml(p.tokensIn)}</td>
+              <td style="padding:4px 6px; font-family:var(--font-mono); color:var(--text-main);">${escapeHtml(p.tokensOut)}</td>
               <td style="padding:4px 6px; font-weight:600; color:${p.costNum > 0 ? 'var(--accent)' : 'var(--text-muted)'};">${escapeHtml(p.cost)}</td>
             </tr>
           `;
@@ -1715,8 +1711,8 @@ function renderUsageUI() {
               <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(mid)}</td>
               <td style="padding:4px 6px; color:var(--text-muted);">${escapeHtml(mprov)}</td>
               <td style="padding:4px 6px; font-family:monospace;">${m.steps || 0}</td>
-              <td style="padding:4px 6px; font-family:monospace; color:#60a5fa;">${inTok}</td>
-              <td style="padding:4px 6px; font-family:monospace; color:#34d399;">${outTok}</td>
+              <td style="padding:4px 6px; font-family:var(--font-mono); color:var(--text-main);">${inTok}</td>
+              <td style="padding:4px 6px; font-family:var(--font-mono); color:var(--text-main);">${outTok}</td>
             </tr>
           `;
         });
@@ -1802,7 +1798,7 @@ function renderUsageTable() {
       `;
     } else if (key === 'opencode') {
       quotaHtml = `
-        <div><strong style="color:#10b981;">${escapeHtml(item.remaining || 'Unbegrenzt')}</strong></div>
+        <div><strong style="color:var(--text-main);">${escapeHtml(item.remaining || 'Unbegrenzt')}</strong></div>
         <div style="font-size:11px; color:var(--text-muted);">${item.tokensFormatted ? escapeHtml(item.tokensFormatted) + ' erfasst' : ''}${item.sessions ? ` (${item.sessions} Sessions)` : ''}</div>
       `;
     } else {

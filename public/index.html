@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0c12">
+  <meta name="theme-color" content="#0b0c10">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Harness Studio</title>
@@ -96,11 +96,6 @@
           </div>
           <div class="terminal-wrapper interactive-terminal-wrapper">
             <div class="terminal-header">
-              <div class="terminal-dots">
-                <span class="dot red"></span>
-                <span class="dot yellow"></span>
-                <span class="dot green"></span>
-              </div>
               <span id="interactive-terminal-title" class="terminal-title">Kein Prozess gestartet</span>
               <div class="terminal-actions">
                 <button id="interactive-stop-btn" class="btn-text btn-text-danger" disabled title="Laufenden Prozess beenden">Beenden</button>
@@ -127,11 +122,6 @@
           <!-- TERMINAL OUTPUT -->
           <div class="terminal-wrapper">
             <div class="terminal-header">
-              <div class="terminal-dots">
-                <span class="dot red"></span>
-                <span class="dot yellow"></span>
-                <span class="dot green"></span>
-              </div>
               <span id="terminal-session-title" class="terminal-title">Live-Ausgabe</span>
               <div class="terminal-actions">
                 <button id="clear-terminal-btn" class="btn-text">Leeren</button>
@@ -404,7 +394,7 @@
             </div>
 
             <!-- Sync feedback banner -->
-            <div id="skills-sync-banner" class="hidden" style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.3); color:#4ade80; font-size:12px; display:flex; align-items:center; justify-content:space-between;">
+            <div id="skills-sync-banner" class="hidden" style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:rgba(79,157,127,0.12); border:1px solid rgba(79,157,127,0.3); color:var(--success); font-size:12px; display:flex; align-items:center; justify-content:space-between;">
               <span id="skills-sync-text">Skills erfolgreich synchronisiert!</span>
               <button id="close-skills-sync-banner-btn" style="background:transparent; border:none; color:inherit; cursor:pointer;">✕</button>
             </div>
@@ -412,7 +402,7 @@
             <!-- Filter & Stats Bar -->
             <div class="skills-filter-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
               <div style="position:relative; flex:1; min-width:240px;">
-                <input id="skills-search-input" type="text" placeholder="🔍 Skill suchen (z. B. pdf, browser, perf, agent)..." style="width:100%; padding:8px 12px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; color:#fff; font-size:12px;" />
+                <input id="skills-search-input" type="text" placeholder="🔍 Skill suchen (z. B. pdf, browser, perf, agent)..." style="width:100%; padding:8px 12px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; color:var(--text-main); font-size:12px;" />
               </div>
               <div id="skills-status-badge" class="badge badge-accent" style="font-size:11px; padding:6px 10px;">
                 Lade Skills...
@@ -462,10 +452,10 @@
               <button id="refresh-usage-btn" class="btn btn-secondary">Aktualisieren</button>
             </div>
 
-            <div class="status-grid" style="margin-bottom: 16px;">
+            <div class="status-grid" style="margin-bottom: 10px;">
               <div class="status-stat">
                 <span class="stat-label">OmniRoute Live (Kosten)</span>
-                <span id="stat-omni-cost" class="stat-value mono" style="color:var(--accent);">$0.00</span>
+                <span id="stat-omni-cost" class="stat-value mono">$0.00</span>
               </div>
               <div class="status-stat">
                 <span class="stat-label">OmniRoute Tokens (Routing)</span>
@@ -473,7 +463,7 @@
               </div>
               <div class="status-stat">
                 <span class="stat-label">OpenCode Telemetrie</span>
-                <span id="stat-opencode-tokens" class="stat-value mono" style="color:#10b981;">0 Tokens</span>
+                <span id="stat-opencode-tokens" class="stat-value mono">0 Tokens</span>
               </div>
             </div>
 
@@ -508,7 +498,7 @@
             <div class="settings-card" id="opencode-details-card">
               <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>OpenCode Telemetrie & Tokens (opencode stats --cost)</span>
-                <span id="opencode-card-badge" class="order-badge" style="background:rgba(16,185,129,0.15); color:#10b981;">Live CLI</span>
+                <span id="opencode-card-badge" class="order-badge" style="background:rgba(79,157,127,0.15); color:var(--success);">Live CLI</span>
               </h5>
               <div id="opencode-models-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
                 <!-- Populated dynamically -->
@@ -662,7 +652,7 @@
 
                 <div class="form-group" style="margin-bottom:12px;">
                   <label for="sched-prompt-input">Aufgabe / Prompt:</label>
-                  <textarea id="sched-prompt-input" rows="2" style="width:100%; background:var(--bg-card); border:1px solid var(--border-color); border-radius:8px; color:#fff; padding:8px 12px; font-family:var(--font-sans); font-size:13px;" placeholder="z. B. Führe alle Tests aus, behebe Warnungen und formatiere geänderte Dateien mit dem Linter."></textarea>
+                  <textarea id="sched-prompt-input" rows="2" style="width:100%; background:var(--bg-card); border:1px solid var(--border-color); border-radius:8px; color:var(--text-main); padding:8px 12px; font-family:var(--font-sans); font-size:13px;" placeholder="z. B. Führe alle Tests aus, behebe Warnungen und formatiere geänderte Dateien mit dem Linter."></textarea>
                 </div>
 
                 <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
@@ -794,11 +784,6 @@
       <!-- LIVE TERMINAL CONSOLE -->
       <div id="installer-console-wrapper" class="installer-console-wrapper hidden">
         <div class="installer-console-header">
-          <div class="terminal-dots">
-            <span class="dot red"></span>
-            <span class="dot yellow"></span>
-            <span class="dot green"></span>
-          </div>
           <span id="installer-console-title" class="installer-console-title">Live Installations-Protokoll</span>
           <div class="installer-console-actions">
             <button id="clear-installer-console-btn" class="btn-text">Leeren</button>
@@ -843,19 +828,19 @@
         </div>
 
         <div id="skill-form-git">
-          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Git Repository URL:</label>
-          <input id="skill-git-url" type="text" placeholder="https://github.com/owner/skill-repo.git" style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; margin-bottom:12px;" />
-          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Skill-Name (optional):</label>
-          <input id="skill-git-name" type="text" placeholder="Automatisch aus URL oder z. B. my-skill" style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:var(--text-main);">Git Repository URL:</label>
+          <input id="skill-git-url" type="text" placeholder="https://github.com/owner/skill-repo.git" style="width:100%; padding:9px 12px; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-main); font-size:12px; margin-bottom:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:var(--text-main);">Skill-Name (optional):</label>
+          <input id="skill-git-name" type="text" placeholder="Automatisch aus URL oder z. B. my-skill" style="width:100%; padding:9px 12px; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-main); font-size:12px;" />
         </div>
 
         <div id="skill-form-custom" class="hidden">
-          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Skill-Name (Identifier):</label>
-          <input id="skill-custom-name" type="text" placeholder="z. B. docker-optimizer" style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; margin-bottom:12px;" />
-          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">Kurzbeschreibung:</label>
-          <input id="skill-custom-desc" type="text" placeholder="Wofür dieser Skill von den Agenten verwendet wird..." style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; margin-bottom:12px;" />
-          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:#fff;">SKILL.md Anweisungen / Prompt:</label>
-          <textarea id="skill-custom-content" rows="6" placeholder="# Workflow & Regeln für den Agenten..." style="width:100%; padding:9px 12px; background:#0e111a; border:1px solid #2d354d; border-radius:6px; color:#fff; font-size:12px; font-family:var(--font-mono);"></textarea>
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:var(--text-main);">Skill-Name (Identifier):</label>
+          <input id="skill-custom-name" type="text" placeholder="z. B. docker-optimizer" style="width:100%; padding:9px 12px; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-main); font-size:12px; margin-bottom:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:var(--text-main);">Kurzbeschreibung:</label>
+          <input id="skill-custom-desc" type="text" placeholder="Wofür dieser Skill von den Agenten verwendet wird..." style="width:100%; padding:9px 12px; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-main); font-size:12px; margin-bottom:12px;" />
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px; color:var(--text-main);">SKILL.md Anweisungen / Prompt:</label>
+          <textarea id="skill-custom-content" rows="6" placeholder="# Workflow & Regeln für den Agenten..." style="width:100%; padding:9px 12px; background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; color:var(--text-main); font-size:12px; font-family:var(--font-mono);"></textarea>
         </div>
 
         <div id="skill-install-feedback" style="font-size:12px; display:none; padding:8px 10px; border-radius:6px;"></div>
