@@ -1118,11 +1118,42 @@ app.get('/api/config', (req, res) => {
   res.json(loadConfig());
 });
 
+// Der Pool-Zustand für die Oberfläche: ein Neuladen des Fensters darf die laufenden
+// und wartenden Aufträge nicht verlieren, und der Zähler braucht die Kappe.
+app.get('/api/runs', (req, res) => {
+  res.json({
+    running: [...liveRuns.values()].map((r) => ({
+      taskId: r.taskId,
+      projectPath: r.workingDir,
+      projectName: path.basename(r.workingDir),
+      prompt: r.record.prompt,
+      harness: r.record.harness,
+      commands: r.commands,
+      startedAt: r.record.timestamp
+    })),
+    queued: dispatchQueue.map((r) => ({
+      taskId: r.taskId,
+      projectPath: r.workingDir,
+      projectName: path.basename(r.workingDir),
+      prompt: r.record.prompt,
+      harness: r.record.harness,
+      commands: r.requires,
+      startedAt: r.record.timestamp
+    })),
+    maxConcurrent: maxConcurrentRuns()
+  });
+});
+
 app.post('/api/config', (req, res) => {
   try {
-    const { clis } = req.body;
+    const { clis, dispatch } = req.body;
     const config = loadConfig();
     config.clis = clis;
+    // Die Kappe kommt aus der Oberfläche; alles unterhalb von 1 würde jeden Auftrag
+    // in der Warteschlange festsetzen.
+    if (dispatch && Number.isInteger(Number(dispatch.max_concurrent))) {
+      config.dispatch = { max_concurrent: Math.min(8, Math.max(1, Number(dispatch.max_concurrent))) };
+    }
     saveConfig(config);
     res.json({ success: true, config });
   } catch (err) {

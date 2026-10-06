@@ -127,6 +127,38 @@ function routes(messages) {
   return messages.filter((m) => m.type === 'route_selected').map((m) => m.harness);
 }
 
+function httpJson(pfad) {
+  return new Promise((resolve, reject) => {
+    require('node:http').get({ port: PAR_PORT, host: '127.0.0.1', path: pfad }, (res) => {
+      let body = '';
+      res.on('data', (d) => { body += d; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) return reject(new Error(`${pfad} -> ${res.statusCode}: ${body}`));
+        try { resolve(JSON.parse(body)); } catch (err) { reject(err); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function httpPost(pfad, data) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(data);
+    const req = require('node:http').request(
+      { port: PAR_PORT, host: '127.0.0.1', path: pfad, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+      (res) => {
+        let out = '';
+        res.on('data', (d) => { out += d; });
+        res.on('end', () => {
+          if (res.statusCode !== 200) return reject(new Error(`${pfad} -> ${res.statusCode}: ${out}`));
+          try { resolve(JSON.parse(out)); } catch (err) { reject(err); }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
 // Parallel dispatch needs its own instance and its own state directory: the chain
 // tests above share studio-tasks.json, and two concurrent runs there could not be
 // told apart. Same stubs, throwaway HOME, own port.
@@ -241,10 +273,15 @@ test('parallel: derselbe Ordner laeuft nie doppelt', async () => {
     { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
   ]);
 
+  let poolWhileQueued = null;
   const messages = await runMany([
     { prompt: 'erster Auftrag', projectPath: parProjectA, harnessOverride: 'Takt A' },
     { prompt: 'zweiter Auftrag', projectPath: parProjectA, harnessOverride: 'Takt B' }
-  ]);
+  ], (msg) => {
+    // Der Blick in den Pool muss während des Wartens passieren, sonst ist die
+    // Schlange längst abgearbeitet.
+    if (msg.type === 'queued' && !poolWhileQueued) poolWhileQueued = httpJson('/api/runs');
+  });
   const [first, second] = createdIds(messages);
   const seq = startStopSeq(messages);
 
@@ -254,6 +291,12 @@ test('parallel: derselbe Ordner laeuft nie doppelt', async () => {
   assert.strictEqual(queued.reason, 'project');
   assert.ok(seq.indexOf(`route_selected:${second}`) > seq.indexOf(`done:${first}`),
     `im selben Ordner darf erst nach dem Abschluss gestartet werden:\n${seq.join(' ')}`);
+
+  // Die Oberfläche braucht den Pool-Zustand zum Neuladen und für den Zähler.
+  const pool = await poolWhileQueued;
+  assert.ok(pool.running.some((r) => r.taskId === first), 'der laufende Auftrag muss im Pool stehen:\n' + JSON.stringify(pool));
+  assert.ok(pool.queued.some((r) => r.taskId === second), 'der wartende Auftrag muss im Pool stehen:\n' + JSON.stringify(pool));
+  assert.strictEqual(typeof pool.maxConcurrent, 'number');
 });
 
 test('parallel: die Kappe haelt weitere Laeufe zurueck', async () => {
@@ -274,6 +317,23 @@ test('parallel: die Kappe haelt weitere Laeufe zurueck', async () => {
   assert.strictEqual(queued.reason, 'capacity');
   assert.ok(seq.indexOf(`route_selected:${second}`) > seq.indexOf(`done:${first}`),
     `die Kappe darf nicht uebergangen werden:\n${seq.join(' ')}`);
+});
+
+test('parallel: die Kappe ist ein Schalter in den Einstellungen', async () => {
+  const clis = [
+    { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
+    { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
+  ];
+  parConfig(clis, { dispatch: { max_concurrent: 2 } });
+  assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 2, 'die Datei ist die Voraussetzung');
+
+  await httpPost('/api/config', { clis, dispatch: { max_concurrent: 4 } });
+  assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 4, 'der Speichern-Knopf muss die Kappe übernehmen');
+
+  await httpPost('/api/config', { clis, dispatch: { max_concurrent: 0 } });
+  assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 1, 'null würde jeden Auftrag festsetzen');
+
+  await httpPost('/api/config', { clis, dispatch: { max_concurrent: 3 } });
 });
 
 test('parallel: Abbrechen trifft nur den eigenen Task', async () => {
