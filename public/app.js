@@ -20,7 +20,14 @@ let state = {
   schedules: [],
   installerTools: [],
   installingTools: new Set(),
-  isInstallingAll: false
+  isInstallingAll: false,
+  // Interaktives PTY-Terminal (xterm.js)
+  studioMode: 'interactive',
+  terminal: null,
+  fitAddon: null,
+  interactiveRunning: false,
+  interactiveSessionId: null,
+  xtermResizeObserver: null
 };
 
 // DOM Elements
@@ -196,7 +203,23 @@ const dom = {
   installerConsoleBody: document.getElementById('installer-console-body'),
   clearInstallerConsoleBtn: document.getElementById('clear-installer-console-btn'),
   hideInstallerConsoleBtn: document.getElementById('hide-installer-console-btn'),
-  installerCardsGrid: document.getElementById('installer-cards-grid')
+  installerCardsGrid: document.getElementById('installer-cards-grid'),
+
+  // Interactive PTY Terminal
+  sidebarSettingsBtn: document.getElementById('sidebar-settings-btn'),
+  settingsOpenInstallerBtn: document.getElementById('settings-open-installer-btn'),
+  interactivePanel: document.getElementById('interactive-panel'),
+  dispatchPanel: document.getElementById('dispatch-panel'),
+  modeInteractiveBtn: document.getElementById('mode-interactive-btn'),
+  modeDispatchBtn: document.getElementById('mode-dispatch-btn'),
+  interactiveCliSelect: document.getElementById('interactive-cli-select'),
+  interactiveTargetFolder: document.getElementById('interactive-target-folder'),
+  interactiveStartBtn: document.getElementById('interactive-start-btn'),
+  interactiveStartLabel: document.getElementById('interactive-start-label'),
+  interactiveStopBtn: document.getElementById('interactive-stop-btn'),
+  interactiveTerminalTitle: document.getElementById('interactive-terminal-title'),
+  interactiveClearBtn: document.getElementById('interactive-clear-btn'),
+  xtermContainer: document.getElementById('xterm-container')
 };
 
 // --- INITIALIZATION ---
@@ -215,6 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   iconObserver.observe(document.body, { childList: true, subtree: true });
   setupWebSocket();
   setupEventListeners();
+  setupInteractiveTerminal();
 
   // Load workspace immediately so projects appear in < 30ms!
   loadWorkspace();
@@ -331,6 +355,8 @@ function setupWebSocket() {
 
   state.ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
+
+    if (handlePtyMessage(data)) return;
 
     if (data.type === 'task_created') {
       state.activeTaskId = data.task.id;
@@ -516,6 +542,193 @@ function setTerminalContent(htmlContent, title) {
   dom.terminalBody.scrollTop = 0;
 }
 
+// --- INTERACTIVE PTY TERMINAL (xterm.js) ---
+// The main window runs the real CLIs in a pseudo-terminal, so TUI-only harnesses
+// such as freebuff behave exactly like in a local shell and always answer.
+function setupInteractiveTerminal() {
+  if (!dom.xtermContainer) return;
+  if (typeof Terminal === 'undefined') {
+    console.warn('xterm.js nicht geladen — interaktives Terminal deaktiviert.');
+    dom.xtermContainer.innerHTML = '<div class="terminal-placeholder">xterm.js konnte nicht geladen werden.</div>';
+    return;
+  }
+
+  const term = new Terminal({
+    convertEol: false,
+    cursorBlink: true,
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontSize: 13,
+    scrollback: 5000,
+    theme: {
+      background: '#0a0c12',
+      foreground: '#eef0f6',
+      cursor: '#6366f1',
+      selectionBackground: 'rgba(99, 102, 241, 0.35)'
+    }
+  });
+
+  const fitAddon = (typeof FitAddon !== 'undefined') ? new FitAddon.FitAddon() : null;
+  if (fitAddon) term.loadAddon(fitAddon);
+
+  term.open(dom.xtermContainer);
+  state.terminal = term;
+  state.fitAddon = fitAddon;
+
+  term.onData((data) => {
+    if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({ type: 'pty_input', data }));
+    }
+  });
+
+  term.write('\x1b[38;5;244mWähle eine CLI und klicke auf „Starten" – der Prozess läuft dann hier im Terminal.\x1b[0m\r\n');
+
+  fitInteractiveTerminal();
+
+  if (window.ResizeObserver) {
+    state.xtermResizeObserver = new ResizeObserver(() => fitInteractiveTerminal());
+    state.xtermResizeObserver.observe(dom.xtermContainer);
+  }
+  window.addEventListener('resize', fitInteractiveTerminal);
+}
+
+function fitInteractiveTerminal() {
+  if (!state.terminal) return;
+  if (dom.interactivePanel && dom.interactivePanel.classList.contains('hidden')) return;
+  if (!dom.xtermContainer || dom.xtermContainer.clientWidth < 40 || dom.xtermContainer.clientHeight < 20) return;
+
+  if (state.fitAddon) {
+    try { state.fitAddon.fit(); } catch (e) { /* Container noch nicht messbar */ }
+  }
+  if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ type: 'pty_resize', cols: state.terminal.cols, rows: state.terminal.rows }));
+  }
+}
+
+function handlePtyMessage(data) {
+  if (data.type === 'pty_started') {
+    state.interactiveRunning = true;
+    state.interactiveSessionId = data.sessionId;
+    if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = false;
+    if (dom.interactiveStartBtn) dom.interactiveStartBtn.disabled = true;
+    if (dom.interactiveStartLabel) dom.interactiveStartLabel.textContent = 'Läuft';
+    if (dom.interactiveTerminalTitle) {
+      const folder = (data.cwd || '').split('/').filter(Boolean).pop() || '';
+      dom.interactiveTerminalTitle.textContent = `${data.command} · ${folder}`;
+    }
+    if (state.terminal) state.terminal.focus();
+    return true;
+  }
+  if (data.type === 'pty_data') {
+    if (state.terminal) state.terminal.write(data.data);
+    return true;
+  }
+  if (data.type === 'pty_exit') {
+    state.interactiveRunning = false;
+    state.interactiveSessionId = null;
+    if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
+    if (dom.interactiveStartBtn) dom.interactiveStartBtn.disabled = false;
+    if (dom.interactiveStartLabel) dom.interactiveStartLabel.textContent = 'Starten';
+    if (dom.interactiveTerminalTitle) {
+      dom.interactiveTerminalTitle.textContent = data.killed ? 'Beendet' : `Prozess beendet (Exit ${data.exitCode})`;
+    }
+    if (state.terminal) {
+      const tail = data.exitCode != null ? ` — Exit-Code ${data.exitCode}` : '';
+      state.terminal.write(`\r\n\x1b[38;5;244m[Prozess beendet${tail}]\x1b[0m\r\n`);
+    }
+    return true;
+  }
+  if (data.type === 'pty_error') {
+    state.interactiveRunning = false;
+    state.interactiveSessionId = null;
+    if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
+    if (dom.interactiveStartBtn) dom.interactiveStartBtn.disabled = false;
+    if (dom.interactiveStartLabel) dom.interactiveStartLabel.textContent = 'Starten';
+    if (state.terminal) state.terminal.write(`\r\n\x1b[31m[Fehler] ${data.error}\x1b[0m\r\n`);
+    return true;
+  }
+  return false;
+}
+
+function renderInteractiveCliSelect() {
+  const select = dom.interactiveCliSelect;
+  if (!select) return;
+
+  const previous = select.value;
+  const tools = state.health || [];
+  select.innerHTML = '';
+
+  if (tools.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Lade Harnesses...';
+    select.appendChild(opt);
+    return;
+  }
+
+  tools.forEach(h => {
+    const opt = document.createElement('option');
+    opt.value = h.cmd;
+    const ver = h.version ? ` · ${h.version}` : '';
+    opt.textContent = h.available
+      ? `${h.name} (${h.cmd})${ver}`
+      : `${h.name} (${h.cmd}) — nicht installiert`;
+    opt.disabled = !h.available;
+    select.appendChild(opt);
+  });
+
+  const available = tools.filter(h => h.available);
+  if (available.length > 0) {
+    const preferred = available.find(h => h.cmd === 'freebuff');
+    const keepPrevious = previous && available.some(h => h.cmd === previous);
+    select.value = keepPrevious ? previous : (preferred ? preferred.cmd : available[0].cmd);
+  }
+}
+
+function startInteractiveCli() {
+  const command = dom.interactiveCliSelect ? dom.interactiveCliSelect.value : '';
+  if (!command || !state.terminal) return;
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+    alert('Verbindung zum Server unterbrochen.');
+    return;
+  }
+
+  fitInteractiveTerminal();
+  state.terminal.reset();
+  const folder = (state.activeProject || '').split('/').filter(Boolean).pop() || '';
+  state.terminal.write(`\x1b[38;5;244mStarte ${command} in ${folder}...\x1b[0m\r\n\r\n`);
+  state.ws.send(JSON.stringify({
+    type: 'pty_start',
+    command,
+    cwd: state.activeProject,
+    cols: state.terminal.cols || 80,
+    rows: state.terminal.rows || 24
+  }));
+}
+
+function stopInteractiveCli() {
+  if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ type: 'pty_kill' }));
+  }
+}
+
+function setStudioMode(mode) {
+  state.studioMode = mode === 'dispatch' ? 'dispatch' : 'interactive';
+  const isInteractive = state.studioMode === 'interactive';
+
+  if (dom.interactivePanel) dom.interactivePanel.classList.toggle('hidden', !isInteractive);
+  if (dom.dispatchPanel) dom.dispatchPanel.classList.toggle('hidden', isInteractive);
+  if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.classList.toggle('active', isInteractive);
+  if (dom.modeDispatchBtn) dom.modeDispatchBtn.classList.toggle('active', !isInteractive);
+
+  if (isInteractive) {
+    // While hidden the container has no dimensions, so fit on the next frame.
+    requestAnimationFrame(() => {
+      fitInteractiveTerminal();
+      if (state.terminal) state.terminal.focus();
+    });
+  }
+}
+
 // --- SVG ICON HYDRATION ---
 function hydrateIcons(root) {
   const scope = root || document;
@@ -618,6 +831,7 @@ async function loadStatus() {
     state.clis = data.clis || [];
 
     renderHarnessStatusPills();
+    renderInteractiveCliSelect();
     renderHarnessOverrideSelect();
     renderHarnessConfigList();
   } catch (err) {
@@ -626,6 +840,7 @@ async function loadStatus() {
 }
 
 function renderHarnessStatusPills() {
+  if (!dom.harnessStatusPills) return;
   dom.harnessStatusPills.innerHTML = '';
   state.health.forEach(h => {
     const pill = document.createElement('div');
@@ -918,6 +1133,7 @@ function updateWorkspaceUI() {
   dom.currentProjectName.textContent = current.name;
   dom.currentProjectPath.textContent = `(${current.path})`;
   dom.promptTargetFolder.textContent = current.name;
+  if (dom.interactiveTargetFolder) dom.interactiveTargetFolder.textContent = current.name;
 
   if (dom.rootAgentsText) {
     dom.rootAgentsText.textContent = `AGENTS.md aktiv`;
@@ -1628,6 +1844,17 @@ function setupEventListeners() {
 
   // Top Bar: New Task
   dom.newTaskTopBtn.addEventListener('click', startNewTaskInProject);
+
+  // Interaktives Terminal: Modus, Start/Stop, Leeren
+  if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.addEventListener('click', () => setStudioMode('interactive'));
+  if (dom.modeDispatchBtn) dom.modeDispatchBtn.addEventListener('click', () => setStudioMode('dispatch'));
+  if (dom.interactiveStartBtn) dom.interactiveStartBtn.addEventListener('click', startInteractiveCli);
+  if (dom.interactiveStopBtn) dom.interactiveStopBtn.addEventListener('click', stopInteractiveCli);
+  if (dom.interactiveClearBtn) dom.interactiveClearBtn.addEventListener('click', () => {
+    if (state.terminal) state.terminal.clear();
+  });
+  if (dom.sidebarSettingsBtn) dom.sidebarSettingsBtn.addEventListener('click', () => openSettingsModal('workspace'));
+  if (dom.settingsOpenInstallerBtn) dom.settingsOpenInstallerBtn.addEventListener('click', () => openInstallerModal());
 
   // Settings Dialog Openers
   if (dom.topOpenSettingsBtn) {

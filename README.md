@@ -21,6 +21,16 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
 
 ## 🌟 Hauptfunktionen
 
+- **🖥️ Interaktives Terminal im Hauptfenster (neu):**
+  - Das Hauptfenster startet die echten CLIs in einem Pseudo-Terminal (`node-pty` + `xterm.js`) – inklusive TUI, Farben und direkter Tastatureingabe.
+  - **Freebuff, Claude Code, Codex, Cline, OpenCode, Antigravity, Qoder & CodeBuddy** laufen damit als vollwertige Prozesse. Damit ist auch Freebuff (reines TUI-CLI ohne Headless-Modus) direkt nutzbar und liefert Live-Rückmeldung.
+  - Zielordner = links ausgewähltes Projekt, CLI per Dropdown wählbar, `Starten` / `Beenden`.
+  - Umschalter zwischen **Interaktives Terminal** (Standard) und **Auto-Route (KI-Dispatch)** – alle bisherigen Funktionen bleiben im Auto-Route-Modus erhalten.
+
+- **🧭 Aufgeräumtes Layout:**
+  - Linke Sidebar: nur Ordner mit Tasks + ein Einstellungsbutton.
+  - Installations-Center, Usage, Skills, Scheduler & Co. liegen im Einstellungsdialog.
+
 - **⚡ 1-Klick CLI-Installations-Center:**
   - Status-, Health- & Versionserkennung aller 8 CLIs in Echtzeit.
   - 1-Klick Einzelinstallation oder sequenzielle Batch-Installation (`🚀 Alle fehlenden CLIs installieren`).
@@ -67,6 +77,8 @@ cd /Users/family/Developer/harness-router-gui
 npm install
 npm start
 ```
+
+> `npm install` lädt neben Express/ws auch `node-pty` (nativer PTY-Treiber für das interaktive Terminal) und `@xterm/xterm` + `@xterm/addon-fit` (Terminal-Emulation im Browser). Beim Serverstart wird der `spawn-helper` von `node-pty` automatisch ausführbar gemacht, falls die Prebuild-Datei ohne Executable-Bit installiert wurde.
 
 Der Server startet auf:
 - **Lokal:** `http://localhost:3000`

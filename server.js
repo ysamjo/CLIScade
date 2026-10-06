@@ -8,6 +8,12 @@ const { spawn, execSync, exec } = require('child_process');
 const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
+let pty = null;
+try {
+  pty = require('node-pty');
+} catch (err) {
+  console.error('[PTY] node-pty konnte nicht geladen werden, interaktives Terminal deaktiviert:', err.message);
+}
 
 const ansiConverter = new Convert({
   newline: true,
@@ -75,6 +81,9 @@ if (!fs.existsSync(SCHEDULES_FILE)) {
 
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
+// xterm.js is served straight from node_modules so no build step or CDN is needed.
+app.use('/vendor/xterm', express.static(path.join(__dirname, 'node_modules', '@xterm', 'xterm')));
+app.use('/vendor/xterm-addon-fit', express.static(path.join(__dirname, 'node_modules', '@xterm', 'addon-fit')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Model presets per harness (defaults + dynamic discovery)
@@ -1554,11 +1563,152 @@ function broadcastToClients(msg, excludeWs) {
   });
 }
 
+// --- INTERACTIVE PTY SESSIONS ---
+// Each browser tab gets its own pseudo-terminal, so TUI-only harnesses such as
+// freebuff run with a real TTY and can stream output and keystrokes both ways.
+const PTY_PLATFORM_DIR = path.join(__dirname, 'node_modules', 'node-pty', 'prebuilds', `${process.platform}-${process.arch}`);
+
+function ensurePtyHelperExecutable() {
+  // The npm prebuild ships spawn-helper without the executable bit and a missing
+  // bit makes every pty.spawn fail with the unhelpful "posix_spawnp failed".
+  try {
+    const helper = path.join(PTY_PLATFORM_DIR, 'spawn-helper');
+    if (fs.existsSync(helper) && !(fs.statSync(helper).mode & 0o111)) {
+      fs.chmodSync(helper, 0o755);
+    }
+  } catch (err) {
+    console.warn('[PTY] spawn-helper konnte nicht ausführbar gemacht werden:', err.message);
+  }
+}
+ensurePtyHelperExecutable();
+
+const PTY_ALLOWED_COMMANDS = new Set(
+  Object.values(CLI_INSTALL_REGISTRY).flatMap(m => [m.cmd, m.altCmd].filter(Boolean))
+);
+
+function resolvePtyCommand(command) {
+  const meta = Object.values(CLI_INSTALL_REGISTRY).find(m => m.cmd === command || m.altCmd === command);
+  if (!meta) return null;
+  for (const candidate of [meta.cmd, meta.altCmd].filter(Boolean)) {
+    try {
+      execSync(`which ${candidate}`, { stdio: 'ignore' });
+      return candidate;
+    } catch {}
+  }
+  return null;
+}
+
+let ptySessionSeq = 0;
+
+function writePty(ws, obj) {
+  if (ws.readyState === 1) {
+    try { ws.send(JSON.stringify(obj)); } catch {}
+  }
+}
+
+function killPtySession(ws, notifyClient = true) {
+  const session = ws._ptySession;
+  if (!session) return;
+  // Mark first: proc.onExit would otherwise emit a second pty_exit for this kill.
+  session.killedByUser = true;
+  ws._ptySession = null;
+  try { session.proc.kill(); } catch {}
+  if (notifyClient) writePty(ws, { type: 'pty_exit', sessionId: session.id, exitCode: null, killed: true });
+}
+
+function startPtySession(ws, payload) {
+  const { command, cwd } = payload || {};
+
+  if (!pty) {
+    return writePty(ws, { type: 'pty_error', error: 'node-pty ist auf diesem Server nicht verfügbar.' });
+  }
+  if (typeof command !== 'string' || !PTY_ALLOWED_COMMANDS.has(command)) {
+    return writePty(ws, { type: 'pty_error', error: `Unbekanntes Harness: ${command}` });
+  }
+  const resolved = resolvePtyCommand(command);
+  if (!resolved) {
+    return writePty(ws, { type: 'pty_error', error: `Befehl "${command}" nicht im PATH gefunden.` });
+  }
+
+  const workDir = (cwd && fs.existsSync(cwd)) ? cwd : (loadTasksData().rootDirectory || process.env.HOME);
+  killPtySession(ws, false);
+
+  const cols = Math.max(20, Math.min(500, parseInt(payload.cols, 10) || 80));
+  const rows = Math.max(5, Math.min(200, parseInt(payload.rows, 10) || 24));
+  const sessionId = `pty_${++ptySessionSeq}_${Date.now()}`;
+
+  let proc;
+  try {
+    proc = pty.spawn(resolved, [], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: workDir,
+      env: {
+        ...process.env,
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+        FORCE_COLOR: '1',
+        LANG: process.env.LANG || 'en_US.UTF-8',
+        PATH: `${process.env.HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}`
+      }
+    });
+  } catch (err) {
+    return writePty(ws, { type: 'pty_error', error: `PTY-Start fehlgeschlagen: ${err.message}` });
+  }
+
+  const session = { id: sessionId, proc, command: resolved, cwd: workDir, killedByUser: false };
+  ws._ptySession = session;
+  writePty(ws, { type: 'pty_started', sessionId, command: resolved, cwd: workDir });
+
+  proc.onData((data) => {
+    writePty(ws, { type: 'pty_data', sessionId, data });
+  });
+
+  proc.onExit(({ exitCode, signal }) => {
+    if (ws._ptySession && ws._ptySession.id === sessionId) ws._ptySession = null;
+    if (session.killedByUser) return;
+    writePty(ws, { type: 'pty_exit', sessionId, exitCode, signal });
+  });
+}
+
+function handlePtyMessage(ws, data) {
+  if (data.type === 'pty_start') {
+    startPtySession(ws, data);
+    return true;
+  }
+  if (data.type === 'pty_input') {
+    const session = ws._ptySession;
+    if (session) {
+      try { session.proc.write(String(data.data == null ? '' : data.data)); } catch {}
+    }
+    return true;
+  }
+  if (data.type === 'pty_resize') {
+    const session = ws._ptySession;
+    if (session) {
+      const cols = Math.max(20, Math.min(500, parseInt(data.cols, 10) || 80));
+      const rows = Math.max(5, Math.min(200, parseInt(data.rows, 10) || 24));
+      try { session.proc.resize(cols, rows); } catch {}
+    }
+    return true;
+  }
+  if (data.type === 'pty_kill') {
+    killPtySession(ws);
+    return true;
+  }
+  return false;
+}
+
 // WebSocket for live streaming execution
 wss.on('connection', (ws) => {
+  ws.on('close', () => killPtySession(ws, false));
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
+
+      if (handlePtyMessage(ws, data)) return;
+
       if (data.type === 'cancel') {
         if (activeProcess) {
           activeProcess.kill('SIGINT');

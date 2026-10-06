@@ -3242,3 +3242,127 @@ kbd {
   font-size: 13px;
   font-weight: 600;
 }
+
+/* ========================================== */
+/* INTERAKTIVES PTY-TERMINAL                  */
+/* ========================================== */
+.sidebar-settings-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sidebar-settings-btn:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.studio-mode-switch {
+  display: flex;
+  gap: 8px;
+  padding: 14px 24px 0;
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-btn:hover {
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.mode-btn.active {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: #c7c9ff;
+}
+
+.interactive-container {
+  padding-top: 14px;
+}
+
+.interactive-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+.interactive-toolbar .select-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.interactive-toolbar .select-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.interactive-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.interactive-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.interactive-hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.xterm-container {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+  background: #0a0c12;
+  overflow: hidden;
+}
+
+.xterm-container .xterm {
+  height: 100%;
+}
+
+.xterm-container .xterm-viewport {
+  background-color: #0a0c12 !important;
+}

@@ -11,6 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="apple-touch-icon" href="/icon.svg">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -55,17 +56,12 @@
         </div>
       </div>
 
-      <!-- SIDEBAR FOOTER: SETTINGS TRIGGER & HARNESS STATUS -->
+      <!-- SIDEBAR FOOTER: SETTINGS -->
       <div class="sidebar-footer">
-        <button id="open-installer-btn" class="installer-trigger-btn" title="1-Klick Installations-Center für alle 8 CLIs öffnen">
-          <span class="bolt-icon" data-icon="bolt"></span>
-          <span>1-Klick CLI-Installation</span>
-          <span id="installer-badge-count" class="count-pill">8 Bereit</span>
+        <button id="sidebar-settings-btn" class="sidebar-settings-btn" title="Einstellungen öffnen (⌘,)">
+          <span data-icon="settings"></span>
+          <span>Einstellungen</span>
         </button>
-        <div class="footer-title">LOKALE HARNESSES</div>
-        <div id="harness-status-pills" class="status-pills" title="Klicken für Harness-Diagnose in den Einstellungen">
-          <!-- Dynamically populated -->
-        </div>
       </div>
     </aside>
 
@@ -84,16 +80,58 @@
           <button id="top-usage-btn" class="btn btn-usage-top" title="Kosten & Token-Verbrauch öffnen">
             <span data-icon="chart"></span> <span class="btn-text-label">Usage:</span> <strong id="top-usage-badge">Lade...</strong>
           </button>
-          <button id="top-open-settings-btn" class="btn btn-settings-top" title="Einstellungen öffnen">
-            <span data-icon="settings"></span> <span class="btn-text-label">Einstellungen</span>
-          </button>
           <span id="connection-status" class="status-indicator connected">Verbunden</span>
         </div>
       </header>
 
-      <!-- STUDIO (CHAT, ROUTING & LIVE TERMINAL) -->
+      <!-- STUDIO (INTERAKTIVES TERMINAL, ROUTING & LIVE OUTPUT) -->
       <section id="tab-studio" class="tab-pane active">
-        <div class="studio-container">
+        <div class="studio-mode-switch">
+          <button id="mode-interactive-btn" class="mode-btn active" data-mode="interactive">
+            <span data-icon="terminal"></span> Interaktives Terminal
+          </button>
+          <button id="mode-dispatch-btn" class="mode-btn" data-mode="dispatch">
+            <span data-icon="send"></span> Auto-Route (KI-Dispatch)
+          </button>
+        </div>
+
+        <!-- INTERAKTIVES PTY-TERMINAL -->
+        <div id="interactive-panel" class="studio-container interactive-container">
+          <div class="interactive-toolbar">
+            <div class="select-group">
+              <label for="interactive-cli-select">CLI:</label>
+              <select id="interactive-cli-select" class="custom-select"></select>
+            </div>
+            <div class="interactive-target">
+              <span data-icon="folder"></span>
+              <span>Zielordner: <strong id="interactive-target-folder">-</strong></span>
+            </div>
+            <div class="interactive-actions">
+              <button id="interactive-start-btn" class="btn btn-primary"><span data-icon="play"></span> <span id="interactive-start-label">Starten</span></button>
+              <button id="interactive-stop-btn" class="btn btn-danger-sm" disabled>Beenden</button>
+            </div>
+          </div>
+          <div class="terminal-wrapper interactive-terminal-wrapper">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <span id="interactive-terminal-title" class="terminal-title">Kein Prozess gestartet</span>
+              <div class="terminal-actions">
+                <button id="interactive-clear-btn" class="btn-text">Leeren</button>
+              </div>
+            </div>
+            <div id="xterm-container" class="xterm-container"></div>
+          </div>
+          <div class="interactive-hint">
+            Wähle links ein Projekt und starte hier eine CLI. Freebuff, Claude Code, Codex, OpenCode &amp; Co. laufen als echte Prozesse mit vollem Terminal – inklusive TUI, Farben und direkter Eingabe.
+          </div>
+        </div>
+
+        <!-- AUTO-ROUTE (BESTEHENDER KI-DISPATCH) -->
+        <div id="dispatch-panel" class="studio-container hidden">
           <!-- LIVE EXECUTION BANNER -->
           <div id="active-routing-card" class="routing-card hidden">
             <div class="routing-card-header">
@@ -406,9 +444,12 @@
 
           <!-- SECTION 5: CLI DIAGNOSTICS & HEALTH -->
           <div id="settings-sec-diagnostics" class="settings-section">
-            <div class="settings-section-header">
-              <h4>Lokale Harness-Diagnose & Systemstatus</h4>
-              <p>Status aller 8 auf diesem Mac erkannten Code-Agenten und CLI-Binaries.</p>
+            <div class="settings-section-header-row">
+              <div class="settings-section-header">
+                <h4>Lokale Harness-Diagnose & Systemstatus</h4>
+                <p>Status aller 8 auf diesem Mac erkannten Code-Agenten und CLI-Binaries.</p>
+              </div>
+              <button id="settings-open-installer-btn" class="btn btn-primary" style="white-space:nowrap;">1-Klick Installations-Center</button>
             </div>
 
             <div class="diagnostics-table-container">
@@ -844,6 +885,8 @@
     </div>
   </div>
 
+  <script src="/vendor/xterm/lib/xterm.js"></script>
+  <script src="/vendor/xterm-addon-fit/lib/addon-fit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
