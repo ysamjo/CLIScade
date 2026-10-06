@@ -953,8 +953,6 @@ function renderHarnessConfigList() {
             ${modelOptionsHtml}
           </select>
           <input type="text" class="model-custom-input ${!isPreset && currentModel !== 'Standard' ? '' : 'hidden'}" data-idx="${index}" value="${!isPreset ? escapeHtml(currentModel) : ''}" placeholder="Modell-ID" />
-        </div>
-        <div class="model-test-line">
           <button class="btn-model-test" data-idx="${index}" title="Testet, ob ${escapeHtml(item.model || 'Standard')} über ${escapeHtml(item.command || '')} antwortet">Test</button>
           <span class="model-test-result"></span>
         </div>

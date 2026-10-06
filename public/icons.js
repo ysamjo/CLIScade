@@ -25,24 +25,26 @@ const ICONS = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>'
 };
+// Nur der Buchstabe unterscheidet die Harnesses — die Flaeche kommt aus style.css,
+// damit die Monogramme nicht als zweites Farbschema durch die Oberflaeche laufen.
 const HARNESS_META = {
-  claude_code_cli: { letter: 'C', bg: 'linear-gradient(135deg,#d97757,#9a4a2e)' },
-  claude: { letter: 'C', bg: 'linear-gradient(135deg,#d97757,#9a4a2e)' },
-  codex_cli: { letter: 'X', bg: 'linear-gradient(135deg,#10a37f,#0b6e55)' },
-  codex: { letter: 'X', bg: 'linear-gradient(135deg,#10a37f,#0b6e55)' },
-  cline_cli: { letter: 'Cl', bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)' },
-  cline: { letter: 'Cl', bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)' },
-  opencode_cli: { letter: 'O', bg: 'linear-gradient(135deg,#64748b,#334155)' },
-  opencode: { letter: 'O', bg: 'linear-gradient(135deg,#64748b,#334155)' },
-  antigravity_cli: { letter: 'A', bg: 'linear-gradient(135deg,#8b5cf6,#5b21b6)' },
-  agy: { letter: 'A', bg: 'linear-gradient(135deg,#8b5cf6,#5b21b6)' },
-  qoder_cli: { letter: 'Q', bg: 'linear-gradient(135deg,#0ea5e9,#0369a1)' },
-  qodercli: { letter: 'Q', bg: 'linear-gradient(135deg,#0ea5e9,#0369a1)' },
-  freebuff_cli: { letter: 'F', bg: 'linear-gradient(135deg,#f59e0b,#b45309)' },
-  freebuff: { letter: 'F', bg: 'linear-gradient(135deg,#f59e0b,#b45309)' },
-  codebuddy_cli: { letter: 'B', bg: 'linear-gradient(135deg,#22c55e,#15803d)' },
-  codebuddy: { letter: 'B', bg: 'linear-gradient(135deg,#22c55e,#15803d)' }
+  claude_code_cli: { letter: 'C' },
+  claude: { letter: 'C' },
+  codex_cli: { letter: 'X' },
+  codex: { letter: 'X' },
+  cline_cli: { letter: 'Cl' },
+  cline: { letter: 'Cl' },
+  opencode_cli: { letter: 'O' },
+  opencode: { letter: 'O' },
+  antigravity_cli: { letter: 'A' },
+  agy: { letter: 'A' },
+  qoder_cli: { letter: 'Q' },
+  qodercli: { letter: 'Q' },
+  freebuff_cli: { letter: 'F' },
+  freebuff: { letter: 'F' },
+  codebuddy_cli: { letter: 'B' },
+  codebuddy: { letter: 'B' }
 };
 function icon(n){return '<span class="svg-icon">'+(ICONS[n]||ICONS.bolt)+'</span>';}
-function harnessIcon(k,s){s=s||30;var h=HARNESS_META[k]||{letter:String(k||'?').slice(0,2).toUpperCase(),bg:'linear-gradient(135deg,#6366f1,#8b5cf6)'};var fs=Math.round(s*0.42);return '<span class="harness-monogram" style="background:'+h.bg+';width:'+s+'px;height:'+s+'px;font-size:'+fs+'px;">'+h.letter+'</span>';}
+function harnessIcon(k,s){s=s||30;var h=HARNESS_META[k]||{letter:String(k||'?').slice(0,2).toUpperCase()};var fs=Math.round(s*0.42);return '<span class="harness-monogram" style="width:'+s+'px;height:'+s+'px;font-size:'+fs+'px;">'+h.letter+'</span>';}
 window.ICONS = ICONS; window.HARNESS_META = HARNESS_META; window.icon = icon; window.harnessIcon = harnessIcon;
