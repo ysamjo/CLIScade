@@ -297,6 +297,10 @@ function renderDiagnosticsTable() {
   if (!dom.diagnosticsTableBody) return;
   dom.diagnosticsTableBody.innerHTML = '';
 
+  const ready = state.health.filter(h => h.available).length;
+  const summary = document.getElementById('diagnostics-summary');
+  if (summary) summary.textContent = `${ready}/${state.health.length} bereit`;
+
   state.health.forEach(h => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1762,7 +1766,8 @@ function updateRouteUsagePill() {
   }
 
   if (targetHarness) {
-    dom.routeUsageText.textContent = `${targetHarness.name}: ${targetHarness.remaining || targetHarness.badge || 'Aktiv'}`;
+    const detail = String(targetHarness.remaining || targetHarness.badge || 'Aktiv').replace(/^Modell:\s*/i, '');
+    dom.routeUsageText.textContent = `${targetHarness.name}: ${detail}`;
     if (dom.routeUsagePill) {
       dom.routeUsagePill.title = `${targetHarness.name} · Kontextfenster: ${targetHarness.contextWindow} · Plan: ${targetHarness.plan} (Klicken für Details)`;
     }
