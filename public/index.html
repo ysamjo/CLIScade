@@ -58,6 +58,9 @@
 
       <!-- SIDEBAR FOOTER: SETTINGS -->
       <div class="sidebar-footer">
+        <div class="sidebar-footer-status">
+          <span id="connection-status" class="status-indicator connected" title="Verbunden"></span>
+        </div>
         <button id="sidebar-settings-btn" class="sidebar-settings-btn" title="Einstellungen öffnen (⌘,)">
           <span data-icon="settings"></span>
           <span>Einstellungen</span>
@@ -67,26 +70,10 @@
 
     <!-- MAIN STUDIO WORKSPACE -->
     <main class="main-content">
-      <!-- TOP STATUS BAR -->
-      <header class="top-bar">
-        <div class="active-project-badge">
-          <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
-          <span class="badge-label">Aktives Projekt:</span>
-          <span id="current-project-name" class="badge-value">Lade...</span>
-          <span id="current-project-path" class="badge-path"></span>
-          <button id="new-task-top-btn" class="btn btn-outline-sm" title="Frische Task-Session starten">+ Neuer Task</button>
-        </div>
-        <div class="top-bar-actions">
-          <button id="top-usage-btn" class="btn btn-usage-top" title="Kosten & Token-Verbrauch öffnen">
-            <span data-icon="chart"></span> <span class="btn-text-label">Usage:</span> <strong id="top-usage-badge">Lade...</strong>
-          </button>
-          <span id="connection-status" class="status-indicator connected">Verbunden</span>
-        </div>
-      </header>
-
       <!-- STUDIO (INTERAKTIVES TERMINAL, ROUTING & LIVE OUTPUT) -->
       <section id="tab-studio" class="tab-pane active">
         <div class="studio-mode-switch">
+          <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
           <button id="mode-interactive-btn" class="mode-btn active" data-mode="interactive">
             <span data-icon="terminal"></span> Interaktives Terminal
           </button>
@@ -106,10 +93,6 @@
               <span data-icon="folder"></span>
               <span>Zielordner: <strong id="interactive-target-folder">-</strong></span>
             </div>
-            <div class="interactive-actions">
-              <button id="interactive-start-btn" class="btn btn-primary"><span data-icon="play"></span> <span id="interactive-start-label">Starten</span></button>
-              <button id="interactive-stop-btn" class="btn btn-danger-sm" disabled>Beenden</button>
-            </div>
           </div>
           <div class="terminal-wrapper interactive-terminal-wrapper">
             <div class="terminal-header">
@@ -120,6 +103,7 @@
               </div>
               <span id="interactive-terminal-title" class="terminal-title">Kein Prozess gestartet</span>
               <div class="terminal-actions">
+                <button id="interactive-stop-btn" class="btn-text btn-text-danger" disabled title="Laufenden Prozess beenden">Beenden</button>
                 <button id="interactive-clear-btn" class="btn-text">Leeren</button>
               </div>
             </div>

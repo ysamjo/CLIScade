@@ -29,6 +29,7 @@ let state = {
   fitAddon: null,
   interactiveRunning: false,
   interactiveSessionId: null,
+  interactiveAutoStartArmed: true,
   xtermResizeObserver: null
 };
 
@@ -46,10 +47,7 @@ const dom = {
   projectTree: document.getElementById('project-tree'),
   projectsCountBadge: document.getElementById('projects-count-badge'),
 
-  // Top Bar
-  currentProjectName: document.getElementById('current-project-name'),
-  currentProjectPath: document.getElementById('current-project-path'),
-  newTaskTopBtn: document.getElementById('new-task-top-btn'),
+  // Sidebar-Footer (Status-Punkt) & Mobile-Drawer
   connectionStatus: document.getElementById('connection-status'),
 
   // Studio & Terminal
@@ -139,8 +137,6 @@ const dom = {
   confirmAddRouteBtn: document.getElementById('confirm-add-route-btn'),
 
   // Usage & Quota & Telemetry
-  topUsageBtn: document.getElementById('top-usage-btn'),
-  topUsageBadge: document.getElementById('top-usage-badge'),
   routeUsagePill: document.getElementById('route-usage-pill'),
   routeUsageText: document.getElementById('route-usage-text'),
   usageTableBody: document.getElementById('usage-table-body'),
@@ -216,8 +212,6 @@ const dom = {
   modeDispatchBtn: document.getElementById('mode-dispatch-btn'),
   interactiveCliSelect: document.getElementById('interactive-cli-select'),
   interactiveTargetFolder: document.getElementById('interactive-target-folder'),
-  interactiveStartBtn: document.getElementById('interactive-start-btn'),
-  interactiveStartLabel: document.getElementById('interactive-start-label'),
   interactiveStopBtn: document.getElementById('interactive-stop-btn'),
   interactiveTerminalTitle: document.getElementById('interactive-terminal-title'),
   interactiveClearBtn: document.getElementById('interactive-clear-btn'),
@@ -339,19 +333,30 @@ function switchTab(tabId) {
 }
 
 // --- WEBSOCKET CONNECTION ---
+// Der Status ist nur noch ein Punkt in der Sidebar-Fußzeile: Text weg, Tooltip
+// trägt die Aussage. Sonst würde die Fußzeile bei jedem Reconnect umbrechen.
+function setConnectionState(online) {
+  const el = dom.connectionStatus;
+  if (!el) return;
+  el.className = online ? 'status-indicator connected' : 'status-indicator offline';
+  el.textContent = '';
+  const label = online ? 'Verbunden' : 'Getrennt – verbinde neu...';
+  el.title = label;
+  el.setAttribute('aria-label', label);
+}
+
 function setupWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}`;
   state.ws = new WebSocket(wsUrl);
 
   state.ws.onopen = () => {
-    dom.connectionStatus.textContent = 'Verbunden';
-    dom.connectionStatus.className = 'status-indicator connected';
+    setConnectionState(true);
+    maybeAutoStartInteractive();
   };
 
   state.ws.onclose = () => {
-    dom.connectionStatus.textContent = 'Getrennt (neu verbinden...)';
-    dom.connectionStatus.className = 'status-indicator';
+    setConnectionState(false);
     setTimeout(setupWebSocket, 2000);
   };
 
@@ -582,7 +587,7 @@ function setupInteractiveTerminal() {
     }
   });
 
-  term.write('\x1b[38;5;244mWähle eine CLI und klicke auf „Starten" – der Prozess läuft dann hier im Terminal.\x1b[0m\r\n');
+  term.write('\x1b[38;5;244mTerminal startet gleich automatisch mit der gewählten CLI.\x1b[0m\r\n');
 
   fitInteractiveTerminal();
 
@@ -591,6 +596,8 @@ function setupInteractiveTerminal() {
     state.xtermResizeObserver.observe(dom.xtermContainer);
   }
   window.addEventListener('resize', fitInteractiveTerminal);
+
+  maybeAutoStartInteractive();
 }
 
 function fitInteractiveTerminal() {
@@ -611,8 +618,6 @@ function handlePtyMessage(data) {
     state.interactiveRunning = true;
     state.interactiveSessionId = data.sessionId;
     if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = false;
-    if (dom.interactiveStartBtn) dom.interactiveStartBtn.disabled = true;
-    if (dom.interactiveStartLabel) dom.interactiveStartLabel.textContent = 'Läuft';
     if (dom.interactiveTerminalTitle) {
       const folder = (data.cwd || '').split('/').filter(Boolean).pop() || '';
       dom.interactiveTerminalTitle.textContent = `${data.command} · ${folder}`;
@@ -628,14 +633,12 @@ function handlePtyMessage(data) {
     state.interactiveRunning = false;
     state.interactiveSessionId = null;
     if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
-    if (dom.interactiveStartBtn) dom.interactiveStartBtn.disabled = false;
-    if (dom.interactiveStartLabel) dom.interactiveStartLabel.textContent = 'Starten';
     if (dom.interactiveTerminalTitle) {
       dom.interactiveTerminalTitle.textContent = data.killed ? 'Beendet' : `Prozess beendet (Exit ${data.exitCode})`;
     }
     if (state.terminal) {
       const tail = data.exitCode != null ? ` — Exit-Code ${data.exitCode}` : '';
-      state.terminal.write(`\r\n\x1b[38;5;244m[Prozess beendet${tail}]\x1b[0m\r\n`);
+      state.terminal.write(`\r\n\x1b[38;5;244m[Prozess beendet${tail}] „Interaktives Terminal" erneut anklicken startet neu.\x1b[0m\r\n`);
     }
     return true;
   }
@@ -643,8 +646,6 @@ function handlePtyMessage(data) {
     state.interactiveRunning = false;
     state.interactiveSessionId = null;
     if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
-    if (dom.interactiveStartBtn) dom.interactiveStartBtn.disabled = false;
-    if (dom.interactiveStartLabel) dom.interactiveStartLabel.textContent = 'Starten';
     if (state.terminal) state.terminal.write(`\r\n\x1b[31m[Fehler] ${data.error}\x1b[0m\r\n`);
     return true;
   }
@@ -684,13 +685,38 @@ function renderInteractiveCliSelect() {
     const keepPrevious = previous && available.some(h => h.cmd === previous);
     select.value = keepPrevious ? previous : (preferred ? preferred.cmd : available[0].cmd);
   }
+
+  // Die Liste füllt sich asynchron: sobald die erste CLI gewählt ist, darf
+  // das Terminal von selbst anlaufen.
+  maybeAutoStartInteractive();
 }
 
-function startInteractiveCli() {
+// Es gibt keinen Start-Button mehr: das Terminal startet, sobald der Modus
+// „Interaktives Terminal" aktiv ist und eine CLI gewählt wurde. Damit ein
+// späterer Re-Render (Health-Refresh) keinen gerade beendeten Prozess wieder
+// hochzieht, wird der Auto-Start nach dem ersten Versuch entwaffnet und nur
+// beim erneuten Betreten des Modus wieder scharf gestellt.
+function armInteractiveAutoStart() {
+  state.interactiveAutoStartArmed = true;
+}
+
+function maybeAutoStartInteractive() {
+  if (!state.interactiveAutoStartArmed) return;
+  if (state.studioMode !== 'interactive') return;
+  if (state.interactiveRunning || state.interactiveSessionId) return;
+  if (!state.terminal || !dom.interactiveCliSelect || !dom.interactiveCliSelect.value) return;
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+
+  state.interactiveAutoStartArmed = false;
+  startInteractiveCli({ silent: true });
+}
+
+function startInteractiveCli(opts) {
+  const silent = !!(opts && opts.silent);
   const command = dom.interactiveCliSelect ? dom.interactiveCliSelect.value : '';
-  if (!command || !state.terminal) return;
+  if (!command || !state.terminal || state.interactiveRunning) return;
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
-    alert('Verbindung zum Server unterbrochen.');
+    if (!silent) alert('Verbindung zum Server unterbrochen.');
     return;
   }
 
@@ -708,6 +734,9 @@ function startInteractiveCli() {
 }
 
 function stopInteractiveCli() {
+  // Manuell beendet heißt: nicht sofort wieder starten. Erst ein erneuter
+  // Wechsel in den Modus startet die CLI wieder.
+  state.interactiveAutoStartArmed = false;
   if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify({ type: 'pty_kill' }));
   }
@@ -723,10 +752,12 @@ function setStudioMode(mode) {
   if (dom.modeDispatchBtn) dom.modeDispatchBtn.classList.toggle('active', !isInteractive);
 
   if (isInteractive) {
+    armInteractiveAutoStart();
     // While hidden the container has no dimensions, so fit on the next frame.
     requestAnimationFrame(() => {
       fitInteractiveTerminal();
       if (state.terminal) state.terminal.focus();
+      maybeAutoStartInteractive();
     });
   }
 }
@@ -1117,6 +1148,12 @@ async function loadWorkspace() {
   }
 }
 
+function activeProjectName() {
+  const p = state.projects.find(x => x.path === state.activeProject);
+  if (p) return p.name;
+  return state.activeProject ? state.activeProject.split('/').filter(Boolean).pop() : 'Kein Projekt';
+}
+
 function updateWorkspaceUI() {
   const rootBase = state.rootDirectory ? state.rootDirectory.split('/').pop() || state.rootDirectory : 'Developer';
   if (dom.rootDirText) {
@@ -1135,8 +1172,6 @@ function updateWorkspaceUI() {
     path: state.activeProject || state.rootDirectory
   };
 
-  dom.currentProjectName.textContent = current.name;
-  dom.currentProjectPath.textContent = `(${current.path})`;
   dom.promptTargetFolder.textContent = current.name;
   if (dom.interactiveTargetFolder) dom.interactiveTargetFolder.textContent = current.name;
 
@@ -1362,7 +1397,7 @@ function startNewTaskInProject() {
   state.activeTaskId = null;
   renderProjectTree();
   setTerminalContent(
-    `<div class="terminal-placeholder">Frischer Task für <strong>${escapeHtml(dom.currentProjectName.textContent)}</strong>. Gib unten deine Aufgabe ein.</div>`,
+    `<div class="terminal-placeholder">Frischer Task für <strong>${escapeHtml(activeProjectName())}</strong>. Gib unten deine Aufgabe ein.</div>`,
     'Neuer Task'
   );
   switchTab('studio');
@@ -1590,31 +1625,10 @@ async function loadUsage(forceRefresh = false) {
   }
 }
 
-function shortTokenCount(n) {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} Mrd`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} Mio`;
-  if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
-  return String(n);
-}
-
 function renderUsageUI() {
   if (!state.usageData) return;
 
-  // 1. Top Bar Badge — spend and tokens. How many CLIs are installed already shows
-  // in the sidebar footer, so repeating it here under "Usage" said something else.
-  if (dom.topUsageBadge) {
-    const omni = state.costsData && state.costsData.omniroute;
-    const open = state.costsData && state.costsData.opencode;
-    if (omni || open) {
-      const tokens = (omni && omni.totalTokens || 0) + (open && open.totalTokens || 0);
-      const cost = (omni && omni.totalCostNum) || 0;
-      dom.topUsageBadge.textContent = `$${cost.toFixed(2)} · ${shortTokenCount(tokens)} Tok`;
-    } else {
-      dom.topUsageBadge.textContent = 'keine Daten';
-    }
-  }
-
-  // 2. Telemetry Stats Grid
+  // 1. Telemetry Stats Grid
   if (state.costsData) {
     if (dom.statOmniCost && state.costsData.omniroute) {
       dom.statOmniCost.textContent = state.costsData.omniroute.totalCost || '$0.00';
@@ -1846,13 +1860,9 @@ function setupEventListeners() {
     }
   });
 
-  // Top Bar: New Task
-  dom.newTaskTopBtn.addEventListener('click', startNewTaskInProject);
-
-  // Interaktives Terminal: Modus, Start/Stop, Leeren
+  // Interaktives Terminal: Modus, Beenden, Leeren
   if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.addEventListener('click', () => setStudioMode('interactive'));
   if (dom.modeDispatchBtn) dom.modeDispatchBtn.addEventListener('click', () => setStudioMode('dispatch'));
-  if (dom.interactiveStartBtn) dom.interactiveStartBtn.addEventListener('click', startInteractiveCli);
   if (dom.interactiveStopBtn) dom.interactiveStopBtn.addEventListener('click', stopInteractiveCli);
   if (dom.interactiveClearBtn) dom.interactiveClearBtn.addEventListener('click', () => {
     if (state.terminal) state.terminal.clear();
@@ -1875,9 +1885,6 @@ function setupEventListeners() {
   }
   if (dom.harnessStatusPills) {
     dom.harnessStatusPills.addEventListener('click', () => openSettingsModal('diagnostics'));
-  }
-  if (dom.topUsageBtn) {
-    dom.topUsageBtn.addEventListener('click', () => openSettingsModal('usage'));
   }
   if (dom.routeUsagePill) {
     dom.routeUsagePill.addEventListener('click', () => openSettingsModal('usage'));

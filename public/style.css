@@ -441,6 +441,13 @@ body {
   margin-bottom: 0 !important;
 }
 
+/* Status-Punkt rechtsbündig über dem Einstellungen-Knopf */
+.sidebar-footer-status {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 4px;
+}
+
 .footer-title {
   font-size: 10px;
   font-weight: 700;
@@ -490,84 +497,33 @@ body {
   overflow: hidden;
 }
 
-.top-bar {
-  height: 44px;
-  border-bottom: 1px solid var(--border-color);
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg-secondary);
-  flex-shrink: 0;
-  gap: 12px;
-}
-
-.active-project-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.top-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  height: 100%;
-}
-
-.badge-label {
-  color: var(--text-dim);
-}
-
-.badge-value {
-  font-weight: 700;
-  color: #fff;
-  font-size: 13px;
-}
-
-.badge-path {
-  color: var(--text-dim);
-  font-size: 11px;
-  font-family: var(--font-mono);
-}
-
-.btn-outline-sm {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: #93c5fd;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-outline-sm:hover {
-  background: var(--accent-light);
-  border-color: var(--accent);
-}
-
+/* Verbindungs-Status: nur ein Punkt in der Sidebar-Fußzeile, Text steht im Tooltip */
 .status-indicator {
-  font-size: 12px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-muted);
 }
 
-.status-indicator.connected::before {
+.status-indicator::before {
   content: '';
   display: inline-block;
   width: 8px;
   height: 8px;
-  background: var(--success);
   border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+.status-indicator.connected::before {
+  background: var(--success);
   box-shadow: 0 0 8px var(--success);
+  animation: none;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 /* TAB PANES */
@@ -1801,33 +1757,6 @@ kbd {
 }
 
 /* USAGE & QUOTA STYLES */
-.btn-usage-top {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.28);
-  color: #a7f3d0;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.btn-usage-top:hover {
-  background: rgba(16, 185, 129, 0.18);
-  border-color: var(--success);
-  color: #fff;
-}
-
-.btn-usage-top strong {
-  color: #34d399;
-  font-weight: 600;
-}
-
 .usage-pill {
   background: rgba(16, 185, 129, 0.12) !important;
   border: 1px solid rgba(16, 185, 129, 0.3) !important;
@@ -1889,7 +1818,7 @@ kbd {
 /* REMOTE & MOBILE STYLES                     */
 /* ========================================== */
 
-/* Mobile Sidebar Toggle Button in Top Bar */
+/* Mobile Sidebar Toggle (sitzt in der Modus-Leiste des Studios) */
 .btn-icon-mobile, button.btn-icon-mobile, #mobile-sidebar-toggle {
   display: none !important;
   align-items: center;
@@ -2766,8 +2695,8 @@ kbd {
     gap: 4px !important;
     font-size: 11px !important;
   }
-  .btn-icon-mobile {
-    display: inline-flex;
+  .btn-icon-mobile, button.btn-icon-mobile, #mobile-sidebar-toggle {
+    display: inline-flex !important;
   }
 
   .mobile-drawer-overlay {
@@ -2813,68 +2742,13 @@ kbd {
     overflow: hidden;
   }
 
-  /* TOP BAR: Clean, overflow-proof horizontal layout */
-  .top-bar {
-    height: 48px;
-    padding: 0 10px;
-    gap: 6px;
-    flex-wrap: nowrap;
-    overflow: hidden;
-  }
-
-  .active-project-badge {
-    flex: 1;
-    min-width: 0;
-    max-width: none;
-    gap: 6px;
-    overflow: hidden;
-  }
-
-  .active-project-badge .badge-label,
-  #current-project-path,
-  #new-task-top-btn,
-  #connection-status,
-  .active-project-hint {
-    display: none !important;
-  }
-
-  #current-project-name {
-    font-size: 13px;
-    max-width: 130px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-    font-weight: 600;
-  }
-
-  .top-bar-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-  }
-
-  .btn-usage-top {
-    padding: 4px 6px;
-    font-size: 11px;
-    white-space: nowrap;
-  }
-
-  .btn-usage-top .btn-text-label {
-    display: none;
-  }
-
-  #top-open-settings-btn {
-    padding: 4px 8px;
-    font-size: 13px;
-  }
-
-  #top-open-settings-btn .btn-text-label {
-    display: none;
-  }
-
   /* STUDIO CONTAINER */
+  .studio-mode-switch {
+    padding: 8px 10px 0;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
   .studio-container {
     padding: 8px 10px;
     gap: 8px;
@@ -3409,9 +3283,18 @@ kbd {
   margin-left: auto;
 }
 
-.interactive-actions {
-  display: flex;
-  gap: 8px;
+/* „Beenden" sitzt im Terminal-Header, nicht mehr in der Toolbar */
+.btn-text:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.btn-text-danger {
+  color: #f87171;
+}
+
+.btn-text-danger:hover:not(:disabled) {
+  color: #fca5a5;
 }
 
 .xterm-container {
