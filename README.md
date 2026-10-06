@@ -28,8 +28,9 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
   - Umschalter zwischen **Interaktives Terminal** (Standard) und **Auto-Route (KI-Dispatch)** – alle bisherigen Funktionen bleiben im Auto-Route-Modus erhalten.
 
 - **🧭 Aufgeräumtes Layout:**
-  - Linke Sidebar: nur Ordner mit Tasks + ein Einstellungsbutton.
-  - Installations-Center, Usage, Skills, Scheduler & Co. liegen im Einstellungsdialog.
+  - Linke Sidebar: alle Workspace-Ordner + Einstellungsbutton. Jeder Ordner ist **standardmäßig ausgeklappt**, der Task-Zähler steht direkt am Ordnernamen; Ordner ohne Tasks bleiben eine einzelne Zeile ohne leeren Platzhalter. Über `Nur Ordner mit Tasks zeigen` lässt sich die Sidebar auf relevante Projekte reduzieren.
+  - **Der Chat/das Terminal steht im Mittelpunkt:** zentrierter Inhaltsbereich (max. 1120 px), kompakte Topbar, Toolbar und Sidebar.
+  - Installations-Center, Usage, Skills, Scheduler & Co. liegen im Einstellungsdialog. Einstellungs- und Installer-Dialog sind auf `min(920px, 92vw)` bzw. `min(880px, 92vw)` begrenzt, unter 1200 px schaltet ein eigener Breakpoint auf kompakte Navigation um; Tabellen scrollen intern statt überzulaufen.
 
 - **⚡ 1-Klick CLI-Installations-Center:**
   - Status-, Health- & Versionserkennung aller 8 CLIs in Echtzeit.

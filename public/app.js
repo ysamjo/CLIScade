@@ -9,8 +9,10 @@ let state = {
   health: [],
   modelPresets: {},
   modelTests: {},
-  expandedProjects: new Set(),
-  showTasklessFolders: false,
+  // Ordner sind standardmäßig ausgeklappt – hier landen nur bewusst zugeklappte.
+  collapsedProjects: new Set(),
+  // Alle Ordner des Workspace sind standardmäßig sichtbar (kompakt per Button reduzierbar).
+  showTasklessFolders: true,
   activeAgentsTab: 'rootDev',
   agentsData: null,
   usageData: null,
@@ -1100,11 +1102,6 @@ async function loadWorkspace() {
     state.projects = data.projects || [];
     state.tasks = data.tasks || [];
 
-    // Automatically expand the active project
-    if (state.activeProject) {
-      state.expandedProjects.add(state.activeProject);
-    }
-
     updateWorkspaceUI();
     renderProjectTree();
   } catch (err) {
@@ -1189,9 +1186,11 @@ function renderProjectTree() {
   }
 
   visibleProjects.forEach(p => {
-    const isExpanded = state.expandedProjects.has(p.path);
-    const isActive = p.path === state.activeProject;
     const projectTasks = state.tasks.filter(t => t.projectPath === p.path);
+    // Ohne Tasks gibt es nichts auszuklappen – der Ordner bleibt eine reine Zeile.
+    const hasTasks = projectTasks.length > 0;
+    const isExpanded = hasTasks && !state.collapsedProjects.has(p.path);
+    const isActive = p.path === state.activeProject;
 
     const node = document.createElement('div');
     node.className = `project-node ${isActive ? 'active' : ''}`;
@@ -1201,9 +1200,10 @@ function renderProjectTree() {
     const header = document.createElement('div');
     header.className = 'project-header';
     header.innerHTML = `
-      <span class="toggle-arrow">${isExpanded ? '▾' : '▸'}</span>
+      <span class="toggle-arrow">${hasTasks ? (isExpanded ? '▾' : '▸') : ''}</span>
       <span class="folder-icon" data-icon="folder"></span>
       <span class="project-title" title="${escapeHtml(p.path)}">${escapeHtml(p.name)}</span>
+      ${hasTasks ? `<span class="project-count" title="${projectTasks.length} Task(s) in diesem Ordner">${projectTasks.length}</span>` : ''}
       ${p.hasAgentsMd ? '<span class="badge-tag">AGENTS</span>' : ''}
       <button class="add-task-btn" title="Neuen Task in '${escapeHtml(p.name)}' starten">＋</button>
     `;
@@ -1212,44 +1212,40 @@ function renderProjectTree() {
     const taskList = document.createElement('div');
     taskList.className = `task-list ${isExpanded ? '' : 'hidden'}`;
 
-    if (projectTasks.length === 0) {
-      taskList.innerHTML = '<div class="empty-task-hint">Keine Tasks vorhanden</div>';
-    } else {
-      projectTasks.forEach(task => {
-        const isTaskActive = task.id === state.activeTaskId;
-        const taskItem = document.createElement('div');
-        taskItem.className = `task-item ${isTaskActive ? 'active' : ''}`;
-        taskItem.dataset.taskId = task.id;
+    projectTasks.forEach(task => {
+      const isTaskActive = task.id === state.activeTaskId;
+      const taskItem = document.createElement('div');
+      taskItem.className = `task-item ${isTaskActive ? 'active' : ''}`;
+      taskItem.dataset.taskId = task.id;
 
-        const timeStr = formatTimestamp(task.timestamp);
-        const statusIcon = task.status === 'completed' ? '●' : (task.status === 'running' ? '◐' : '○');
+      const timeStr = formatTimestamp(task.timestamp);
+      const statusIcon = task.status === 'completed' ? '●' : (task.status === 'running' ? '◐' : '○');
 
-        let usageMeta = '';
-        if (task.usage && task.usage.totalTokens) {
-          const tokK = Math.round(task.usage.totalTokens / 100) / 10;
-          usageMeta = ` · <span style="color:#10b981; font-weight:600;">${tokK}k Tok</span>`;
-          if (task.usage.remainingPercent !== undefined) {
-            usageMeta += ` <span style="color:var(--text-dim); font-size:10px;">(${task.usage.remainingPercent}% frei)</span>`;
-          }
+      let usageMeta = '';
+      if (task.usage && task.usage.totalTokens) {
+        const tokK = Math.round(task.usage.totalTokens / 100) / 10;
+        usageMeta = ` · <span style="color:#10b981; font-weight:600;">${tokK}k Tok</span>`;
+        if (task.usage.remainingPercent !== undefined) {
+          usageMeta += ` <span style="color:var(--text-dim); font-size:10px;">(${task.usage.remainingPercent}% frei)</span>`;
         }
+      }
 
-        taskItem.innerHTML = `
-          <span class="task-icon">↳</span>
-          <div class="task-meta">
-            <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
-            <span class="task-badge">${statusIcon} ${escapeHtml(task.harness || 'cli')} · ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
-          </div>
-        `;
+      taskItem.innerHTML = `
+        <span class="task-icon">↳</span>
+        <div class="task-meta">
+          <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
+          <span class="task-badge">${statusIcon} ${escapeHtml(task.harness || 'cli')} · ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
+        </div>
+      `;
 
-        // Click task: show recorded terminal output
-        taskItem.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectTask(task);
-        });
-
-        taskList.appendChild(taskItem);
+      // Click task: show recorded terminal output
+      taskItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectTask(task);
       });
-    }
+
+      taskList.appendChild(taskItem);
+    });
 
     // Toggle expand/collapse or select project
     header.addEventListener('click', (e) => {
@@ -1268,7 +1264,7 @@ function renderProjectTree() {
 
       // Clicking the header selects project and expands it
       selectProject(p.path);
-      state.expandedProjects.add(p.path);
+      state.collapsedProjects.delete(p.path);
       renderProjectTree();
     });
 
@@ -1299,10 +1295,10 @@ function renderProjectTree() {
 }
 
 function toggleProjectExpand(projectPath) {
-  if (state.expandedProjects.has(projectPath)) {
-    state.expandedProjects.delete(projectPath);
+  if (state.collapsedProjects.has(projectPath)) {
+    state.collapsedProjects.delete(projectPath);
   } else {
-    state.expandedProjects.add(projectPath);
+    state.collapsedProjects.add(projectPath);
   }
   renderProjectTree();
 }
@@ -1340,7 +1336,7 @@ function selectTask(task) {
   state.activeTaskId = task.id;
   if (task.projectPath && state.activeProject !== task.projectPath) {
     state.activeProject = task.projectPath;
-    state.expandedProjects.add(task.projectPath);
+    state.collapsedProjects.delete(task.projectPath);
     updateWorkspaceUI();
   }
 
