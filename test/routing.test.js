@@ -198,32 +198,34 @@ test('gilt nur fuer Einkonto-Befehle', () => {
   assert.strictEqual(holder, null);
 });
 
+// runningForGate() liefert pro Lauf eine Kommandoliste: ein Konsens laeuft mit zwei
+// Engines, ein Auto-Lauf mit der einen, die die Kette gerade gewaehlt hat.
 test('laesst einen Task warten, wenn die Kappe voll ist', () => {
   const running = [
-    { taskId: 't1', command: 'opencode', projectPath: '/a' },
-    { taskId: 't2', command: 'cline', projectPath: '/b' }
+    { taskId: 't1', projectPath: '/a', commands: ['opencode'] },
+    { taskId: 't2', projectPath: '/b', commands: ['cline'] }
   ];
   const block = dispatchSlotDecision({
     maxConcurrent: 2,
     running,
-    incoming: { projectPath: '/c', candidateCommands: ['claude'] }
+    incoming: { projectPath: '/c', candidates: ['claude'] }
   });
   assert.strictEqual(block.reason, 'capacity');
 });
 
 test('laesst zwei Tasks im selben Ordner nicht gleichzeitig arbeiten', () => {
-  const running = [{ taskId: 't1', command: 'opencode', projectPath: '/a' }];
+  const running = [{ taskId: 't1', projectPath: '/a', commands: ['opencode'] }];
   const block = dispatchSlotDecision({
     maxConcurrent: 3,
     running,
-    incoming: { projectPath: '/a', candidateCommands: ['cline'] }
+    incoming: { projectPath: '/a', candidates: ['cline'] }
   });
   assert.strictEqual(block.reason, 'project');
   assert.strictEqual(block.blocker.taskId, 't1', 'der wartende Task muss nennen, wer den Ordner haelt');
 });
 
 test('laesst einen frei gewaehlten Harness warten, wenn er schon arbeitet', () => {
-  const running = [{ taskId: 't1', command: 'cline', projectPath: '/a' }];
+  const running = [{ taskId: 't1', projectPath: '/a', commands: ['cline'] }];
   const block = dispatchSlotDecision({
     maxConcurrent: 3,
     running,
@@ -233,30 +235,39 @@ test('laesst einen frei gewaehlten Harness warten, wenn er schon arbeitet', () =
 });
 
 test('startet auto, solange wenigstens eine Kette frei ist', () => {
-  const running = [{ taskId: 't1', command: 'cline', projectPath: '/a' }];
+  const running = [{ taskId: 't1', projectPath: '/a', commands: ['cline'] }];
   const block = dispatchSlotDecision({
     maxConcurrent: 3,
     running,
-    incoming: { projectPath: '/b', candidateCommands: ['cline', 'claude'] }
+    incoming: { projectPath: '/b', candidates: ['cline', 'claude'] }
   });
   assert.strictEqual(block, null, 'auto darf starten und weicht in der Kette auf claude aus');
 });
 
 test('laesst auto warten, wenn die ganze Kette belegt ist', () => {
   const running = [
-    { taskId: 't1', command: 'cline', projectPath: '/a' },
-    { taskId: 't2', command: 'claude', projectPath: '/b' }
+    { taskId: 't1', projectPath: '/a', commands: ['cline'] },
+    { taskId: 't2', projectPath: '/b', commands: ['claude'] }
   ];
   const block = dispatchSlotDecision({
     maxConcurrent: 5,
     running,
-    incoming: { projectPath: '/c', candidateCommands: ['cline', 'claude'] }
+    incoming: { projectPath: '/c', candidates: ['cline', 'claude'] }
   });
   assert.strictEqual(block.reason, 'harness');
 });
 
+test('laesst nichts starten, wenn ueberhaupt nichts laeuft', () => {
+  const block = dispatchSlotDecision({
+    maxConcurrent: 3,
+    running: [],
+    incoming: { projectPath: '/c', candidates: ['cline', 'claude'] }
+  });
+  assert.strictEqual(block, null, 'eine leere Liste ist keine belegte Kette');
+});
+
 test('reserviert fuer Konsens beide Engines', () => {
-  const running = [{ taskId: 't1', command: 'claude', projectPath: '/a' }];
+  const running = [{ taskId: 't1', projectPath: '/a', commands: ['claude'] }];
   const block = dispatchSlotDecision({
     maxConcurrent: 3,
     running,
@@ -267,7 +278,7 @@ test('reserviert fuer Konsens beide Engines', () => {
 });
 
 test('startet Konsens, wenn beide Engines frei sind', () => {
-  const running = [{ taskId: 't1', command: 'opencode', projectPath: '/a' }];
+  const running = [{ taskId: 't1', projectPath: '/a', commands: ['opencode'] }];
   const block = dispatchSlotDecision({
     maxConcurrent: 3,
     running,
@@ -277,7 +288,7 @@ test('startet Konsens, wenn beide Engines frei sind', () => {
 });
 
 test('meldet einen belegten Harness als Grund, in der Kette weiterzuruecken', () => {
-  const running = [{ taskId: 't1', command: 'cline', projectPath: '/a' }];
+  const running = [{ taskId: 't1', projectPath: '/a', commands: ['cline'] }];
   assert.match(busyHarnessBlocker({ command: 'cline', name: 'Cline' }, running), /Cline/);
   assert.strictEqual(busyHarnessBlocker({ command: 'claude', name: 'Claude Code' }, running), null);
 });

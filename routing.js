@@ -112,14 +112,16 @@ function dispatchSlotDecision({ maxConcurrent, running = [], incoming = {} } = {
   const sameFolder = running.find((r) => r.projectPath === incoming.projectPath);
   if (sameFolder) return { reason: 'project', blocker: sameFolder };
 
+  const usesCommand = (run, command) => (run.commands || []).includes(command);
   const required = incoming.requires || [];
-  const busyRequired = running.find((r) => required.includes(r.command));
+  const busyRequired = running.find((r) => required.some((c) => usesCommand(r, c)));
   if (busyRequired) return { reason: 'harness', blocker: busyRequired };
   if (required.length) return null;
 
-  const candidates = incoming.candidateCommands || [];
-  const allBusy = candidates.length > 0 && candidates.every((c) => running.some((r) => r.command === c));
-  if (allBusy) return { reason: 'harness', blocker: running.find((r) => r.command === candidates[0]) };
+  const candidates = incoming.candidates || [];
+  const isBusy = (r) => candidates.some((c) => usesCommand(r, c));
+  const allBusy = candidates.length > 0 && candidates.every((c) => running.some((r) => usesCommand(r, c)));
+  if (allBusy) return { reason: 'harness', blocker: running.find(isBusy) };
   return null;
 }
 
@@ -127,7 +129,7 @@ function dispatchSlotDecision({ maxConcurrent, running = [], incoming = {} } = {
 // anderen Task arbeitet, gilt als Grund, eine Route zu ueberspringen — nie zwei Tasks
 // auf ein Konto.
 function busyHarnessBlocker(route = {}, running = []) {
-  const busy = running.find((r) => r.command === route.command);
+  const busy = running.find((r) => (r.commands || []).includes(route.command));
   if (!busy) return null;
   return `${route.name || route.command} arbeitet bereits in einem anderen Task`;
 }

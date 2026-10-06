@@ -299,6 +299,29 @@ test('parallel: derselbe Ordner laeuft nie doppelt', async () => {
   assert.strictEqual(typeof pool.maxConcurrent, 'number');
 });
 
+test('parallel: derselbe Harness arbeitet nie in zwei Ordnern', async () => {
+  await waitForParServer();
+  parConfig([
+    { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
+    { name: 'Takt B', command: 'stub-tick-b', enabled: true, model: 'plan-free' }
+  ]);
+
+  const messages = await runMany([
+    { prompt: 'erster Auftrag', projectPath: parProjectA, harnessOverride: 'Takt A' },
+    { prompt: 'zweiter Auftrag', projectPath: parProjectB, harnessOverride: 'Takt A' }
+  ]);
+  const [first, second] = createdIds(messages);
+  const seq = startStopSeq(messages);
+
+  const queued = messages.find((m) => m.type === 'queued');
+  assert.ok(queued, 'zwei Aufträge auf ein Konto dürfen nicht gleichzeitig laufen:\n' + describe(messages));
+  assert.strictEqual(queued.reason, 'harness');
+  assert.match(queued.message, /stub-tick-a/, 'die Meldung muss nennen, welcher Harness belegt ist:\n' + describe(messages));
+  assert.match(queued.message, /proj-a/, 'und in welchem Ordner er arbeitet:\n' + describe(messages));
+  assert.ok(seq.indexOf(`route_selected:${second}`) > seq.indexOf(`done:${first}`),
+    `der zweite Lauf darf erst nach dem Abschluss starten:\n${seq.join(' ')}`);
+});
+
 test('parallel: die Kappe haelt weitere Laeufe zurueck', async () => {
   parConfig([
     { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
