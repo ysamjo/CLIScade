@@ -2114,6 +2114,14 @@ wss.on('connection', (ws) => {
 const GATEWAY_ENV_NAMES = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL'];
 let shellGatewayEnv = null;
 
+// Die Namen reichen als Beleg — Werte in einem Log wären weitergegebene Anmeldedaten.
+function logGatewayEnv(umgebung) {
+  const namen = Object.keys(umgebung);
+  console.log(namen.length
+    ? `[Gateway] Umbiegung aus der Login-Shell: ${namen.join(', ')}`
+    : '[Gateway] Login-Shell kennt keine Umbiegung, claude läuft direkt');
+}
+
 function readShellGatewayEnv() {
   const shell = process.env.SHELL || '/bin/zsh';
   try {
@@ -2134,6 +2142,7 @@ function readShellGatewayEnv() {
       const treffer = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(zeile);
       if (treffer && GATEWAY_ENV_NAMES.includes(treffer[1])) shellEnv[treffer[1]] = treffer[2];
     }
+    logGatewayEnv(shellEnv);
     return shellEnv;
   } catch (err) {
     console.error('[Gateway] Login-Shell nicht befragt, claude läuft ohne Umbiegung:', err.message);
@@ -2141,10 +2150,15 @@ function readShellGatewayEnv() {
   }
 }
 
-function harnessEnv(overrides = {}) {
+function gatewayEnv() {
+  // Einmal fragen und behalten — auch ein leeres Ergebnis, damit keine Nachfragen folgen.
   if (!shellGatewayEnv) shellGatewayEnv = readShellGatewayEnv();
+  return shellGatewayEnv;
+}
+
+function harnessEnv(overrides = {}) {
   const env = {
-    ...gatewayEnvFromShell({ shellEnv: shellGatewayEnv, currentEnv: process.env, names: GATEWAY_ENV_NAMES }),
+    ...gatewayEnvFromShell({ shellEnv: gatewayEnv(), currentEnv: process.env, names: GATEWAY_ENV_NAMES }),
     ...process.env,
     FORCE_COLOR: '1',
     ...overrides
@@ -3529,5 +3543,6 @@ server.listen(PORT, '0.0.0.0', () => {
   const lanIp = getLanIp();
   console.log(`Harness Studio running on http://0.0.0.0:${PORT} (LAN: http://${lanIp}:${PORT})`);
   reconcileOrphanedTasks();
+  gatewayEnv();
   startTelegramBot().catch(err => console.error("Telegram Bot Start:", err));
 });
