@@ -13,6 +13,7 @@ const {
   routePolicyBlocker,
   knownBrokenBlocker,
   startupRefusal,
+  ptyOwnershipBlocker,
   RUN_IDLE_TIMEOUT_MS
 } = require('./routing');
 let pty = null;
@@ -536,6 +537,11 @@ const CLI_INSTALL_REGISTRY = {
 // Without a real TTY they abort immediately ("Terminal protocol transition failed")
 // and leave their screen-redraw bytes in the output pipe, so they cannot be dispatched.
 const TUI_ONLY_COMMANDS = new Set(['freebuff']);
+
+// Harnesses, deren Anbieter dem Konto nur eine gleichzeitig aktive Session zugesteht.
+// Eine zweite Instanz verdrängt die erste (HTTP 409 session_superseded), und das ältere
+// Terminal zeigt einen Fehler, obwohl der Nutzer dort gar nichts getan hat.
+const SINGLE_SESSION_COMMANDS = new Set(['freebuff']);
 
 // A TUI-only launcher has no --version shortcut: `freebuff --version` still starts the
 // full agent, which on startup migrates its token through the Keychain. That Keychain
@@ -1659,6 +1665,7 @@ function resolvePtyCommand(command) {
 }
 
 let ptySessionSeq = 0;
+const livePtySessions = new Set();
 
 function writePty(ws, obj) {
   if (ws.readyState === 1) {
@@ -1666,14 +1673,15 @@ function writePty(ws, obj) {
   }
 }
 
-function killPtySession(ws, notifyClient = true) {
+function killPtySession(ws, notifyClient = true, notice) {
   const session = ws._ptySession;
   if (!session) return;
   // Mark first: proc.onExit would otherwise emit a second pty_exit for this kill.
   session.killedByUser = true;
+  livePtySessions.delete(session);
   ws._ptySession = null;
   try { session.proc.kill(); } catch {}
-  if (notifyClient) writePty(ws, { type: 'pty_exit', sessionId: session.id, exitCode: null, killed: true });
+  if (notifyClient) writePty(ws, { type: 'pty_exit', sessionId: session.id, exitCode: null, killed: true, notice });
 }
 
 function startPtySession(ws, payload) {
@@ -1691,6 +1699,26 @@ function startPtySession(ws, payload) {
   }
 
   const workDir = (cwd && fs.existsSync(cwd)) ? cwd : (loadTasksData().rootDirectory || process.env.HOME);
+
+  const holder = ptyOwnershipBlocker({
+    singleSessionCommands: SINGLE_SESSION_COMMANDS,
+    sessions: [...livePtySessions],
+    command: resolved,
+    clientId: ws._ptyClientId
+  });
+  if (holder) {
+    if (!payload.takeover) {
+      const folder = String(holder.cwd).split('/').filter(Boolean).pop() || holder.cwd;
+      return writePty(ws, {
+        type: 'pty_error',
+        code: 'pty_in_use',
+        error: `${resolved} läuft bereits in einem anderen Fenster (Ordner ${folder}).`,
+        holder: { id: holder.id, command: holder.command, cwd: holder.cwd }
+      });
+    }
+    killPtySession(holder.ws, true, 'Ein anderes Fenster hat diese Session übernommen.');
+  }
+
   killPtySession(ws, false);
 
   const cols = Math.max(20, Math.min(500, parseInt(payload.cols, 10) || 80));
@@ -1717,8 +1745,9 @@ function startPtySession(ws, payload) {
     return writePty(ws, { type: 'pty_error', error: `PTY-Start fehlgeschlagen: ${err.message}` });
   }
 
-  const session = { id: sessionId, proc, command: resolved, cwd: workDir, killedByUser: false };
+  const session = { id: sessionId, proc, command: resolved, cwd: workDir, ws, clientId: ws._ptyClientId, killedByUser: false };
   ws._ptySession = session;
+  livePtySessions.add(session);
   writePty(ws, { type: 'pty_started', sessionId, command: resolved, cwd: workDir });
 
   proc.onData((data) => {
@@ -1726,6 +1755,7 @@ function startPtySession(ws, payload) {
   });
 
   proc.onExit(({ exitCode, signal }) => {
+    livePtySessions.delete(session);
     if (ws._ptySession && ws._ptySession.id === sessionId) ws._ptySession = null;
     if (session.killedByUser) return;
     writePty(ws, { type: 'pty_exit', sessionId, exitCode, signal });
@@ -1762,6 +1792,7 @@ function handlePtyMessage(ws, data) {
 
 // WebSocket for live streaming execution
 wss.on('connection', (ws) => {
+  ws._ptyClientId = `client_${++ptySessionSeq}`;
   ws.on('close', () => killPtySession(ws, false));
   ws.on('message', (message) => {
     try {

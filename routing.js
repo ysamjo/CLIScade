@@ -91,6 +91,15 @@ function startupRefusal(rawOutput = '') {
   return line ? line.trim().slice(0, 200) : null;
 }
 
+// Harnesses wie freebuff nehmen dem Konto genau eine Session ab: startet ein zweites
+// Fenster dieselbe CLI, verdrängt die neue die alte und das alte Terminal meldet
+// "released or taken over". Ein Fenster darf seinen eigenen Prozess neu starten, weil
+// der Server ihn vor dem Spawn fegt.
+function ptyOwnershipBlocker({ singleSessionCommands, sessions = [], command, clientId } = {}) {
+  if (!singleSessionCommands || !singleSessionCommands.has(command)) return null;
+  return sessions.find((s) => s.command === command && s.clientId !== clientId) || null;
+}
+
 module.exports = {
   RUN_IDLE_TIMEOUT_MS,
   RUN_IDLE_GRACE_MS,
@@ -98,5 +107,6 @@ module.exports = {
   routePolicyBlocker,
   knownBrokenBlocker,
   startupRefusal,
+  ptyOwnershipBlocker,
   formatAge
 };

@@ -164,6 +164,10 @@ pruefe("Beenden sitzt im Terminal-Header",
   stopp?.parentElement?.classList.contains("terminal-actions") === true);
 pruefe("Beenden ist im Ruhezustand deaktiviert", stopp?.disabled === true);
 
+const takeover = document.querySelector("#interactive-takeover-btn");
+pruefe("#interactive-takeover-btn existiert", takeover !== null);
+pruefe("Übernehmen ist im Ruhezustand versteckt", takeover?.hidden === true);
+
 // --- 4. Das Skript ist ohne Fehler durchgelaufen -------------------------
 
 pruefe("keine JS-Fehler beim Bootstrap", fehler.length === 0, fehler.join(" | "));
@@ -210,6 +214,24 @@ document.querySelector("#mode-interactive-btn").click();
 await new Promise((r) => setTimeout(r, 80));
 await ruhen(6);
 pruefe("Klick auf den Modus-Knopf startet die CLI neu",
+  frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
+
+// --- 8. Server-Neustart: das Terminal friert nicht ein -------------------
+// Faellt die Verbindung weg, ist der PTY-Prozess auf dem Server laengst fort.
+// Hielte die App ihn fuer lebendig, koennte der Nutzer nichts mehr starten.
+
+frames.length = 0;
+ws.onmessage({ data: JSON.stringify({ type: "pty_started", sessionId: "s9", command: "freebuff", cwd: "/tmp/harness-router-gui" }) });
+await ruhen(2);
+ws.onclose();
+await ruhen(2100); // die App verbindet sich nach zwei Sekunden neu
+
+const ws2 = WebSocketStub.last;
+pruefe("Neuverbindung opened", ws2 != null && ws2 !== ws);
+ws2.readyState = WebSocketStub.OPEN;
+ws2.onopen();
+await ruhen(8);
+pruefe("Terminal startet nach der Neuverbindung neu",
   frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);

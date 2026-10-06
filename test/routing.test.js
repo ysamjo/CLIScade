@@ -7,7 +7,8 @@ const {
   armIdleWatchdog,
   routePolicyBlocker,
   knownBrokenBlocker,
-  startupRefusal
+  startupRefusal,
+  ptyOwnershipBlocker
 } = require('../routing');
 
 // Waet until a process is gone, so no test leaves orphans behind.
@@ -157,4 +158,38 @@ test('erkennt einen Start mit unbekanntem Flag', () => {
 test('laesst eine Route durch, die wirklich gearbeitet hat', () => {
   assert.strictEqual(startupRefusal('Ich habe die Konfiguration pruefen lassen und zwei Dateien geaendert.\nFertig.'), null);
   assert.strictEqual(startupRefusal(''), null);
+});
+
+test('laesst keine zweite freebuff-Instanz aus einem anderen Fenster starten', () => {
+  const sessions = [{ id: 'pty_1', command: 'freebuff', clientId: 'A', cwd: '/proj' }];
+  const holder = ptyOwnershipBlocker({
+    singleSessionCommands: new Set(['freebuff']),
+    sessions,
+    command: 'freebuff',
+    clientId: 'B'
+  });
+  assert.ok(holder, 'freebuff nimmt dem Konto nur eine Session ab; die zweite verdraengt die erste');
+  assert.strictEqual(holder.id, 'pty_1');
+});
+
+test('laesst dasselbe Fenster neu starten', () => {
+  const sessions = [{ id: 'pty_1', command: 'freebuff', clientId: 'A', cwd: '/proj' }];
+  const holder = ptyOwnershipBlocker({
+    singleSessionCommands: new Set(['freebuff']),
+    sessions,
+    command: 'freebuff',
+    clientId: 'A'
+  });
+  assert.strictEqual(holder, null, 'der eigene Prozess wird vom Server vorher gefegt');
+});
+
+test('gilt nur fuer Einkonto-Befehle', () => {
+  const sessions = [{ id: 'pty_1', command: 'freebuff', clientId: 'A', cwd: '/proj' }];
+  const holder = ptyOwnershipBlocker({
+    singleSessionCommands: new Set(['freebuff']),
+    sessions,
+    command: 'claude',
+    clientId: 'B'
+  });
+  assert.strictEqual(holder, null);
 });

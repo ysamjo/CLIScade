@@ -213,6 +213,7 @@ const dom = {
   interactiveCliSelect: document.getElementById('interactive-cli-select'),
   interactiveTargetFolder: document.getElementById('interactive-target-folder'),
   interactiveStopBtn: document.getElementById('interactive-stop-btn'),
+  interactiveTakeoverBtn: document.getElementById('interactive-takeover-btn'),
   interactiveTerminalTitle: document.getElementById('interactive-terminal-title'),
   interactiveClearBtn: document.getElementById('interactive-clear-btn'),
   xtermContainer: document.getElementById('xterm-container')
@@ -356,6 +357,15 @@ function setupWebSocket() {
 
   state.ws.onopen = () => {
     setConnectionState(true);
+    // Neue Verbindung, alter Prozess: der PTY ist auf dem Server langst weg,
+    // wurde er doch nur iiber den ehemaligen Socket bekannt. Wurde er weiter als
+    // laufend gefuehrt, friert das Terminal ein und der Nutzer kann nichts mehr starten.
+    if (state.interactiveRunning || state.interactiveSessionId) {
+      state.interactiveRunning = false;
+      state.interactiveSessionId = null;
+      if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
+      armInteractiveAutoStart();
+    }
     maybeAutoStartInteractive();
   };
 
@@ -621,6 +631,7 @@ function handlePtyMessage(data) {
   if (data.type === 'pty_started') {
     state.interactiveRunning = true;
     state.interactiveSessionId = data.sessionId;
+    if (dom.interactiveTakeoverBtn) dom.interactiveTakeoverBtn.hidden = true;
     if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = false;
     if (dom.interactiveTerminalTitle) {
       const folder = (data.cwd || '').split('/').filter(Boolean).pop() || '';
@@ -638,11 +649,17 @@ function handlePtyMessage(data) {
     state.interactiveSessionId = null;
     if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
     if (dom.interactiveTerminalTitle) {
-      dom.interactiveTerminalTitle.textContent = data.killed ? 'Beendet' : `Prozess beendet (Exit ${data.exitCode})`;
+      dom.interactiveTerminalTitle.textContent = data.notice
+        ? 'Anderes Fenster übernommen'
+        : (data.killed ? 'Beendet' : `Prozess beendet (Exit ${data.exitCode})`);
     }
     if (state.terminal) {
-      const tail = data.exitCode != null ? ` — Exit-Code ${data.exitCode}` : '';
-      state.terminal.write(`\r\n\x1b[38;5;244m[Prozess beendet${tail}] „Interaktives Terminal" erneut anklicken startet neu.\x1b[0m\r\n`);
+      if (data.notice) {
+        state.terminal.write(`\r\n\x1b[38;5;244m[${data.notice}]\x1b[0m\r\n`);
+      } else {
+        const tail = data.exitCode != null ? ` — Exit-Code ${data.exitCode}` : '';
+        state.terminal.write(`\r\n\x1b[38;5;244m[Prozess beendet${tail}] „Interaktives Terminal" erneut anklicken startet neu.\x1b[0m\r\n`);
+      }
     }
     return true;
   }
@@ -650,7 +667,15 @@ function handlePtyMessage(data) {
     state.interactiveRunning = false;
     state.interactiveSessionId = null;
     if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
-    if (state.terminal) state.terminal.write(`\r\n\x1b[31m[Fehler] ${data.error}\x1b[0m\r\n`);
+    const inUse = data.code === 'pty_in_use';
+    if (dom.interactiveTakeoverBtn) dom.interactiveTakeoverBtn.hidden = !inUse;
+    if (dom.interactiveTerminalTitle && inUse) dom.interactiveTerminalTitle.textContent = 'Session läuft anderweitig';
+    if (state.terminal) {
+      state.terminal.write(`\r\n\x1b[31m[Fehler] ${data.error}\x1b[0m\r\n`);
+      if (inUse) {
+        state.terminal.write('\x1b[38;5;244m„Übernehmen" oben rechts holt die Session in dieses Fenster.\x1b[0m\r\n');
+      }
+    }
     return true;
   }
   return false;
@@ -717,6 +742,7 @@ function maybeAutoStartInteractive() {
 
 function startInteractiveCli(opts) {
   const silent = !!(opts && opts.silent);
+  const takeover = !!(opts && opts.takeover);
   const command = dom.interactiveCliSelect ? dom.interactiveCliSelect.value : '';
   if (!command || !state.terminal || state.interactiveRunning) return;
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
@@ -731,6 +757,7 @@ function startInteractiveCli(opts) {
   state.ws.send(JSON.stringify({
     type: 'pty_start',
     command,
+    takeover,
     cwd: state.activeProject,
     cols: state.terminal.cols || 80,
     rows: state.terminal.rows || 24
@@ -1863,6 +1890,10 @@ function setupEventListeners() {
   if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.addEventListener('click', () => setStudioMode('interactive'));
   if (dom.modeDispatchBtn) dom.modeDispatchBtn.addEventListener('click', () => setStudioMode('dispatch'));
   if (dom.interactiveStopBtn) dom.interactiveStopBtn.addEventListener('click', stopInteractiveCli);
+  if (dom.interactiveTakeoverBtn) dom.interactiveTakeoverBtn.addEventListener('click', () => {
+    dom.interactiveTakeoverBtn.hidden = true;
+    startInteractiveCli({ takeover: true, silent: true });
+  });
   if (dom.interactiveClearBtn) dom.interactiveClearBtn.addEventListener('click', () => {
     if (state.terminal) state.terminal.clear();
   });
