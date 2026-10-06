@@ -29,6 +29,8 @@ function makeStub(name, body) {
 makeStub('stub-hang', 'echo "hange jetzt"; exec sleep 120');
 makeStub('stub-run', 'echo "aufgabe erledigt"');
 makeStub('stub-login', 'echo "angemeldet"');
+// Der echte Fall: opencode lehnt seine Konfiguration ab und endet mit Code 0.
+makeStub('stub-configfehler', 'echo "Configuration is invalid at /Users/family/.config/opencode/opencode.jsonc"');
 
 function writeConfig(clis) {
   // JSON is valid YAML, so the stub config needs no formatter.
@@ -170,6 +172,33 @@ test('chain: ein Nutzerabbruch beendet die Kette, statt an die naechste Route we
 
   assert.deepStrictEqual(routes(messages), ['Haenger'], 'ein Abbruch gilt als Wunsch des Nutzers, nicht als Routen-Ausfall:\n' + trail);
   assert.match(trail, /Abgebrochen durch Benutzer/);
+});
+
+test('chain: eine Route, die mit 0 ihre Konfiguration ablehnt, gilt nicht als Erfolg', async () => {
+  writeConfig([
+    { name: 'Kaputte Konfig', command: 'stub-configfehler', enabled: true, model: 'plan-free' },
+    { name: 'Uebernehmer', command: 'stub-run', enabled: true, model: 'plan-free' }
+  ]);
+
+  const messages = await runDispatch({ prompt: 'mach was' });
+  const trail = describe(messages);
+
+  assert.deepStrictEqual(routes(messages), ['Kaputte Konfig', 'Uebernehmer'], 'Exit 0 mit Ablehnung muss die Kette weiterreichen:\n' + trail);
+  assert.match(trail, /Start verweigert/);
+  assert.match(trail, /Configuration is invalid/);
+  assert.strictEqual(messages.at(-1).exitCode, 0, 'der Uebernehmer schliesst die Kette ab:\n' + trail);
+});
+
+test('chain: die letzte Route darf eine Start-Ablehnung nicht als Erfolg melden', async () => {
+  writeConfig([
+    { name: 'Kaputte Konfig', command: 'stub-configfehler', enabled: true, model: 'plan-free' }
+  ]);
+
+  const messages = await runDispatch({ prompt: 'mach was' });
+  const done = messages.at(-1);
+
+  assert.match(done.message, /Start verweigert/, 'ohne naechste Route muss der Fehler sichtbar bleiben:\n' + describe(messages));
+  assert.ok(!/Erfolgreich abgeschlossen/.test(describe(messages)), 'kein Erfolgsbanner bei verweigerter Start:\n' + describe(messages));
 });
 
 test.after(async () => {

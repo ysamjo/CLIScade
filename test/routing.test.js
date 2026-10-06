@@ -6,7 +6,8 @@ const { spawn, execFileSync } = require('child_process');
 const {
   armIdleWatchdog,
   routePolicyBlocker,
-  knownBrokenBlocker
+  knownBrokenBlocker,
+  startupRefusal
 } = require('../routing');
 
 // Waet until a process is gone, so no test leaves orphans behind.
@@ -139,4 +140,21 @@ test('bremst nicht, wenn der Nutzer die Route selbst gewaehlt hat', () => {
 test('bremst nur Login-Fehler, nicht Quota-Voll', () => {
   const broken = { cline: { errorKind: 'rate_limit', at: Date.now() } };
   assert.strictEqual(knownBrokenBlocker({ command: 'cline', name: 'Cline' }, broken, {}), null);
+});
+
+test('meldet eine Route, die ihre Konfiguration ablehnt, obwohl sie mit 0 endet', () => {
+  const ausgabe = 'Configuration is invalid at /Users/family/.config/opencode/opencode.jsonc\n'
+    + '\u21B3 Expected { readonly "type": "local", ... }, got {"harness-dispatch":{...}} mcp.servers\n';
+  const grund = startupRefusal(ausgabe);
+  assert.ok(grund, 'ein Start, den die CLI selbst ablehnt, darf kein Erfolg sein');
+  assert.match(grund, /Configuration is invalid/);
+});
+
+test('erkennt einen Start mit unbekanntem Flag', () => {
+  assert.match(startupRefusal('error: unknown option "--permission-mode"'), /unknown option/);
+});
+
+test('laesst eine Route durch, die wirklich gearbeitet hat', () => {
+  assert.strictEqual(startupRefusal('Ich habe die Konfiguration pruefen lassen und zwei Dateien geaendert.\nFertig.'), null);
+  assert.strictEqual(startupRefusal(''), null);
 });

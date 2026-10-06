@@ -79,11 +79,24 @@ function knownBrokenBlocker(route = {}, broken = {}, options = {}) {
   return `${name}: Login fehlgeschlagen (${formatAge(Date.now() - mark.at)}) — erneut in den Einstellungen testen`;
 }
 
+// Some harnesses refuse their own startup and still exit with 0, which the chain
+// would count as a finished task. These phrasings come from the CLI's argument and
+// config parser, never from an agent that is busy working, so they are safe to read
+// as "nothing was attempted".
+const STARTUP_REFUSAL = /(configuration is invalid at|invalid configuration file|error: unknown (option|command)|unrecognized command line option|unknown flag:)/i;
+
+function startupRefusal(rawOutput = '') {
+  const clean = rawOutput.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+  const line = clean.split('\n').find((l) => STARTUP_REFUSAL.test(l));
+  return line ? line.trim().slice(0, 200) : null;
+}
+
 module.exports = {
   RUN_IDLE_TIMEOUT_MS,
   RUN_IDLE_GRACE_MS,
   armIdleWatchdog,
   routePolicyBlocker,
   knownBrokenBlocker,
+  startupRefusal,
   formatAge
 };

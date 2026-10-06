@@ -12,6 +12,7 @@ const {
   armIdleWatchdog,
   routePolicyBlocker,
   knownBrokenBlocker,
+  startupRefusal,
   RUN_IDLE_TIMEOUT_MS
 } = require('./routing');
 let pty = null;
@@ -2381,10 +2382,16 @@ function runDispatch(payload, ws, onComplete) {
           return;
         }
 
+        // A harness that refuses its own config or flags can still exit with 0, so
+        // its output decides alongside the code.
+        const refusal = code === 0 ? startupRefusal(currentRunRawOutput) : null;
+
         // If failed and more routes exist, auto-fallback with SMART CONTEXT HANDOFF!
-        if (code !== 0 && routeIndex + 1 < candidateRoutes.length) {
+        if ((code !== 0 || refusal) && routeIndex + 1 < candidateRoutes.length) {
           let reason = `Fehlercode ${code}`;
-          if (watchdogIdleMs) {
+          if (refusal) {
+            reason = `Start verweigert: ${refusal}`;
+          } else if (watchdogIdleMs) {
             reason = `Keine Ausgabe seit ${Math.round(watchdogIdleMs / 1000)} s`;
           } else if (currentRunRawOutput.match(/429|rate\s*limit|quota|credit|insufficient|budget|overloaded/i)) {
             reason = 'Quota / Rate-Limit erreicht (429 / Guthaben erschöpft)';
@@ -2431,7 +2438,7 @@ function runDispatch(payload, ws, onComplete) {
           return tryRoute(routeIndex + 1, nextRelayContext);
         }
 
-        taskRecord.status = code === 0 ? 'completed' : 'failed';
+        taskRecord.status = code === 0 && !refusal ? 'completed' : 'failed';
         taskRecord.exitCode = code;
 
         // Token Usage Calculation
@@ -2472,7 +2479,7 @@ function runDispatch(payload, ws, onComplete) {
           cost: costStr
         };
 
-        if (code === 0) {
+        if (code === 0 && !refusal) {
           const usageBanner = `\n<div class="usage-summary-banner">
             <span class="badge badge-accent">📊 Usage</span>
             <span><strong>Tokens:</strong> ${totalTokens.toLocaleString()} (${promptTokens.toLocaleString()} Prompt / ${outputTokens.toLocaleString()} Antwort)</span>
@@ -2496,7 +2503,7 @@ function runDispatch(payload, ws, onComplete) {
           taskId: taskId,
           exitCode: code,
           usage: taskRecord.usage,
-          message: code === 0 ? 'Erfolgreich abgeschlossen' : `Beendet mit Code ${code}`
+          message: refusal ? `Start verweigert: ${refusal}` : (code === 0 ? 'Erfolgreich abgeschlossen' : `Beendet mit Code ${code}`)
         });
 
         if (onComplete) onComplete(null, taskRecord);
