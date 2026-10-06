@@ -28,13 +28,13 @@ const ansiConverter = new Convert({
   stream: true,
   colors: {
     0: '#000000',
-    1: '#ef4444',
-    2: '#22c55e',
-    3: '#eab308',
-    4: '#3b82f6',
-    5: '#a855f7',
-    6: '#06b6d4',
-    7: '#f4f4f5'
+    1: '#c2625c',
+    2: '#4f9d7f',
+    3: '#b98a45',
+    4: '#7d8ba5',
+    5: '#9a8cc0',
+    6: '#7fa3ad',
+    7: '#d9dce3'
   }
 });
 
@@ -1773,7 +1773,7 @@ wss.on('connection', (ws) => {
         if (activeProcess) {
           userCancelledProcesses.add(activeProcess);
           activeProcess.kill('SIGINT');
-          broadcastToClients({ type: 'output', html: '<span style="color:#ef4444">\n[Abgebrochen durch Benutzer]</span>\n' });
+          broadcastToClients({ type: 'output', html: '<span style="color:var(--danger)">\n[Abgebrochen durch Benutzer]</span>\n' });
           activeProcess = null;
         }
         return;
@@ -1783,7 +1783,7 @@ wss.on('connection', (ws) => {
         if (activeInstallProcess) {
           activeInstallProcess.kill('SIGINT');
           activeInstallProcess = null;
-          broadcastToClients({ type: 'install_output', text: '\n[Installation abgebrochen]\n', html: '<span style="color:#ef4444">\n[Installation abgebrochen]</span>\n' });
+          broadcastToClients({ type: 'install_output', text: '\n[Installation abgebrochen]\n', html: '<span style="color:var(--danger)">\n[Installation abgebrochen]</span>\n' });
         }
         return;
       }
@@ -2068,13 +2068,13 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
 
   if (!isInstalled) {
     const errText = `Befehl "${selectedRoute.command}" nicht im PATH gefunden.`;
-    notify({ type: 'output', html: `<span style="color:#ef4444;">[Fehler: ${errText}]</span>\n` });
+    notify({ type: 'output', html: `<span style="color:var(--danger);">[Fehler: ${errText}]</span>\n` });
     return callback(new Error(errText), '');
   }
 
   if (TUI_ONLY_COMMANDS.has(selectedRoute.command)) {
     const errText = `"${selectedRoute.command}" ist ein reines TUI-CLI ohne Headless-Modus und kann nicht automatisiert ausgeführt werden.`;
-    notify({ type: 'output', html: `<span style="color:#ef4444;">[Fehler: ${errText}]</span>\n` });
+    notify({ type: 'output', html: `<span style="color:var(--danger);">[Fehler: ${errText}]</span>\n` });
     return callback(new Error(errText), '');
   }
 
@@ -2114,7 +2114,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     child.stderr.on('data', (data) => {
       const text = data.toString();
       collectedOutput += text;
-      const html = `<span style="color:#f59e0b">${ansiConverter.toHtml(text)}</span>`;
+      const html = `<span style="color:var(--warning)">${ansiConverter.toHtml(text)}</span>`;
       taskRecord.outputHtml += html;
       notify({ type: 'output', raw: text, html });
     });
@@ -2230,7 +2230,7 @@ function runDispatch(payload, ws, onComplete) {
   function tryRoute(routeIndex, relayContext = null) {
     if (routeIndex >= candidateRoutes.length) {
       const errMsg = 'Alle verfügbaren Harnesses in der Prioritätskette sind fehlgeschlagen oder nicht installiert.';
-      const failBanner = `\n<div class="route-failed-banner" style="background:rgba(239,68,68,0.15); border:1px solid var(--danger); padding:10px 14px; border-radius:8px; margin-top:8px; color:#ef4444;">✕ <strong>Routing-Kette erschöpft:</strong> ${errMsg}</div>\n`;
+      const failBanner = `\n<div class="route-failed-banner" style="background:rgba(194,98,92,0.15); border:1px solid var(--danger); padding:10px 14px; border-radius:8px; margin-top:8px; color:var(--danger);">✕ <strong>Routing-Kette erschöpft:</strong> ${errMsg}</div>\n`;
       taskRecord.outputHtml += failBanner;
       notify({ type: 'output', raw: errMsg, html: failBanner });
       taskRecord.status = 'failed';
@@ -2255,14 +2255,14 @@ function runDispatch(payload, ws, onComplete) {
     }
 
     if (!isInstalled) {
-      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) nicht im System-PATH gefunden.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
+      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:var(--warning); font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) nicht im System-PATH gefunden.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
       taskRecord.outputHtml += skipNotice;
       notify({ type: 'output', raw: '', html: skipNotice });
       return tryRoute(routeIndex + 1, relayContext);
     }
 
     if (TUI_ONLY_COMMANDS.has(selectedRoute.command)) {
-      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) ist ein reines TUI-CLI ohne Headless-Modus — ohne echtes Terminal (PTY) führt es keinen Auftrag aus.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
+      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:var(--warning); font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) ist ein reines TUI-CLI ohne Headless-Modus — ohne echtes Terminal (PTY) führt es keinen Auftrag aus.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
       taskRecord.outputHtml += skipNotice;
       notify({ type: 'output', raw: '', html: skipNotice });
       return tryRoute(routeIndex + 1, relayContext);
@@ -2301,7 +2301,7 @@ function runDispatch(payload, ws, onComplete) {
     });
 
     const isRelay = Boolean(relayContext);
-    const headerMsg = `<div class="route-banner" style="${isRelay ? 'border-left: 3px solid #f59e0b;' : ''}">
+    const headerMsg = `<div class="route-banner" style="${isRelay ? 'border-left: 3px solid var(--warning);' : ''}">
       <span class="badge ${isRelay ? 'badge-warning' : 'badge-accent'}">${isRelay ? '🔄 Kontext-Relay #' + (routeIndex + 1) : 'Priorität #' + (routeIndex + 1)}</span>
       <span><strong>Harness:</strong> ${selectedRoute.name} (${selectedRoute.command})</span>
       <span><strong>Modell:</strong> ${effectiveModel}</span>
@@ -2366,7 +2366,7 @@ function runDispatch(payload, ws, onComplete) {
       child.stderr.on('data', (data) => {
         const text = data.toString();
         currentRunRawOutput += text;
-        const html = `<span style="color:#f59e0b">${ansiConverter.toHtml(text)}</span>`;
+        const html = `<span style="color:var(--warning)">${ansiConverter.toHtml(text)}</span>`;
         taskRecord.outputHtml += html;
         notify({ type: 'output', raw: text, html });
       });
@@ -2425,9 +2425,9 @@ function runDispatch(payload, ws, onComplete) {
           });
 
           const nextName = candidateRoutes[routeIndex + 1].name;
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:10px 14px; border-radius:8px; margin:8px 0; color:#f59e0b; font-size:12px;">
+          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:10px 14px; border-radius:8px; margin:8px 0; color:var(--warning); font-size:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-              <span class="badge" style="background:#f59e0b; color:#000; font-weight:700;">🔄 Smart Context Relay</span>
+              <span class="badge" style="background:var(--warning); color:#0b0c10; font-weight:700;">🔄 Smart Context Relay</span>
               <strong>${escapeHtml(selectedRoute.name)} abgebrochen (${escapeHtml(reason)})</strong>
             </div>
             <div>Zwischenstand (${lastOutputSnippet.length} Zeichen) und Workspace-Status werden nahtlos an Priorität #${routeIndex + 2} (<strong>${escapeHtml(nextName)}</strong>) übergeben...</div>
@@ -2521,9 +2521,9 @@ function runDispatch(payload, ws, onComplete) {
             workspaceDiff: getWorkspaceChanges(workingDir)
           };
           const nextName = candidateRoutes[routeIndex + 1].name;
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); padding:10px 14px; border-radius:8px; margin:6px 0; color:#f59e0b; font-size:12px;">
+          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:10px 14px; border-radius:8px; margin:6px 0; color:var(--warning); font-size:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-              <span class="badge" style="background:#f59e0b; color:#000; font-weight:700;">🔄 Smart Relay</span>
+              <span class="badge" style="background:var(--warning); color:#0b0c10; font-weight:700;">🔄 Smart Relay</span>
               <strong>Fehler beim Starten von ${escapeHtml(selectedRoute.name)}: ${escapeHtml(err.message)}</strong>
             </div>
             <div>Übergebe an <strong>${escapeHtml(nextName)}</strong>...</div>
@@ -3209,7 +3209,7 @@ function reconcileOrphanedTasks() {
     if (orphans.length === 0) return;
     orphans.forEach(t => {
       t.status = 'error';
-      t.outputHtml += `\n<span style="color:#ef4444;">[Unterbrochen: Der Server wurde neu gestartet, bevor dieser Task endete.]</span>\n`;
+      t.outputHtml += `\n<span style="color:var(--danger);">[Unterbrochen: Der Server wurde neu gestartet, bevor dieser Task endete.]</span>\n`;
     });
     saveTasksData(data);
     console.log(`⚠ ${orphans.length} Task(s) als unterbrochen markiert.`);
