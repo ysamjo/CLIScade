@@ -506,6 +506,22 @@ const CLI_INSTALL_REGISTRY = {
 // and leave their screen-redraw bytes in the output pipe, so they cannot be dispatched.
 const TUI_ONLY_COMMANDS = new Set(['freebuff']);
 
+// A TUI-only launcher has no --version shortcut: `freebuff --version` still starts the
+// full agent, which on startup migrates its token through the Keychain. That Keychain
+// item's ACL is pinned to the cdhash of one specific self-updated binary, so the request
+// is denied and macOS asks for the login password. Version info comes from the harness's
+// own update metadata instead of a process launch.
+function readTuiVersion(cmd) {
+  if (cmd !== 'freebuff') return null;
+  try {
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(os.homedir(), '.config', 'manicode', 'freebuff-metadata.json'), 'utf8'));
+    return meta.version ? `v${meta.version}` : null;
+  } catch {
+    return null;
+  }
+}
+
 let healthCache = null;
 let healthCacheTime = 0;
 
@@ -524,11 +540,15 @@ function checkSingleCliHealth(meta) {
     if (p) {
       available = true;
       binaryPath = p;
-      try {
-        const vOut = execSync(`${meta.cmd} --version 2>/dev/null || ${altCmd} --version 2>/dev/null`, { encoding: 'utf8', timeout: 3000 }).trim();
-        version = vOut.split('\n')[0].trim();
-        if (version.length > 32) version = version.slice(0, 32);
-      } catch {}
+      if (TUI_ONLY_COMMANDS.has(meta.cmd)) {
+        version = readTuiVersion(meta.cmd);
+      } else {
+        try {
+          const vOut = execSync(`${meta.cmd} --version 2>/dev/null || ${altCmd} --version 2>/dev/null`, { encoding: 'utf8', timeout: 3000 }).trim();
+          version = vOut.split('\n')[0].trim();
+          if (version.length > 32) version = version.slice(0, 32);
+        } catch {}
+      }
     }
   } catch {
     available = false;
