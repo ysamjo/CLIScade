@@ -31,6 +31,8 @@ makeStub('stub-run', 'echo "aufgabe erledigt"');
 makeStub('stub-login', 'echo "angemeldet"');
 // Der echte Fall: opencode lehnt seine Konfiguration ab und endet mit Code 0.
 makeStub('stub-configfehler', 'echo "Configuration is invalid at /Users/family/.config/opencode/opencode.jsonc"');
+// Der echte Fall: qodercli bricht mit sdk_invalid_args ab, wenn der Host-Marker im Kind steht.
+makeStub('stub-env', 'echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
 
 function writeConfig(clis) {
   // JSON is valid YAML, so the stub config needs no formatter.
@@ -46,7 +48,8 @@ const server = spawn(process.execPath, ['server.js'], {
     HOME: sandbox,
     PATH: `${binDir}:/usr/bin:/bin`,
     PORT: String(PORT),
-    HARNESS_IDLE_TIMEOUT_MS: String(IDLE_MS)
+    HARNESS_IDLE_TIMEOUT_MS: String(IDLE_MS),
+    QODER_AGENT_SDK_ENTRYPOINT: 'sdk-node'
   },
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -199,6 +202,18 @@ test('chain: die letzte Route darf eine Start-Ablehnung nicht als Erfolg melden'
 
   assert.match(done.message, /Start verweigert/, 'ohne naechste Route muss der Fehler sichtbar bleiben:\n' + describe(messages));
   assert.ok(!/Erfolgreich abgeschlossen/.test(describe(messages)), 'kein Erfolgsbanner bei verweigerter Start:\n' + describe(messages));
+});
+
+test('chain: der SDK-Entrypoint-Marker des Hosts darf nicht im Agent-CLI landen', async () => {
+  writeConfig([
+    { name: 'Umgebung', command: 'stub-env', enabled: true, model: 'plan-free' }
+  ]);
+
+  const messages = await runDispatch({ prompt: 'mach was' });
+  const trail = describe(messages);
+
+  assert.match(trail, /ENTRYPOINT=\[keiner\]/, 'der Server laeuft oft aus einer Agent-Sitzung; das Kind darf den Marker nicht erben:\n' + trail);
+  assert.strictEqual(messages.at(-1).exitCode, 0, 'die Route muss durchlaufen:\n' + trail);
 });
 
 test.after(async () => {

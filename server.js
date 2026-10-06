@@ -1176,7 +1176,7 @@ app.post('/api/harness/test', (req, res) => {
   try {
     child = spawn(cmd, args, {
       cwd: workDir,
-      env: { ...process.env, FORCE_COLOR: '1', PWD: workDir }
+      env: harnessEnv({ PWD: workDir })
     });
   } catch (err) {
     return finish({ ok: false, errorKind: 'unknown', error: err.message });
@@ -1732,14 +1732,12 @@ function startPtySession(ws, payload) {
       cols,
       rows,
       cwd: workDir,
-      env: {
-        ...process.env,
+      env: harnessEnv({
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
-        FORCE_COLOR: '1',
         LANG: process.env.LANG || 'en_US.UTF-8',
         PATH: `${process.env.HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}`
-      }
+      })
     });
   } catch (err) {
     return writePty(ws, { type: 'pty_error', error: `PTY-Start fehlgeschlagen: ${err.message}` });
@@ -1827,6 +1825,14 @@ wss.on('connection', (ws) => {
     }
   });
 });
+
+// This server is often started from inside an agent session. That marker would make
+// a child qodercli expect the SDK control protocol and abort before it ever calls a model.
+function harnessEnv(overrides = {}) {
+  const env = { ...process.env, FORCE_COLOR: '1', ...overrides };
+  delete env.QODER_AGENT_SDK_ENTRYPOINT;
+  return env;
+}
 
 function buildCliCommand(selectedRoute, fullPrompt, effectiveModel) {
   let cmd = selectedRoute.command;
@@ -2117,7 +2123,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
       cwd: workingDir,
       // CLIs like opencode derive their project directory from PWD, which would
       // otherwise stay pointing at this server's own launch directory.
-      env: { ...process.env, FORCE_COLOR: '1', PWD: workingDir }
+      env: harnessEnv({ PWD: workingDir })
     });
     if (taskWsMap.get(taskRecord)) activeProcess = child;
 
@@ -2370,7 +2376,7 @@ function runDispatch(payload, ws, onComplete) {
     try {
       const child = spawn(cmd, args, {
         cwd: workingDir,
-        env: { ...process.env, FORCE_COLOR: '1', PWD: workingDir }
+        env: harnessEnv({ PWD: workingDir })
       });
       if (ws) activeProcess = child;
 
