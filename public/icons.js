@@ -43,7 +43,9 @@ const HARNESS_META = {
   freebuff_cli: { letter: 'F' },
   freebuff: { letter: 'F' },
   codebuddy_cli: { letter: 'B' },
-  codebuddy: { letter: 'B' }
+  codebuddy: { letter: 'B' },
+  cursor_cli: { letter: 'Cu' },
+  cursor: { letter: 'Cu' }
 };
 function icon(n){return '<span class="svg-icon">'+(ICONS[n]||ICONS.bolt)+'</span>';}
 function harnessIcon(k,s){s=s||30;var h=HARNESS_META[k]||{letter:String(k||'?').slice(0,2).toUpperCase()};var fs=Math.round(s*0.42);return '<span class="harness-monogram" style="width:'+s+'px;height:'+s+'px;font-size:'+fs+'px;">'+h.letter+'</span>';}

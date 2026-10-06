@@ -33,6 +33,8 @@ makeStub('stub-login', 'echo "angemeldet"');
 makeStub('stub-configfehler', 'echo "Configuration is invalid at /Users/family/.config/opencode/opencode.jsonc"');
 // Der echte Fall: qodercli bricht mit sdk_invalid_args ab, wenn der Host-Marker im Kind steht.
 makeStub('stub-env', 'echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
+// Cursor lehnt ein untrusted Verzeichnis still ab (Exit 0) — die Flags sind der Auftrag.
+makeStub('agent', 'echo "ARGS=$*"; echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
 
 function writeConfig(clis) {
   // JSON is valid YAML, so the stub config needs no formatter.
@@ -214,6 +216,19 @@ test('chain: der SDK-Entrypoint-Marker des Hosts darf nicht im Agent-CLI landen'
 
   assert.match(trail, /ENTRYPOINT=\[keiner\]/, 'der Server laeuft oft aus einer Agent-Sitzung; das Kind darf den Marker nicht erben:\n' + trail);
   assert.strictEqual(messages.at(-1).exitCode, 0, 'die Route muss durchlaufen:\n' + trail);
+});
+
+test('chain: cursor startet mit Verzeichnis-Freigabe und Modell-Schalter', async () => {
+  writeConfig([
+    { name: 'Cursor', harness: 'cursor', command: 'agent', model: 'auto', enabled: true }
+  ]);
+
+  const messages = await runDispatch({ prompt: 'mach was' });
+  const trail = describe(messages);
+
+  assert.match(trail, /ARGS=-p --force --trust --model auto/, 'ohne --force/--trust bricht Cursor die Arbeit mit Exit 0 ab:\n' + trail);
+  assert.match(trail, /ENTRYPOINT=\[keiner\]/, 'auch hier darf der SDK-Marker nicht weitergegeben werden:\n' + trail);
+  assert.strictEqual(messages.at(-1).exitCode, 0, 'der Lauf muss durchlaufen:\n' + trail);
 });
 
 test.after(async () => {

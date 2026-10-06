@@ -382,11 +382,11 @@
             <div class="settings-section-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
               <div>
                 <h4>Installierte Skills & MCP-Plugins (Open-Agent Hub)</h4>
-                <p>Zentraler Standard (<code>~/.agents/skills</code>). Einmal synchronisiert – sofort von allen 8 Harnesses per Symlink geteilt.</p>
+                <p>Zentraler Standard (<code>~/.agents/skills</code>). Einmal synchronisiert – sofort von allen 9 Harnesses per Symlink geteilt.</p>
               </div>
               <div style="display:flex; gap:8px; align-items:center;">
                 <button id="sync-skills-btn" class="btn btn-secondary" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
-                  <span data-icon="refresh"></span> Skills für alle 8 CLIs synchronisieren
+                  <span data-icon="refresh"></span> Skills für alle 9 CLIs synchronisieren
                 </button>
                 <button id="open-install-skill-btn" class="btn btn-primary" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
                   <span data-icon="plus"></span> Skill installieren
@@ -514,7 +514,8 @@
                 • <strong>OpenCode</strong>: Live erfasste Statistiken via <code>opencode stats --cost</code> mit transparentem Token- und Session-Verlauf.<br/>
                 • <strong>Freebuff / CodeBuddy</strong>: Nutzen standardmäßig unmetered / kostenfreie Community-Modelle ohne Abrechnungslimit.<br/>
                 • <strong>Codex</strong>: Nutzt Ihre ChatGPT Plus/Pro Web-Session (im OpenAI-Abonnement enthalten).<br/>
-                • <strong>Qoder / Cline</strong>: Verwenden Account-Credits bzw. konfigurierte Bring-Your-Own-Key / lokale Modelle.
+                • <strong>Qoder / Cline</strong>: Verwenden Account-Credits bzw. konfigurierte Bring-Your-Own-Key / lokale Modelle.<br/>
+                • <strong>Cursor</strong>: Läuft über Ihr Cursor-Konto (Abo-Kontingent). <code>auto</code> ist die aktuelle Voreinstellung und wählt das Modell pro Aufgabe.
               </p>
             </div>
           </div>
@@ -723,6 +724,7 @@
             <option value="qoder">Qoder (qodercli)</option>
             <option value="freebuff">Freebuff (freebuff)</option>
             <option value="codebuddy">CodeBuddy (codebuddy)</option>
+            <option value="cursor">Cursor (agent)</option>
           </select>
         </div>
         <div class="form-group">
@@ -753,7 +755,7 @@
           <span class="installer-header-icon" data-icon="bolt"></span>
           <div>
             <h3>1-Klick CLI Installations-Center</h3>
-            <span class="installer-subtitle">Installiere, repariere oder aktualisiere alle 8 Harness-CLIs mit einem einzigen Klick</span>
+            <span class="installer-subtitle">Installiere, repariere oder aktualisiere alle 9 Harness-CLIs mit einem einzigen Klick</span>
           </div>
         </div>
         <div class="installer-header-actions">
@@ -815,12 +817,12 @@
   <div id="install-skill-modal" class="modal-overlay hidden" style="z-index: 2100;">
     <div class="modal-card" style="max-width:560px;">
       <div class="modal-header">
-        <h5>Neuen Skill für alle 8 Harnesses installieren</h5>
+        <h5>Neuen Skill für alle 9 Harnesses installieren</h5>
         <button id="close-install-skill-btn" class="icon-btn" data-icon="x"></button>
       </div>
       <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
         <p style="font-size:12px; color:var(--text-muted); margin:0;">
-          Der Skill wird zentral unter <code>~/.agents/skills/</code> abgelegt und sofort automatisch als Symlink für alle 8 CLIs (Claude Code, OpenCode, Codex, Cline, Qoder, CodeBuddy, Antigravity) freigeschaltet.
+          Der Skill wird zentral unter <code>~/.agents/skills/</code> abgelegt und sofort automatisch als Symlink für alle 9 CLIs (Claude Code, OpenCode, Codex, Cline, Qoder, CodeBuddy, Antigravity, Cursor) freigeschaltet.
         </p>
 
         <div style="display:flex; gap:8px; border-bottom:1px solid var(--border-color); padding-bottom:8px;">

@@ -944,6 +944,7 @@ function getHarnessKey(item) {
   if (item.command === 'qodercli' || item.command === 'qoder') return 'qoder';
   if (item.command === 'freebuff') return 'freebuff';
   if (item.command === 'codebuddy' || item.command === 'cbc') return 'codebuddy';
+  if (item.command === 'agent' || item.command === 'cursor-agent') return 'cursor';
   return 'claude_code';
 }
 
@@ -1582,7 +1583,7 @@ async function syncSkills() {
   } finally {
     if (dom.syncSkillsBtn) {
       dom.syncSkillsBtn.disabled = false;
-      dom.syncSkillsBtn.innerHTML = '<span data-icon="refresh"></span> Skills für alle 8 CLIs synchronisieren';
+      dom.syncSkillsBtn.innerHTML = '<span data-icon="refresh"></span> Skills für alle 9 CLIs synchronisieren';
       if (typeof refreshIcons === 'function') refreshIcons(dom.syncSkillsBtn);
     }
   }
@@ -1596,7 +1597,7 @@ async function handleInstallSkill() {
   feedback.style.background = 'var(--bg-secondary)';
   feedback.style.border = '1px solid var(--border-color)';
   feedback.style.color = 'var(--text-main)';
-  feedback.textContent = 'Installiere Skill und verteile per Symlink auf alle 8 Harnesses...';
+  feedback.textContent = 'Installiere Skill und verteile per Symlink auf alle 9 Harnesses...';
 
   const payload = {
     mode: isGit ? 'git' : 'custom',
@@ -1815,7 +1816,8 @@ function renderUsageTable() {
     'freebuff',
     'codebuddy',
     'antigravity_cli',
-    'cline'
+    'cline',
+    'cursor'
   ];
 
   harnessesOrder.forEach(key => {
@@ -2204,7 +2206,8 @@ function setupEventListeners() {
       antigravity_cli: 'agy',
       qoder: 'qodercli',
       freebuff: 'freebuff',
-      codebuddy: 'codebuddy'
+      codebuddy: 'codebuddy',
+      cursor: 'agent'
     };
 
     const newRoute = {
@@ -2846,7 +2849,9 @@ const CLI_ICON_KEYS = {
   freebuff_cli: 'freebuff_cli',
   freebuff: 'freebuff_cli',
   codebuddy_cli: 'codebuddy_cli',
-  codebuddy: 'codebuddy_cli'
+  codebuddy: 'codebuddy_cli',
+  cursor_cli: 'cursor_cli',
+  cursor: 'cursor_cli'
 };
 
 async function openInstallerModal(focusToolId = null) {

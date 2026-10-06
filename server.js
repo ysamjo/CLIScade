@@ -161,6 +161,10 @@ const DEFAULT_MODEL_PRESETS = {
     { id: 'fast-model', label: 'Fast Model (Schnell)' },
     { id: 'balanced-model', label: 'Balanced Model' },
     { id: 'deep-model', label: 'Deep Model (Tiefe Analyse)' }
+  ],
+  cursor: [
+    { id: 'Standard', label: 'Standard (Cursor entscheidet)' },
+    { id: 'auto', label: 'Auto' }
   ]
 };
 
@@ -530,6 +534,18 @@ const CLI_INSTALL_REGISTRY = {
     category: 'Specialized',
     iconKey: 'codebuddy_cli',
     docsUrl: 'https://codebuddy.ca'
+  },
+  cursor_cli: {
+    id: 'cursor_cli',
+    name: 'Cursor CLI',
+    cmd: 'agent',
+    altCmd: 'cursor-agent',
+    package: 'cursor-agent',
+    installCmd: 'curl https://cursor.com/install -fsS | bash',
+    description: 'Cursor Agent CLI für Terminal und GitHub Actions',
+    category: 'Frontier Agent',
+    iconKey: 'cursor_cli',
+    docsUrl: 'https://cursor.com/docs/cli/overview'
   }
 };
 
@@ -818,6 +834,17 @@ function fetchCliCostsAndUsage(forceRefresh = false) {
       cost: '$0.00',
       badge: 'Aktiv'
     },
+    cursor: {
+      id: 'cursor',
+      name: 'Cursor CLI',
+      command: 'agent',
+      available: false,
+      plan: 'Cursor-Konto',
+      contextWindow: 'Modellabhängig',
+      remaining: 'Modell: Auto',
+      cost: 'Abo-Kontingent',
+      badge: 'Bereit'
+    },
     antigravity_cli: {
       id: 'antigravity_cli',
       name: 'Antigravity',
@@ -852,6 +879,7 @@ function fetchCliCostsAndUsage(forceRefresh = false) {
     if (key === 'qoder_cli') key = 'qoder';
     if (key === 'freebuff_cli') key = 'freebuff';
     if (key === 'codebuddy_cli') key = 'codebuddy';
+    if (key === 'cursor_cli') key = 'cursor';
 
     if (usage[key]) {
       usage[key].available = h.available;
@@ -1248,7 +1276,7 @@ app.post('/api/agents-md', (req, res) => {
   }
 });
 
-// --- UNIVERSAL SKILLS HUB & SYNC (Open-Agent Standard for all 8 CLIs) ---
+// --- UNIVERSAL SKILLS HUB & SYNC (Open-Agent Standard for all 9 CLIs) ---
 const HARNESS_DIRS = [
   { id: 'agents', name: 'Open-Agent Standard Hub', path: path.join(os.homedir(), '.agents', 'skills') },
   { id: 'claude', name: 'Claude Code', path: path.join(os.homedir(), '.claude', 'skills') },
@@ -1257,7 +1285,8 @@ const HARNESS_DIRS = [
   { id: 'cline', name: 'Cline CLI', path: path.join(os.homedir(), '.cline', 'skills') },
   { id: 'qoder', name: 'Qoder CLI', path: path.join(os.homedir(), '.qoder', 'skills') },
   { id: 'codebuddy', name: 'CodeBuddy CLI', path: path.join(os.homedir(), '.codebuddy', 'skills') },
-  { id: 'gemini', name: 'Gemini / Antigravity', path: path.join(os.homedir(), '.gemini', 'antigravity', 'skills') }
+  { id: 'gemini', name: 'Gemini / Antigravity', path: path.join(os.homedir(), '.gemini', 'antigravity', 'skills') },
+  { id: 'cursor', name: 'Cursor CLI', path: path.join(os.homedir(), '.cursor', 'skills-cursor') }
 ];
 const HARNESS_SKILLS_DIRS = HARNESS_DIRS;
 
@@ -1306,6 +1335,7 @@ function syncAllSkills() {
     path.join(os.homedir(), '.cline', 'skills'),
     path.join(os.homedir(), '.config', 'opencode', 'skills'),
     path.join(os.homedir(), '.gemini', 'antigravity', 'builtin', 'skills'),
+    path.join(os.homedir(), '.cursor', 'skills-cursor'),
     path.join(os.homedir(), '.local', 'share', 'ego', 'ego-skills')
   ];
 
@@ -1443,13 +1473,13 @@ app.post('/api/skills/install', (req, res) => {
       const targetDir = path.join(HUB_DIR, safeName);
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       const skillMd = path.join(targetDir, 'SKILL.md');
-      const mdContent = `---\nname: "${safeName}"\ndescription: "${(description || '').replace(/"/g, '\\"')}"\n---\n\n${content || `# ${safeName}\nSkill für alle 8 Harnesses.`}\n`;
+      const mdContent = `---\nname: "${safeName}"\ndescription: "${(description || '').replace(/"/g, '\\"')}"\n---\n\n${content || `# ${safeName}\nSkill für alle 9 Harnesses.`}\n`;
       fs.writeFileSync(skillMd, mdContent, 'utf8');
     }
 
     // Automatically sync across all 8 CLIs
     const syncResult = syncAllSkills();
-    res.json({ success: true, message: 'Skill erfolgreich für alle 8 CLIs installiert & synchronisiert!', sync: syncResult });
+    res.json({ success: true, message: 'Skill erfolgreich für alle 9 CLIs installiert & synchronisiert!', sync: syncResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1880,6 +1910,14 @@ function buildCliCommand(selectedRoute, fullPrompt, effectiveModel) {
   } else if (selectedRoute.command === 'codebuddy' || selectedRoute.command === 'cbc' || selectedRoute.harness === 'codebuddy') {
     cmd = 'codebuddy';
     args = ['-p', '-y'];
+    if (effectiveModel && effectiveModel !== 'Standard') {
+      args.push('--model', effectiveModel);
+    }
+    args.push(fullPrompt);
+  } else if (selectedRoute.command === 'agent' || selectedRoute.command === 'cursor-agent' || selectedRoute.harness === 'cursor') {
+    // Ohne --trust will Cursor die Verzeichnis-Freigabe; --force vertritt die sonst
+    // nachfragenden Tool-Genehmigungen und hält den Lauf damit nicht an.
+    args = ['-p', '--force', '--trust'];
     if (effectiveModel && effectiveModel !== 'Standard') {
       args.push('--model', effectiveModel);
     }
@@ -2895,7 +2933,7 @@ async function handleTelegramUpdate(update, token) {
         `• \`/status\` – Status, Pfade & Kontingente\n` +
         `• \`/projects\` – Projekt auswählen (Buttons)\n` +
         `• \`/harness\` – KI-Modell / CLI auswählen\n` +
-        `• \`/usage\` – Kontingente aller 8 CLIs\n` +
+        `• \`/usage\` – Kontingente aller 9 CLIs\n` +
         `• \`/consensus <Aufgabe>\` – Dual-Agent Kollaboration & Synthese\n` +
         `• \`/run <prompt>\` – Oder tippe einfach direkt deine Aufgabe!\n\n` +
         `📸 *Multimodal:* Sende ein Bildschirmfoto oder Bild (mit oder ohne Text), um visuelle Bugs zu lösen.\n` +
@@ -3228,7 +3266,7 @@ app.post('/api/remote/telegram/test', async (req, res) => {
 });
 
 if (process.argv.includes('sync-skills')) {
-  console.log('🔄 Synchronisiere alle Skills für alle 8 Harnesses...');
+  console.log('🔄 Synchronisiere alle Skills für alle 9 Harnesses...');
   const res = syncAllSkills();
   console.log(`✅ ${res.totalSkills} Skills inventarisiert (${res.newlyLinked} neu verlinkt).`);
   res.harnesses.forEach(h => {

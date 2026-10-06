@@ -6,7 +6,7 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
 
 ---
 
-## 🚀 Unterstützte Harnesses (8 KI-Coding-Agenten)
+## 🚀 Unterstützte Harnesses (9 KI-Coding-Agenten)
 
 1. **Claude Code (`claude`)**: Anthropics offizieller Terminal-Agent (Sonnet 3.7 & Opus 4.6).
 2. **OpenAI Codex CLI (`codex`)**: Coding-CLI für OpenAI o3, o3-mini & GPT-4.5.
@@ -16,6 +16,7 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
 6. **Qoder CLI (`qodercli`)**: Enterprise Coding CLI mit Qwen 3.8 Modellen.
 7. **Freebuff (`freebuff`)**: Refactoring-Agent für Multi-Context & Space-Bunny-Modelle.
 8. **CodeBuddy (`codebuddy`)**: Terminal-CLI für DeepSeek v3/v4 & Coding Assistants.
+9. **Cursor CLI (`agent`)**: Cursor Agent im Terminal, Standard-Modell `auto`.
 
 ---
 
@@ -23,7 +24,7 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
 
 - **🖥️ Interaktives Terminal im Hauptfenster (neu):**
   - Das Hauptfenster startet die echten CLIs in einem Pseudo-Terminal (`node-pty` + `xterm.js`) – inklusive TUI, Farben und direkter Tastatureingabe.
-  - **Freebuff, Claude Code, Codex, Cline, OpenCode, Antigravity, Qoder & CodeBuddy** laufen damit als vollwertige Prozesse. Damit ist auch Freebuff (reines TUI-CLI ohne Headless-Modus) direkt nutzbar und liefert Live-Rückmeldung.
+  - **Freebuff, Claude Code, Codex, Cline, OpenCode, Antigravity, Qoder, CodeBuddy & Cursor** laufen damit als vollwertige Prozesse. Damit ist auch Freebuff (reines TUI-CLI ohne Headless-Modus) direkt nutzbar und liefert Live-Rückmeldung.
   - Zielordner = links ausgewähltes Projekt, CLI per Dropdown wählbar, `Starten` / `Beenden`.
   - Umschalter zwischen **Interaktives Terminal** (Standard) und **Auto-Route (KI-Dispatch)** – alle bisherigen Funktionen bleiben im Auto-Route-Modus erhalten.
 
@@ -33,7 +34,7 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
   - Installations-Center, Usage, Skills, Scheduler & Co. liegen im Einstellungsdialog. Einstellungs- und Installer-Dialog sind auf `min(920px, 92vw)` bzw. `min(880px, 92vw)` begrenzt, unter 1200 px schaltet ein eigener Breakpoint auf kompakte Navigation um; Tabellen scrollen intern statt überzulaufen.
 
 - **⚡ 1-Klick CLI-Installations-Center:**
-  - Status-, Health- & Versionserkennung aller 8 CLIs in Echtzeit.
+  - Status-, Health- & Versionserkennung aller 9 CLIs in Echtzeit.
   - 1-Klick Einzelinstallation oder sequenzielle Batch-Installation (`🚀 Alle fehlenden CLIs installieren`).
   - Integrierte Live-Terminal-Konsole mit ANSI-Farben via WebSocket.
 
@@ -47,7 +48,7 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
   - Phase 3: Ein Synthese-Agent führt eine kritische Gegenüberstellung durch und fusioniert beide Ansichten zur idealen Gesamtlösung.
 
 - **📊 Live Usage & Kontingent-Dashboard:**
-  - Anzeige verbleibender Token-Limits, Kontextfenster-Größen und Abrechnungsmodelle (Max Plan, Pay-per-Token, Free Tier) aller 8 Harnesses.
+  - Anzeige verbleibender Token-Limits, Kontextfenster-Größen und Abrechnungsmodelle (Max Plan, Pay-per-Token, Free Tier) aller 9 Harnesses.
 
 - **📱 Remote-App & Unterwegs-Steuerung:**
   - Responsive Mobile-Layout für Smartphones (Vollbild, Touch-optimiert, Slide-out Drawer).
