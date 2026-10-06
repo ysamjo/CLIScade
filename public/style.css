@@ -542,34 +542,97 @@ body {
   overflow: hidden;
 }
 
-.routing-card {
-  background: var(--bg-card);
+/* SPLIT-VIEW: zwei Konsolen nebeneinander, je eine pro Auftrag */
+.run-split {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  min-height: 0;
+}
+
+.run-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 6px 10px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.run-pane-head {
+  height: 28px;
+  flex: 0 0 28px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 10px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.routing-card.hidden {
-  display: none;
-}
-
-.routing-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-}
-
-/* Der Punkt pulsiert nur, waehrend etwas laeuft — deshalb ohne Glow. */
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
+/* Der Punkt trägt den Zustand: laufend, wartend, beendet. */
+.run-pane-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
   border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.run-pane-dot.running {
+  background: var(--accent);
   animation: pulse 1.5s infinite;
+}
+
+.run-pane-dot.queued {
+  background: var(--warning);
+}
+
+.run-pane-dot.done {
+  background: var(--success);
+}
+
+.run-pane-dot.error {
+  background: var(--danger);
+}
+
+.run-pane-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.run-pane-folder {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-pane-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.run-pane-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.run-queue-note {
+  color: var(--warning);
+  font-weight: 600;
+  margin-bottom: 6px;
 }
 
 .pill-badge {
@@ -726,10 +789,6 @@ body {
   color: var(--text-main);
 }
 
-.pill-agents {
-  border-color: var(--border-soft);
-}
-
 .custom-select {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -859,22 +918,6 @@ textarea#prompt-input::-webkit-scrollbar {
 .btn-secondary:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-focus);
-}
-
-.btn-danger-sm {
-  background: transparent;
-  color: var(--danger);
-  border: 1px solid var(--border-color);
-  padding: 3px 9px;
-  font-size: 11.5px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  margin-left: auto;
-}
-
-.btn-danger-sm:hover {
-  background: var(--danger);
-  color: var(--bg-primary);
 }
 
 /* SETTINGS PANEL */
@@ -1530,6 +1573,41 @@ textarea#prompt-input::-webkit-scrollbar {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Eine Zeile mit Label, Feld und kurzem Hinweistext (z. B. die Kappe). */
+.settings-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.settings-inline-row label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.number-input-sm {
+  width: 54px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.number-input-sm:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+
+.inline-hint {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .settings-card-footer {
@@ -2699,6 +2777,15 @@ kbd {
 
   .terminal-wrapper {
     flex: 1;
+    min-height: 0;
+  }
+
+  /* Untereinander statt nebeneinander: zwei Spalten wären zu schmal. */
+  .run-split {
+    flex-direction: column;
+  }
+
+  .run-pane {
     min-height: 0;
   }
 

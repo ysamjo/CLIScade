@@ -109,29 +109,34 @@
 
         <!-- AUTO-ROUTE (BESTEHENDER KI-DISPATCH) -->
         <div id="dispatch-panel" class="studio-container hidden">
-          <!-- LIVE EXECUTION BANNER -->
-          <div id="active-routing-card" class="routing-card hidden">
-            <div class="routing-card-header">
-              <span class="pulse-dot"></span>
-              <span id="route-harness-title">Routing läuft...</span>
-              <span id="route-model-title" class="pill-badge">Modell</span>
-              <span id="route-agents-badge" class="pill-badge pill-agents">AGENTS.md</span>
-              <button id="cancel-run-btn" class="btn btn-danger-sm">Abbrechen</button>
-            </div>
-          </div>
-
-          <!-- TERMINAL OUTPUT -->
-          <div class="terminal-wrapper">
-            <div class="terminal-header">
-              <span id="terminal-session-title" class="terminal-title">Live-Ausgabe</span>
-              <div class="terminal-actions">
-                <button id="clear-terminal-btn" class="btn-text">Leeren</button>
-                <button id="copy-terminal-btn" class="btn-text">Kopieren</button>
+          <!-- KONSOLEN: zwei Aufträge nebeneinander, je einer pro Feld -->
+          <div id="run-split" class="run-split">
+            <div class="run-pane" id="run-pane-0">
+              <div class="run-pane-head">
+                <span class="run-pane-dot"></span>
+                <span class="run-pane-title">Konsole 1</span>
+                <span class="run-pane-folder"></span>
+                <span class="run-pane-tools">
+                  <button class="btn-text run-pane-copy" title="Ausgabe kopieren">Kopieren</button>
+                  <button class="btn-text btn-text-danger run-pane-cancel" title="Nur diesen Auftrag abbrechen" hidden>Abbrechen</button>
+                </span>
+              </div>
+              <div class="run-pane-body terminal-body">
+                <div class="terminal-placeholder">Kein Auftrag — unten eine Aufgabe eingeben.</div>
               </div>
             </div>
-            <div id="terminal-body" class="terminal-body">
-              <div class="terminal-placeholder">
-                Wähle links ein Projekt aus und gib unten eine Aufgabe ein. Das Studio routet automatisch nach deiner festgelegten Priorität.
+            <div class="run-pane" id="run-pane-1">
+              <div class="run-pane-head">
+                <span class="run-pane-dot"></span>
+                <span class="run-pane-title">Konsole 2</span>
+                <span class="run-pane-folder"></span>
+                <span class="run-pane-tools">
+                  <button class="btn-text run-pane-copy" title="Ausgabe kopieren">Kopieren</button>
+                  <button class="btn-text btn-text-danger run-pane-cancel" title="Nur diesen Auftrag abbrechen" hidden>Abbrechen</button>
+                </span>
+              </div>
+              <div class="run-pane-body terminal-body">
+                <div class="terminal-placeholder">Zweiter Auftrag daneben.</div>
               </div>
             </div>
           </div>
@@ -153,6 +158,9 @@
                 </span>
                 <span class="context-pill usage-pill" id="route-usage-pill" title="Klicken, um Kontingente in den Einstellungen anzuzeigen">
                   Verbleibend: <strong id="route-usage-text">Lade...</strong>
+                </span>
+                <span class="context-pill" id="run-capacity-pill" title="Gleichzeitig laufende Aufträge — Kappe in den Einstellungen">
+                  Frei: <strong id="run-capacity-text">–</strong>
                 </span>
                 <div class="active-project-hint">
                   <span>Zielordner: <strong id="prompt-target-folder">-</strong></span>
@@ -343,6 +351,12 @@
               <div id="harness-config-list" class="harness-table-body">
                 <!-- Dynamically populated -->
               </div>
+            </div>
+
+            <div class="settings-inline-row">
+              <label for="max-concurrent-input">Gleichzeitig</label>
+              <input type="number" id="max-concurrent-input" class="number-input-sm" min="1" max="8" step="1" value="3" />
+              <span class="inline-hint">Aufträge nebeneinander — pro Ordner und pro Harness arbeitet nur einer.</span>
             </div>
 
             <div class="settings-card-footer">

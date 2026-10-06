@@ -50,18 +50,35 @@ const HEALTH = [
 ];
 
 const ANTWORTEN = {
-  "GET /api/status": { health: HEALTH, clis: HEALTH },
-  "GET /api/workspace": { projects: [{ name: "harness-router-gui", path: "/tmp/harness-router-gui", hasAgentsMd: true }], tasks: [] },
+  "GET /api/status": {
+    health: HEALTH,
+    clis: HEALTH,
+    dispatch: { max_concurrent: 3 }
+  },
+  "GET /api/workspace": {
+    projects: [
+      { name: "harness-router-gui", path: "/tmp/harness-router-gui", hasAgentsMd: true },
+      // Die drei Parallel-Aufträge liegen in echten Ordnern — sonst tauchen sie
+      // in der Seitenleiste gar nicht auf und diebadge-Prüfung liefe ins Leere.
+      { name: "proj-a", path: "/tmp/proj-a" },
+      { name: "proj-b", path: "/tmp/proj-b" },
+      { name: "proj-c", path: "/tmp/proj-c" }
+    ],
+    tasks: []
+  },
   "GET /api/model-presets": {},
   "GET /api/agents-md": {},
   "GET /api/skills": [],
   "GET /api/usage": {},
   "GET /api/remote": {},
   "GET /api/schedules": [],
-  "GET /api/installer/status": {}
+  "GET /api/installer/status": {},
+  // Zwei Läufe von drei Plätzen belegt: der Zähler muss "1/3 frei" sagen.
+  "GET /api/runs": { running: [{ taskId: "f1" }, { taskId: "f2" }], queued: [], maxConcurrent: 3 }
 };
 
 const frames = [];
+const fetches = [];
 class WebSocketStub {
   static CONNECTING = 0;
   static OPEN = 1;
@@ -120,6 +137,7 @@ window.FitAddon = { FitAddon: class { fit() {} } };
 
 window.fetch = async (pfad, optionen = {}) => {
   const schluessel = `${optionen.method || "GET"} ${pfad}`;
+  fetches.push({ schluessel, body: optionen.body });
   const daten = ANTWORTEN[schluessel] ?? ANTWORTEN[pfad] ?? {};
   return { ok: true, status: 200, json: async () => daten, text: async () => JSON.stringify(daten) };
 };
@@ -233,6 +251,103 @@ ws2.onopen();
 await ruhen(8);
 pruefe("Terminal startet nach der Neuverbindung neu",
   frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
+
+// --- 9. Split-View: zwei Aufträge nebeneinander -------------------------
+// Der Composer sperrt nicht mehr: Aufträge werden schnell nacheinander geschickt und
+// laufen nebeneinander. Meldungen sind über die Task-ID zugeordnet und rendereren
+// ausschließlich ihr eigenes Feld.
+
+const konsole = (i) => document.querySelector(`#run-split .run-pane:nth-child(${i + 1})`);
+const auftrag = (id, ordner, name) => ({
+  id, prompt: name, projectPath: `/tmp/${ordner}`, projectName: ordner,
+  harness: "Freebuff", model: "plan-free", status: "queued", outputHtml: ""
+});
+const A = auftrag("task_a", "proj-a", "Erster Auftrag");
+const B = auftrag("task_b", "proj-b", "Zweiter Auftrag");
+const C = auftrag("task_c", "proj-c", "Dritter Auftrag");
+const sag = (json) => ws2.onmessage({ data: JSON.stringify(json) });
+
+pruefe("#run-split existiert", document.querySelector("#run-split") !== null);
+pruefe("zwei Konsolenfelder", document.querySelectorAll("#run-split .run-pane").length === 2);
+pruefe("jedes Feld hat eigene Ausgabe",
+  document.querySelectorAll("#run-split .run-pane-body").length === 2);
+pruefe("jedes Feld hat eigenen Abbrechen-Knopf",
+  document.querySelectorAll("#run-split .run-pane-cancel").length === 2);
+pruefe("die Einzelkonsole ist raus", document.querySelector("#terminal-body") === null);
+pruefe("das globale Routing-Banner ist raus", document.querySelector("#active-routing-card") === null);
+
+frames.length = 0;
+sag({ type: "task_created", taskId: A.id, task: A });
+sag({ type: "route_selected", taskId: A.id, harness: "Freebuff", command: "freebuff", model: "plan-free", agentsInfo: "AGENTS.md aktiv" });
+sag({ type: "output", taskId: A.id, html: "AUSGABE-A" });
+await ruhen(4);
+
+pruefe("Auftrag A sitzt im ersten Feld", (konsole(0)?.textContent || "").includes("AUSGABE-A"), konsole(0)?.innerHTML);
+pruefe("der Ausführen-Knopf bleibt während des Laufs benutzbar",
+  document.querySelector("#send-prompt-btn")?.disabled === false);
+
+frames.length = 0;
+sag({ type: "task_created", taskId: B.id, task: B });
+sag({ type: "route_selected", taskId: B.id, harness: "Qoder", command: "qoder", model: "auto" });
+sag({ type: "output", taskId: B.id, html: "AUSGABE-B" });
+await ruhen(4);
+
+pruefe("Auftrag B bekommt das zweite Feld", (konsole(1)?.textContent || "").includes("AUSGABE-B"));
+pruefe("B schreibt nicht in A's Feld", !(konsole(0)?.textContent || "").includes("AUSGABE-B"));
+pruefe("A's Ausgabe bleibt stehen", (konsole(0)?.textContent || "").includes("AUSGABE-A"));
+pruefe("jedes Feld nennt seinen Harness",
+  /Freebuff/.test(konsole(0)?.textContent || "") && /Qoder/.test(konsole(1)?.textContent || ""));
+// Die Seitenleiste weiß es vorher (erste Route der Kette) — route_selected bessert nach.
+pruefe("die Seitenleiste zeigt den gewählten Harness",
+  /Qoder/.test(document.querySelector('.task-item[data-task-id="task_b"]')?.textContent || ""),
+  document.querySelector('.task-item[data-task-id="task_b"]')?.textContent);
+pruefe("die Seitenleiste markiert den Lauf als aktiv",
+  /◐/.test(document.querySelector('.task-item[data-task-id="task_b"]')?.textContent || ""),
+  document.querySelector('.task-item[data-task-id="task_b"]')?.textContent);
+
+sag({ type: "queued", taskId: B.id, reason: "project", blockerTaskId: A.id, message: "Warteschlange: in proj-a arbeitet bereits ein Auftrag" });
+await ruhen(3);
+pruefe("die Warteschlangen-Meldung erscheint im eigenen Feld",
+  /Warteschlange/.test(konsole(1)?.textContent || ""));
+
+sag({ type: "done", taskId: B.id, exitCode: 0, message: "Fertig" });
+await ruhen(4);
+pruefe("Abbrechen ist im beendeten Feld weg", konsole(1)?.querySelector(".run-pane-cancel")?.hidden === true);
+pruefe("Abbrechen bleibt im laufenden Feld stehen", konsole(0)?.querySelector(".run-pane-cancel")?.hidden === false);
+
+frames.length = 0;
+sag({ type: "task_created", taskId: C.id, task: C });
+sag({ type: "route_selected", taskId: C.id, harness: "Cline", command: "cline", model: "plan-free" });
+sag({ type: "output", taskId: C.id, html: "AUSGABE-C" });
+await ruhen(4);
+
+pruefe("der dritte Auftrag nimmt das Feld des beendeten", (konsole(1)?.textContent || "").includes("AUSGABE-C"));
+pruefe("C verdrängt A nicht aus dem laufenden Feld", (konsole(0)?.textContent || "").includes("AUSGABE-A"));
+pruefe("C löscht B's Ausgabe aus seinem Feld", !(konsole(1)?.textContent || "").includes("AUSGABE-B"));
+
+konsole(0)?.querySelector(".run-pane-cancel")?.click();
+await ruhen(2);
+pruefe("Klick auf Abbrechen meldet genau diese Task-ID",
+  frames.some((f) => f.type === "cancel" && f.taskId === A.id), JSON.stringify(frames));
+
+pruefe("der Zähler meldet die freie Kapazität",
+  (document.querySelector("#run-capacity-text")?.textContent || "").includes("1/3"),
+  document.querySelector("#run-capacity-text")?.textContent);
+
+// --- 10. Die Kappe ist ein Schalter in den Einstellungen ------------------
+
+const kappe = document.querySelector("#max-concurrent-input");
+pruefe("Feld für gleichzeitige Aufträge", kappe !== null);
+pruefe("das Feld zeigt die gespeicherte Kappe", kappe?.value === "3", kappe?.value);
+
+kappe.value = "5";
+fetches.length = 0;
+document.querySelector("#save-settings-btn").click();
+await ruhen(8);
+const gespeichert = fetches.find((f) => f.schluessel === "POST /api/config");
+const gesendet = gespeichert ? JSON.parse(gespeichert.body) : {};
+pruefe("Speichern schickt die Kappe mit", gesendet.dispatch?.max_concurrent === 5, gespeichert?.body);
+pruefe("und behält die Harness-Routen dabei", (gesendet.clis || []).length === 3);
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

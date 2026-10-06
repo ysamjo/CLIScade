@@ -4,8 +4,11 @@ let state = {
   projects: [],
   activeProject: '',
   tasks: [],
-  activeTaskId: null,
+  // Zwei Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
+  streams: new Map(),
+  panes: [null, null],
   clis: [],
+  dispatch: { max_concurrent: 3 },
   health: [],
   modelPresets: {},
   modelTests: {},
@@ -17,7 +20,6 @@ let state = {
   agentsData: null,
   usageData: null,
   ws: null,
-  isRunning: false,
   attachedImage: null,
   schedules: [],
   installerTools: [],
@@ -50,16 +52,21 @@ const dom = {
   // Sidebar-Footer (Status-Punkt) & Mobile-Drawer
   connectionStatus: document.getElementById('connection-status'),
 
-  // Studio & Terminal
-  activeRoutingCard: document.getElementById('active-routing-card'),
-  routeHarnessTitle: document.getElementById('route-harness-title'),
-  routeModelTitle: document.getElementById('route-model-title'),
-  routeAgentsBadge: document.getElementById('route-agents-badge'),
-  cancelRunBtn: document.getElementById('cancel-run-btn'),
-  terminalSessionTitle: document.getElementById('terminal-session-title'),
-  terminalBody: document.getElementById('terminal-body'),
-  clearTerminalBtn: document.getElementById('clear-terminal-btn'),
-  copyTerminalBtn: document.getElementById('copy-terminal-btn'),
+  // Studio & Konsolen (Split-View, zwei Felder)
+  runPanes: [0, 1].map((i) => {
+    const root = document.getElementById(`run-pane-${i}`);
+    if (!root) return null;
+    return {
+      root,
+      dot: root.querySelector('.run-pane-dot'),
+      title: root.querySelector('.run-pane-title'),
+      folder: root.querySelector('.run-pane-folder'),
+      body: root.querySelector('.run-pane-body'),
+      copy: root.querySelector('.run-pane-copy'),
+      cancel: root.querySelector('.run-pane-cancel')
+    };
+  }),
+  runCapacityText: document.getElementById('run-capacity-text'),
   harnessOverride: document.getElementById('harness-override'),
   promptTargetFolder: document.getElementById('prompt-target-folder'),
   agentsContextPill: document.getElementById('agents-context-pill'),
@@ -90,6 +97,7 @@ const dom = {
   modelsRefreshText: document.getElementById('models-refresh-text'),
   addRouteBtn: document.getElementById('add-route-btn'),
   harnessConfigList: document.getElementById('harness-config-list'),
+  maxConcurrentInput: document.getElementById('max-concurrent-input'),
   saveSettingsBtn: document.getElementById('save-settings-btn'),
   settingsSaveFeedback: document.getElementById('settings-save-feedback'),
 
@@ -238,7 +246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupInteractiveTerminal();
 
   // Load workspace immediately so projects appear in < 30ms!
-  loadWorkspace();
+  loadWorkspace().then(refreshRunPool);
   loadModelPresets();
   loadStatus();
   loadAgentsMd();
@@ -367,6 +375,7 @@ function setupWebSocket() {
       armInteractiveAutoStart();
     }
     maybeAutoStartInteractive();
+    refreshRunPool();
   };
 
   state.ws.onclose = () => {
@@ -380,7 +389,6 @@ function setupWebSocket() {
     if (handlePtyMessage(data)) return;
 
     if (data.type === 'task_created') {
-      state.activeTaskId = data.task.id;
       // Prepend task to task list if not exists
       const existingIdx = state.tasks.findIndex(t => t.id === data.task.id);
       if (existingIdx === -1) {
@@ -388,53 +396,64 @@ function setupWebSocket() {
       } else {
         state.tasks[existingIdx] = data.task;
       }
+      // Der Auftrag hat sofort beim Einreichen sein Feld — auch wenn er danach wartet.
+      // Die Harness-Bezeichnung kommt erst mit route_selected, vorher wäre sie geraten.
+      const born = openRunPane(data.task.id, {
+        prompt: data.task.prompt,
+        folder: data.task.projectName || '',
+        startedAt: Date.parse(data.task.timestamp) || Date.now()
+      });
+      renderRunPane(born.slot);
       renderProjectTree();
     } else if (data.type === 'route_selected') {
-      dom.activeRoutingCard.classList.remove('hidden');
-      dom.routeHarnessTitle.textContent = `Ausführung mit: ${data.harness} (${data.command})`;
-      dom.routeModelTitle.textContent = data.model || 'Standard';
-      if (dom.routeAgentsBadge) {
-        dom.routeAgentsBadge.textContent = (data.agentsInfo || 'AGENTS.md aktiv');
+      const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
+      stream.status = 'running';
+      stream.title = `${data.harness} · ${data.model || 'Standard'}`;
+      const pane = dom.runPanes[stream.slot];
+      if (pane) pane.root.title = data.agentsInfo || '';
+      // Die Seitenleiste nannte die erste Route der Kette; jetzt gilt die gewaehlte.
+      const task = state.tasks.find(t => t.id === data.taskId);
+      if (task) {
+        task.harness = data.harness;
+        task.command = data.command;
+        task.model = data.model || 'Standard';
+        task.status = 'running';
       }
-      state.isRunning = true;
-      dom.sendPromptBtn.disabled = true;
-      dom.sendPromptBtn.innerHTML = '<span>Läuft…</span>';
-      if (dom.imageUploadBtn) dom.imageUploadBtn.disabled = true;
-      if (dom.voiceInputBtn) dom.voiceInputBtn.disabled = true;
-      dom.terminalSessionTitle.textContent = `Live: ${data.harness} [${data.model || 'Standard'}]`;
+      renderRunPane(stream.slot);
+      renderProjectTree();
+    } else if (data.type === 'queued') {
+      const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
+      stream.status = 'queued';
+      appendRunOutput(stream, `<div class="run-queue-note">[${escapeHtml(data.message || 'Warteschlange')}]</div>\n`);
+      renderRunPane(stream.slot);
     } else if (data.type === 'output') {
-      appendTerminalOutput(data.html || data.raw);
-      // Also append to active task in state
-      if (state.activeTaskId) {
-        const task = state.tasks.find(t => t.id === state.activeTaskId);
-        if (task) {
-          task.outputHtml = (task.outputHtml || '') + (data.html || data.raw);
-        }
+      const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
+      appendRunOutput(stream, data.html || data.raw);
+      const task = state.tasks.find(t => t.id === data.taskId);
+      if (task) {
+        task.outputHtml = (task.outputHtml || '') + (data.html || data.raw);
       }
     } else if (data.type === 'done' || data.type === 'error') {
-      state.isRunning = false;
-      dom.sendPromptBtn.disabled = false;
-      dom.sendPromptBtn.innerHTML = `<span>Ausführen</span> ${typeof icon === 'function' ? icon('send') : ''}`;
-      if (dom.imageUploadBtn) dom.imageUploadBtn.disabled = false;
-      if (dom.voiceInputBtn) dom.voiceInputBtn.disabled = false;
-      dom.activeRoutingCard.classList.add('hidden');
-
-      if (state.activeTaskId) {
-        const task = state.tasks.find(t => t.id === state.activeTaskId);
-        if (task) {
-          task.status = data.type === 'done' ? 'completed' : 'error';
-          if (data.usage) {
-            task.usage = data.usage;
-          }
+      const stream = state.streams.get(data.taskId);
+      if (stream) {
+        stream.status = data.type === 'done' ? 'done' : 'error';
+        if (data.message) {
+          const color = data.type === 'error' ? 'var(--danger)' : 'var(--success)';
+          stream.buffer += `\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`;
         }
-        renderProjectTree();
+        renderRunPane(stream.slot);
       }
-      loadUsage();
 
-      if (data.message) {
-        const color = data.type === 'error' ? 'var(--danger)' : 'var(--success)';
-        appendTerminalOutput(`\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`);
+      const task = state.tasks.find(t => t.id === data.taskId);
+      if (task) {
+        task.status = data.type === 'done' ? 'completed' : 'error';
+        if (data.usage) {
+          task.usage = data.usage;
+        }
       }
+      renderProjectTree();
+      loadUsage();
+      refreshRunPool();
     } else if (data.type === 'install_start') {
       state.installingTools.add(data.toolId);
       if (dom.installerConsoleWrapper) dom.installerConsoleWrapper.classList.remove('hidden');
@@ -466,8 +485,7 @@ function setupWebSocket() {
 }
 
 // --- TERMINAL HELPERS & REASONING FORMATTER ---
-let streamBuffer = '';
-
+// --- TERMINAL HELPERS & REASONING FORMATTER ---
 function formatReasoningAndOutput(html) {
   if (!html) return '';
 
@@ -532,35 +550,174 @@ function formatReasoningAndOutput(html) {
   return html;
 }
 
-// Auto-follow stays on until the reader scrolls away from the bottom; scrolling
-// back down re-arms it, so a running task never fights manual reading.
-let terminalFollowOutput = true;
+// --- RUN PANES (SPLIT-VIEW) ---
+// Zwei Konsolenfelder nebeneinander. Ein Auftrag zieht in das Feld, das leer ist oder
+// einen beendeten Lauf zeigt; Meldungen sind über die Task-ID zugeordnet, deshalb
+// schreibt ein Lauf nie in die Konsole eines anderen.
+const RUN_PANE_COUNT = 2;
+const runPaneFollow = [true, true];
 
-function scrollTerminalToBottom() {
-  if (!terminalFollowOutput) return;
-  dom.terminalBody.scrollTop = dom.terminalBody.scrollHeight;
+const RUN_LEERTEXT = {
+  queued: 'Wartet auf einen freien Platz…',
+  running: 'Startet…',
+  done: 'Keine Ausgabe für diesen Auftrag.',
+  error: 'Keine Ausgabe für diesen Auftrag.'
+};
+
+function streamAtSlot(slot) {
+  const taskId = state.panes[slot];
+  return taskId ? state.streams.get(taskId) || null : null;
 }
 
-function appendTerminalOutput(htmlContent) {
-  const placeholder = dom.terminalBody.querySelector('.terminal-placeholder');
-  if (placeholder) placeholder.remove();
-
-  streamBuffer += htmlContent;
-  dom.terminalBody.innerHTML = formatReasoningAndOutput(streamBuffer);
-  scrollTerminalToBottom();
-  // Replacing the whole content re-wraps every line, so the final height is only
-  // known after the next layout pass; pinning once leaves the view short.
-  requestAnimationFrame(scrollTerminalToBottom);
+function isBeendet(taskId) {
+  const stream = state.streams.get(taskId);
+  return !stream || stream.status === 'done' || stream.status === 'error';
 }
 
-function setTerminalContent(htmlContent, title) {
-  streamBuffer = htmlContent || '';
-  if (title) {
-    dom.terminalSessionTitle.textContent = title;
+// Das Feld für einen neuen Auftrag: erst leer, dann beendet, sonst das ältere —
+// bei mehr Läufen als Feldern gewinnt der neueste, weil der alte schon durch ist.
+function freeSlot() {
+  const leer = state.panes.findIndex((id) => id === null);
+  if (leer !== -1) return leer;
+  const beendet = state.panes.findIndex((id) => isBeendet(id));
+  if (beendet !== -1) return beendet;
+  const links = state.streams.get(state.panes[0]);
+  const rechts = state.streams.get(state.panes[1]);
+  return (links?.startedAt ?? 0) <= (rechts?.startedAt ?? 0) ? 0 : 1;
+}
+
+function openRunPane(taskId, init = {}) {
+  const bestehend = state.streams.get(taskId);
+  if (bestehend && state.panes.includes(taskId)) return bestehend;
+
+  const slot = freeSlot();
+  const verdraengt = state.panes[slot];
+  if (verdraengt && verdraengt !== taskId) state.streams.delete(verdraengt);
+
+  const stream = Object.assign(
+    { taskId, slot, buffer: '', status: 'queued', title: '', folder: '', prompt: '', startedAt: Date.now() },
+    bestehend || {},
+    init,
+    { slot }
+  );
+  state.streams.set(taskId, stream);
+  state.panes[slot] = taskId;
+  runPaneFollow[slot] = true;
+  return stream;
+}
+
+function scrollRunPaneToBottom(slot) {
+  const pane = dom.runPanes[slot];
+  if (!runPaneFollow[slot] || !pane) return;
+  pane.body.scrollTop = pane.body.scrollHeight;
+}
+
+function renderRunPane(slot) {
+  const pane = dom.runPanes[slot];
+  const stream = streamAtSlot(slot);
+  if (!pane) return;
+
+  if (!stream) {
+    pane.dot.className = 'run-pane-dot';
+    pane.title.textContent = `Konsole ${slot + 1}`;
+    pane.folder.textContent = '';
+    pane.cancel.hidden = true;
+    return;
   }
-  dom.terminalBody.innerHTML = htmlContent ? formatReasoningAndOutput(htmlContent) : '<div class="terminal-placeholder">Keine Ausgabe für diesen Task vorhanden.</div>';
-  terminalFollowOutput = false;
-  dom.terminalBody.scrollTop = 0;
+
+  pane.dot.className = `run-pane-dot ${stream.status}`;
+  pane.title.textContent = stream.title || (stream.prompt ? stream.prompt.slice(0, 40) : 'Auftrag');
+  pane.folder.textContent = stream.folder || '';
+  pane.cancel.hidden = stream.status === 'done' || stream.status === 'error';
+  pane.body.innerHTML = stream.buffer
+    ? formatReasoningAndOutput(stream.buffer)
+    : `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
+  scrollRunPaneToBottom(slot);
+}
+
+function appendRunOutput(stream, htmlContent) {
+  const pane = dom.runPanes[stream.slot];
+  stream.buffer += htmlContent;
+  if (!pane) return;
+  pane.body.innerHTML = formatReasoningAndOutput(stream.buffer);
+  scrollRunPaneToBottom(stream.slot);
+  // Ersetzt der Chunk den Inhalt, wird neu umgebrochen: die Endhöhe kennt das Layout
+  // erst im nächsten Frame, also einmal nachziehen.
+  requestAnimationFrame(() => scrollRunPaneToBottom(stream.slot));
+}
+
+// Auto-follow pro Feld: wer in einem Lauf mitliest, liest mit; wer hochscrollt, liest
+// in Ruhe weiter — das andere Feld bleibt davon unberührt.
+function setupRunPanes() {
+  dom.runPanes.forEach((pane, slot) => {
+    if (!pane) return;
+
+    pane.body.addEventListener('scroll', () => {
+      const b = pane.body;
+      runPaneFollow[slot] = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
+    });
+
+    pane.copy.addEventListener('click', () => {
+      navigator.clipboard.writeText(pane.body.innerText);
+      pane.copy.textContent = 'Kopiert!';
+      setTimeout(() => { pane.copy.textContent = 'Kopieren'; }, 1500);
+    });
+
+    pane.cancel.addEventListener('click', () => {
+      const taskId = state.panes[slot];
+      if (!taskId || !state.ws) return;
+      state.ws.send(JSON.stringify({ type: 'cancel', taskId }));
+    });
+  });
+}
+
+// Ein Auftrag aus der Historie kommt in ein Feld — das mit dem beendeten Lauf weicht.
+function showTaskInPane(task) {
+  if (state.panes.includes(task.id)) return;
+  const status = task.status === 'running' ? 'running' : (task.status === 'queued' ? 'queued' : 'done');
+  const stream = openRunPane(task.id, {
+    prompt: task.prompt,
+    folder: task.projectName || (task.projectPath ? task.projectPath.split('/').pop() : ''),
+    title: task.harness ? `${task.harness} · ${task.model || 'Standard'}` : '',
+    buffer: task.outputHtml || '',
+    status,
+    startedAt: Date.parse(task.timestamp) || Date.now()
+  });
+  renderRunPane(stream.slot);
+  runPaneFollow[stream.slot] = false;
+  const pane = dom.runPanes[stream.slot];
+  if (pane) {
+    pane.body.scrollTop = 0;
+    pane.root.title = task.agentsInfo || '';
+  }
+}
+
+// Der Server kennt die Kappe und die Läufe anderer Fenster: Zähler auffrischen und
+// Aufträge, die hier noch kein Feld haben, hereinholen.
+async function refreshRunPool() {
+  let pool;
+  try {
+    const res = await fetch('/api/runs');
+    pool = await res.json();
+  } catch {
+    return;
+  }
+  const max = pool.maxConcurrent || 1;
+  const belegt = (pool.running || []).length + (pool.queued || []).length;
+  if (dom.runCapacityText) {
+    dom.runCapacityText.textContent = `${Math.max(0, max - belegt)}/${max}`;
+  }
+
+  const laeufe = [
+    ...(pool.running || []).map((r) => ({ ...r, laufStatus: 'running' })),
+    ...(pool.queued || []).map((r) => ({ ...r, laufStatus: 'queued' }))
+  ];
+  for (const lauf of laeufe) {
+    if (!lauf.taskId || state.panes.includes(lauf.taskId)) continue;
+    const task = state.tasks.find((t) => t.id === lauf.taskId);
+    if (!task) continue;
+    showTaskInPane({ ...task, status: lauf.laufStatus });
+  }
 }
 
 // --- INTERACTIVE PTY TERMINAL (xterm.js) ---
@@ -893,6 +1050,11 @@ async function loadStatus() {
     const data = await res.json();
     state.health = data.health || [];
     state.clis = data.clis || [];
+    state.dispatch = data.dispatch || state.dispatch;
+    // Das Feld soll zeigen, was gespeichert ist — nicht, was zuletzt geklickt wurde.
+    if (dom.maxConcurrentInput && state.dispatch.max_concurrent) {
+      dom.maxConcurrentInput.value = state.dispatch.max_concurrent;
+    }
 
     renderHarnessStatusPills();
     renderInteractiveCliSelect();
@@ -1286,7 +1448,7 @@ function renderProjectTree() {
     taskList.className = `task-list ${isExpanded ? '' : 'hidden'}`;
 
     projectTasks.forEach(task => {
-      const isTaskActive = task.id === state.activeTaskId;
+      const isTaskActive = state.panes.includes(task.id);
       const taskItem = document.createElement('div');
       taskItem.className = `task-item ${isTaskActive ? 'active' : ''}`;
       taskItem.dataset.taskId = task.id;
@@ -1406,7 +1568,6 @@ async function selectProject(projectPath) {
 }
 
 function selectTask(task) {
-  state.activeTaskId = task.id;
   if (task.projectPath && state.activeProject !== task.projectPath) {
     state.activeProject = task.projectPath;
     state.collapsedProjects.delete(task.projectPath);
@@ -1418,18 +1579,14 @@ function selectTask(task) {
     if (dom.mobileDrawerOverlay) dom.mobileDrawerOverlay.classList.remove('active');
   }
 
+  showTaskInPane(task);
   renderProjectTree();
-  setTerminalContent(task.outputHtml, `Task: ${task.prompt.slice(0, 32)}... (${task.harness})`);
   switchTab('studio');
 }
 
+// Der neue Auftrag bekommt sein Feld erst mit task_created — hier wird nur der
+// Composer vorbereitet, die laufenden Felder bleiben stehen.
 function startNewTaskInProject() {
-  state.activeTaskId = null;
-  renderProjectTree();
-  setTerminalContent(
-    `<div class="terminal-placeholder">Frischer Task für <strong>${escapeHtml(activeProjectName())}</strong>. Gib unten deine Aufgabe ein.</div>`,
-    'Neuer Task'
-  );
   switchTab('studio');
   dom.promptInput.focus();
 }
@@ -1881,12 +2038,8 @@ function setupEventListeners() {
     }
   });
 
-  // Cancel run
-  dom.cancelRunBtn.addEventListener('click', () => {
-    if (state.ws && state.isRunning) {
-      state.ws.send(JSON.stringify({ type: 'cancel' }));
-    }
-  });
+  // Konsolenfelder: jedes bricht nur seinen eigenen Auftrag ab
+  setupRunPanes();
 
   // Interaktives Terminal: Modus, Beenden, Leeren
   if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.addEventListener('click', () => setStudioMode('interactive'));
@@ -2084,41 +2237,26 @@ function setupEventListeners() {
     loadWorkspace();
   });
 
-  // Terminal buttons
-  dom.terminalBody.addEventListener('scroll', () => {
-    const b = dom.terminalBody;
-    terminalFollowOutput = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
-  });
-
-  if (dom.clearTerminalBtn) {
-    dom.clearTerminalBtn.addEventListener('click', () => {
-      streamBuffer = '';
-      terminalFollowOutput = true;
-      dom.terminalBody.innerHTML = '<div class="terminal-placeholder">Ausgabe geleert. Bereit für neue Aufgaben.</div>';
-    });
-  }
-
-  if (dom.copyTerminalBtn) {
-    dom.copyTerminalBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(dom.terminalBody.innerText);
-      dom.copyTerminalBtn.textContent = 'Kopiert!';
-      setTimeout(() => dom.copyTerminalBtn.textContent = 'Kopieren', 1500);
-    });
-  }
-
   // Save Settings (Harness Priorities & Models)
   if (dom.saveSettingsBtn) {
     dom.saveSettingsBtn.addEventListener('click', async () => {
       try {
         dom.settingsSaveFeedback.textContent = 'Speichere...';
+        // Die Kappe speichert mit: ohne sie würde der Server den alten Wert behalten.
+        const kappe = Number(dom.maxConcurrentInput?.value);
+        const body = { clis: state.clis };
+        if (Number.isFinite(kappe)) {
+          body.dispatch = { max_concurrent: Math.min(8, Math.max(1, Math.round(kappe))) };
+        }
         const res = await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clis: state.clis })
+          body: JSON.stringify(body)
         });
         if (res.ok) {
           dom.settingsSaveFeedback.textContent = 'Gespeichert in ~/.harness-dispatch/config.yaml!';
           renderHarnessOverrideSelect();
+          refreshRunPool();
         } else {
           dom.settingsSaveFeedback.textContent = 'Fehler beim Speichern!';
         }
@@ -2286,9 +2424,11 @@ function updateNewRouteModelOptions() {
 }
 
 // --- DISPATCH TASK ---
+// Der Composer sperrt nicht: mehrere Aufträge schnell nacheinander einreichen ist der
+// Weg, den Pool zu füllen. Die Kappe nimmt der Server, nicht das Fenster.
 function sendPrompt() {
   const prompt = dom.promptInput.value.trim();
-  if ((!prompt && !state.attachedImage) || state.isRunning) return;
+  if (!prompt && !state.attachedImage) return;
 
   const harnessOverride = dom.harnessOverride.value;
 
@@ -2301,10 +2441,10 @@ function sendPrompt() {
   };
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    terminalFollowOutput = true;
     state.ws.send(JSON.stringify(payload));
     dom.promptInput.value = '';
     removeAttachedImage();
+    refreshRunPool();
   } else {
     alert("Verbindung zum Server unterbrochen.");
   }
