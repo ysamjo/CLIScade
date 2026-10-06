@@ -295,6 +295,70 @@ body {
   color: var(--text-main);
 }
 
+.section-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Der Archiv-Schalter ist ein Filter, kein Auftrag: er nennt gleich, was drin liegt. */
+.filter-chip {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-chip strong {
+  color: var(--text-muted);
+}
+
+.filter-chip:hover {
+  color: var(--text-main);
+  border-color: var(--border-focus);
+}
+
+.filter-chip.on {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  color: var(--text-main);
+}
+
+.filter-chip.on strong {
+  color: var(--accent);
+}
+
+/* Immer da, aber leise: auf dem Handy gibt es kein Hover, das den Knopf erst zeigt. */
+.task-archive-btn,
+.task-restore-btn {
+  margin-left: auto;
+  align-self: center;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  letter-spacing: 0.3px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.task-archive-btn:hover,
+.task-restore-btn:hover {
+  background: var(--border-color);
+  color: var(--text-main);
+}
+
 /* INDENTED TASKS LIST */
 .task-list {
   display: flex;
@@ -804,54 +868,58 @@ body {
   border-color: var(--border-focus);
 }
 
-.prompt-input-row {
+/* Der Composer sitzt im Konsolenfeld: Text und Zielordner gehören zu diesem Feld. */
+.run-pane-composer {
+  flex: 0 0 auto;
   display: flex;
-  gap: 8px;
   align-items: flex-end;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.run-pane-target {
+  flex: 0 0 auto;
+  max-width: 110px;
+  font-size: 11.5px;
+  padding: 5px 6px;
+  text-overflow: ellipsis;
+}
+
+.run-pane-composer textarea {
+  flex: 1;
+  min-width: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 4px 8px;
-  transition: border-color 0.15s;
-}
-
-.prompt-input-row:focus-within {
-  border-color: var(--border-focus);
-}
-
-textarea#prompt-input {
-  flex: 1;
-  background: transparent;
-  border: none;
+  border-radius: var(--radius-sm);
   color: var(--text-main);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12.5px;
   resize: none;
   outline: none;
   min-height: 28px;
-  max-height: 120px;
+  max-height: 110px;
   line-height: 1.4;
-  padding: 5px 2px;
+  padding: 5px 7px;
   overflow-y: auto;
   scrollbar-width: none;
+  transition: border-color 0.15s;
 }
 
-textarea#prompt-input::-webkit-scrollbar {
+.run-pane-composer textarea:focus {
+  border-color: var(--border-focus);
+}
+
+.run-pane-composer textarea::-webkit-scrollbar {
   display: none;
 }
 
-.prompt-btn-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-bottom: 1px;
-}
-
-.prompt-btn-group-left {
+.prompt-tools {
   display: flex;
   align-items: center;
   gap: 5px;
+  flex-shrink: 0;
 }
 
 .btn-image-upload,
@@ -878,9 +946,9 @@ textarea#prompt-input::-webkit-scrollbar {
   color: var(--text-main);
 }
 
-#send-prompt-btn {
+.run-pane-send {
   height: 28px;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 12.5px;
   font-weight: 600;
   border-radius: var(--radius-sm);
@@ -956,7 +1024,7 @@ textarea#prompt-input::-webkit-scrollbar {
 
 .harness-table-header {
   display: grid;
-  grid-template-columns: 26px 30px 44px minmax(96px, 1fr) minmax(74px, 0.8fr) minmax(160px, 1.5fr) 82px;
+  grid-template-columns: 26px 30px minmax(96px, 1fr) minmax(74px, 0.8fr) minmax(160px, 1.5fr) 82px;
   padding: 5px 10px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -974,7 +1042,7 @@ textarea#prompt-input::-webkit-scrollbar {
 
 .harness-row {
   display: grid;
-  grid-template-columns: 26px 30px 44px minmax(96px, 1fr) minmax(74px, 0.8fr) minmax(160px, 1.5fr) 82px;
+  grid-template-columns: 26px 30px minmax(96px, 1fr) minmax(74px, 0.8fr) minmax(160px, 1.5fr) 82px;
   padding: 3px 10px;
   min-height: 30px;
   align-items: center;
@@ -2129,12 +2197,6 @@ kbd {
   color: var(--text-main);
 }
 
-.prompt-btn-group-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 /* Consensus Mode & Fallback Banners */
 /* Phasen sind im Text benannt — die Farbe traegt nur noch den Zustand (Konflikt, Erfolg, Fehler). */
 .consensus-banner {
@@ -2698,7 +2760,7 @@ kbd {
 
   .harness-table-header,
   .harness-row {
-    grid-template-columns: 22px 26px 40px minmax(72px, 1fr) minmax(64px, 0.8fr) minmax(0, 1.5fr) 74px;
+    grid-template-columns: 22px 26px minmax(72px, 1fr) minmax(64px, 0.8fr) minmax(0, 1.5fr) 74px;
     padding-left: 8px;
     padding-right: 8px;
   }
@@ -2841,35 +2903,34 @@ kbd {
     white-space: nowrap;
   }
 
-  .prompt-input-row {
-    flex-direction: column;
+  /* Der Composer im Feld: 16px verhindert das Auto-Zoom von iOS und Android. */
+  .run-pane-composer {
+    flex-wrap: wrap;
     gap: 8px;
   }
 
-  textarea#prompt-input {
-    font-size: 16px; /* Prevents auto-zoom in mobile Safari / Chrome */
-    min-height: 44px;
-    max-height: 120px;
+  .run-pane-composer textarea {
+    flex: 1 1 130px;
+    font-size: 16px;
+    min-height: 40px;
     padding: 8px 10px;
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
+  }
+
+  .run-pane-target {
+    flex: 0 0 auto;
+    height: 40px;
+    font-size: 13px;
+    max-width: 120px;
+  }
+
+  .run-pane-send {
+    height: 40px;
+    padding: 0 14px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 8px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .prompt-btn-group {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .prompt-btn-group-left {
-    display: flex;
-    align-items: center;
-    gap: 6px;
   }
 
   .btn-image-upload,
@@ -2886,18 +2947,6 @@ kbd {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     color: var(--text-main);
-  }
-
-  #send-prompt-btn {
-    flex: 1;
-    height: 38px;
-    font-size: 13px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border-radius: 8px;
   }
 
   /* Full screen settings dialog on mobile */

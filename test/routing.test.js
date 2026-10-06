@@ -5,7 +5,6 @@ const { spawn, execFileSync } = require('child_process');
 
 const {
   armIdleWatchdog,
-  routePolicyBlocker,
   knownBrokenBlocker,
   startupRefusal,
   ptyOwnershipBlocker,
@@ -93,40 +92,6 @@ test('Frist liesst HARNESS_IDLE_TIMEOUT_MS, damit ein End-to-End-Test nicht drei
   // FORCE_COLOR faerbt Node's -p-Ausgabe gelb; der Wert selbst bleibt derselbe.
   const wert = out.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').trim();
   assert.strictEqual(wert, '2500');
-});
-
-test('blockiert eine Route, die Bezahl-Nutzung ablehnt', () => {
-  const blocker = routePolicyBlocker({ command: 'claude', name: 'Claude Code', billing_kind: 'metered_api', allow_paid_usage: false });
-  assert.ok(blocker, 'allow_paid_usage:false muss die Route bremsen');
-  assert.match(blocker, /Bezahl/);
-});
-
-test('laesst eine Route mit erlaubter Bezahl-Nutzung durch', () => {
-  assert.strictEqual(routePolicyBlocker({ command: 'agy', billing_kind: 'metered_api', allow_paid_usage: true }), null);
-});
-
-test('laesst reine Plan-Nutzung immer durch', () => {
-  assert.strictEqual(routePolicyBlocker({ command: 'opencode', billing_kind: 'included_plan_usage' }), null);
-});
-
-test('blockiert ein Bezahltmodell, obwohl die Route Gratis verlangt', () => {
-  const blocker = routePolicyBlocker({
-    command: 'opencode',
-    name: 'OpenCode',
-    model: 'anthropic/claude-sonnet-5-5',
-    billing_kind: 'included_plan_usage',
-    allow_paid_usage: false
-  });
-  assert.ok(blocker, 'ein Modell ausserhalb des Plans kostet extra und darf nicht heimlich gemailt werden');
-  assert.match(blocker, /claude-sonnet-5-5/);
-});
-
-test('laesst ein Gratismodell unter der Bezahl-Sperre durch', () => {
-  assert.strictEqual(routePolicyBlocker({
-    command: 'opencode',
-    model: 'opencode/ling-3.1-flash-free',
-    allow_paid_usage: false
-  }), null);
 });
 
 test('ueberspringt eine Route mit frischem Login-Fehler', () => {

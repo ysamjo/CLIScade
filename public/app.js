@@ -7,6 +7,9 @@ let state = {
   // Zwei Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
   streams: new Map(),
   panes: [null, null],
+  // Jeder Composer gehört zu einem Feld: Zielordner und das zuletzt angefasste Feld.
+  paneTarget: [null, null],
+  lastPaneSlot: 0,
   clis: [],
   dispatch: { max_concurrent: 3 },
   health: [],
@@ -16,6 +19,8 @@ let state = {
   collapsedProjects: new Set(),
   // Alle Ordner des Workspace sind standardmäßig sichtbar (kompakt per Button reduzierbar).
   showTasklessFolders: true,
+  // Archivierte Aufträge sind eingepackt, nicht gelöscht — erst der Schalter zeigt sie.
+  showArchived: false,
   activeAgentsTab: 'rootDev',
   agentsData: null,
   usageData: null,
@@ -52,7 +57,7 @@ const dom = {
   // Sidebar-Footer (Status-Punkt) & Mobile-Drawer
   connectionStatus: document.getElementById('connection-status'),
 
-  // Studio & Konsolen (Split-View, zwei Felder)
+  // Studio & Konsolen (Split-View, zwei Felder — je eines zum Tippen)
   runPanes: [0, 1].map((i) => {
     const root = document.getElementById(`run-pane-${i}`);
     if (!root) return null;
@@ -63,16 +68,18 @@ const dom = {
       folder: root.querySelector('.run-pane-folder'),
       body: root.querySelector('.run-pane-body'),
       copy: root.querySelector('.run-pane-copy'),
-      cancel: root.querySelector('.run-pane-cancel')
+      cancel: root.querySelector('.run-pane-cancel'),
+      target: root.querySelector('.run-pane-target'),
+      input: root.querySelector('.run-pane-input'),
+      send: root.querySelector('.run-pane-send')
     };
   }),
   runCapacityText: document.getElementById('run-capacity-text'),
   harnessOverride: document.getElementById('harness-override'),
-  promptTargetFolder: document.getElementById('prompt-target-folder'),
   agentsContextPill: document.getElementById('agents-context-pill'),
   agentsContextText: document.getElementById('agents-context-text'),
-  promptInput: document.getElementById('prompt-input'),
-  sendPromptBtn: document.getElementById('send-prompt-btn'),
+  archiveFilterBtn: document.getElementById('archive-filter-btn'),
+  archiveCountText: document.getElementById('archive-count-text'),
 
   // Settings Modal Dialog
   settingsModal: document.getElementById('settings-modal'),
@@ -454,6 +461,11 @@ function setupWebSocket() {
       renderProjectTree();
       loadUsage();
       refreshRunPool();
+    } else if (data.type === 'task_archived') {
+      // Ein anderes Fenster hat eingepackt oder zurückgeholt — die Liste zieht nach.
+      const task = state.tasks.find((t) => t.id === data.taskId);
+      if (task) task.archived = Boolean(data.archived);
+      renderProjectTree();
     } else if (data.type === 'install_start') {
       state.installingTools.add(data.toolId);
       if (dom.installerConsoleWrapper) dom.installerConsoleWrapper.classList.remove('hidden');
@@ -668,6 +680,40 @@ function setupRunPanes() {
       if (!taskId || !state.ws) return;
       state.ws.send(JSON.stringify({ type: 'cancel', taskId }));
     });
+
+    // Der Composer gehört zum Feld: hier tippen, hier senden, hierher der Auftrag.
+    pane.send.addEventListener('click', () => sendPrompt(slot));
+    pane.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendPrompt(slot);
+      }
+    });
+    pane.input.addEventListener('focus', () => { state.lastPaneSlot = slot; });
+    pane.input.addEventListener('paste', handlePromptPaste);
+    pane.target.addEventListener('change', () => {
+      state.paneTarget[slot] = pane.target.value;
+    });
+  });
+}
+
+// Jedes Feld schickt in seinen eigenen Ordner. Die Liste kommt aus dem Workspace;
+// eine bewusste Wahl bleibt, solange es den Ordner noch gibt, sonst folgt sie dem
+// Ziel der Seitenleiste.
+function syncPaneTargets() {
+  const bekannt = state.projects.map((p) => p.path);
+  const fallback = bekannt.includes(state.activeProject)
+    ? state.activeProject
+    : bekannt[0] || '';
+
+  dom.runPanes.forEach((pane, slot) => {
+    if (!pane || !pane.target) return;
+    pane.target.innerHTML = state.projects
+      .map((p) => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name)}</option>`)
+      .join('');
+    const gewaehlt = bekannt.includes(state.paneTarget[slot]) ? state.paneTarget[slot] : fallback;
+    state.paneTarget[slot] = gewaehlt || null;
+    if (gewaehlt) pane.target.value = gewaehlt;
   });
 }
 
@@ -1136,7 +1182,6 @@ function renderHarnessConfigList() {
     row.innerHTML = `
       <div><span class="order-badge">${index + 1}</span></div>
       <div><input type="checkbox" class="harness-active-chk" data-idx="${index}" ${isChecked} title="Aktivieren / Deaktivieren" /></div>
-      <div><input type="checkbox" class="harness-paid-chk" data-idx="${index}" ${item.allow_paid_usage === false ? '' : 'checked'} title="Bezahlnutzung erlaubt — aus hält die Kette diese Route zurück, wenn das Modell extra kostet" /></div>
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
@@ -1192,13 +1237,6 @@ function renderHarnessConfigList() {
       const idx = parseInt(chk.dataset.idx, 10);
       state.clis[idx].enabled = chk.checked;
       renderHarnessOverrideSelect();
-    });
-  });
-
-  dom.harnessConfigList.querySelectorAll('.harness-paid-chk').forEach(chk => {
-    chk.addEventListener('change', () => {
-      const idx = parseInt(chk.dataset.idx, 10);
-      state.clis[idx].allow_paid_usage = chk.checked;
     });
   });
 
@@ -1364,7 +1402,7 @@ function updateWorkspaceUI() {
     path: state.activeProject || state.rootDirectory
   };
 
-  dom.promptTargetFolder.textContent = current.name;
+  syncPaneTargets();
   if (dom.interactiveTargetFolder) dom.interactiveTargetFolder.textContent = current.name;
 
   if (dom.rootAgentsText) {
@@ -1392,13 +1430,21 @@ function updateWorkspaceUI() {
 function renderProjectTree() {
   dom.projectTree.innerHTML = '';
 
+  const archiv = state.tasks.filter((t) => t.archived).length;
+  if (dom.archiveCountText) dom.archiveCountText.textContent = archiv;
+  if (dom.archiveFilterBtn) dom.archiveFilterBtn.classList.toggle('on', state.showArchived);
+
+  // Eingepackte Aufträge sind aus dem Weg, solange das Archiv zu ist. Die Zähler
+  // nennen nur, was wirklich zu sehen ist — sonst klickt man auf eine leere Liste.
+  const sichtbar = state.tasks.filter((t) => state.showArchived || !t.archived);
+
   if (state.projects.length === 0) {
     dom.projectTree.innerHTML = '<div class="empty-task-hint">Keine Unterordner in diesem Verzeichnis gefunden.</div>';
     return;
   }
 
   const taskCount = new Map();
-  state.tasks.forEach(t => {
+  sichtbar.forEach(t => {
     if (!t.projectPath) return;
     taskCount.set(t.projectPath, (taskCount.get(t.projectPath) || 0) + 1);
   });
@@ -1421,7 +1467,7 @@ function renderProjectTree() {
   }
 
   visibleProjects.forEach(p => {
-    const projectTasks = state.tasks.filter(t => t.projectPath === p.path);
+    const projectTasks = sichtbar.filter(t => t.projectPath === p.path);
     // Ohne Tasks gibt es nichts auszuklappen – der Ordner bleibt eine reine Zeile.
     const hasTasks = projectTasks.length > 0;
     const isExpanded = hasTasks && !state.collapsedProjects.has(p.path);
@@ -1465,12 +1511,21 @@ function renderProjectTree() {
         }
       }
 
+      // Ein laufender Auftrag bleibt unangetastet: einpacken würde ihn vor dem
+      // Abbrechen verstecken. Erledigte dürfen ins Archiv.
+      const aktion = task.archived
+        ? '<button class="task-restore-btn" title="Zurück in die Aufgabenliste">Zurück</button>'
+        : (task.status === 'completed' || task.status === 'error'
+            ? '<button class="task-archive-btn" title="Ins Archiv legen — die Ausgabe bleibt erhalten">Archiv</button>'
+            : '');
+
       taskItem.innerHTML = `
         <span class="task-icon">↳</span>
         <div class="task-meta">
           <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
           <span class="task-badge">${statusIcon} ${escapeHtml(task.harness || 'cli')} · ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
         </div>
+        ${aktion}
       `;
 
       // Click task: show recorded terminal output
@@ -1478,6 +1533,14 @@ function renderProjectTree() {
         e.stopPropagation();
         selectTask(task);
       });
+
+      const aktionsBtn = taskItem.querySelector('.task-archive-btn, .task-restore-btn');
+      if (aktionsBtn) {
+        aktionsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          archiveTask(task, !task.archived);
+        });
+      }
 
       taskList.appendChild(taskItem);
     });
@@ -1487,7 +1550,7 @@ function renderProjectTree() {
       if (e.target.classList.contains('add-task-btn')) {
         e.stopPropagation();
         selectProject(p.path);
-        startNewTaskInProject();
+        startNewTaskInProject(p.path);
         return;
       }
 
@@ -1567,6 +1630,27 @@ async function selectProject(projectPath) {
   }
 }
 
+// Archivieren ist ein Umzug, kein Löschen: der Server setzt den Flag, jedes Fenster
+// blendet die Aufgabe aus der Liste aus (oder wieder ein).
+async function archiveTask(task, archived) {
+  try {
+    const res = await fetch('/api/tasks/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: task.id, archived })
+    });
+    if (!res.ok) {
+      const grund = await res.json().catch(() => ({}));
+      alert(grund.error || 'Auftrag nicht geändert.');
+      return;
+    }
+    task.archived = archived;
+    renderProjectTree();
+  } catch (err) {
+    alert('Archiv nicht erreicht: ' + err.message);
+  }
+}
+
 function selectTask(task) {
   if (task.projectPath && state.activeProject !== task.projectPath) {
     state.activeProject = task.projectPath;
@@ -1585,10 +1669,18 @@ function selectTask(task) {
 }
 
 // Der neue Auftrag bekommt sein Feld erst mit task_created — hier wird nur der
-// Composer vorbereitet, die laufenden Felder bleiben stehen.
-function startNewTaskInProject() {
+// Composer vorbereitet: das Feld, das ein neuer Auftrag beim Senden nähme, und
+// sein Zielordner sind der angeklickte Ordner.
+function startNewTaskInProject(projectPath) {
   switchTab('studio');
-  dom.promptInput.focus();
+  const slot = freeSlot();
+  const pane = dom.runPanes[slot];
+  if (!pane) return;
+  if (projectPath) {
+    state.paneTarget[slot] = projectPath;
+    pane.target.value = projectPath;
+  }
+  pane.input.focus();
 }
 
 function formatTimestamp(isoStr) {
@@ -2029,17 +2121,15 @@ function renderUsageTable() {
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
-  // Send prompt
-  dom.sendPromptBtn.addEventListener('click', sendPrompt);
-  dom.promptInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendPrompt();
-    }
-  });
-
-  // Konsolenfelder: jedes bricht nur seinen eigenen Auftrag ab
+  // Konsolenfelder: jedes bricht nur seinen eigenen Auftrag ab, jedes tippt für sich
   setupRunPanes();
+
+  if (dom.archiveFilterBtn) {
+    dom.archiveFilterBtn.addEventListener('click', () => {
+      state.showArchived = !state.showArchived;
+      renderProjectTree();
+    });
+  }
 
   // Interaktives Terminal: Modus, Beenden, Leeren
   if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.addEventListener('click', () => setStudioMode('interactive'));
@@ -2093,9 +2183,6 @@ function setupEventListeners() {
   }
   if (dom.removeImageBtn) {
     dom.removeImageBtn.addEventListener('click', removeAttachedImage);
-  }
-  if (dom.promptInput) {
-    dom.promptInput.addEventListener('paste', handlePromptPaste);
   }
 
   // Scheduled Tasks Listeners
@@ -2424,25 +2511,25 @@ function updateNewRouteModelOptions() {
 }
 
 // --- DISPATCH TASK ---
-// Der Composer sperrt nicht: mehrere Aufträge schnell nacheinander einreichen ist der
+// Die Composer sperren nicht: mehrere Aufträge schnell nacheinander einreichen ist der
 // Weg, den Pool zu füllen. Die Kappe nimmt der Server, nicht das Fenster.
-function sendPrompt() {
-  const prompt = dom.promptInput.value.trim();
+function sendPrompt(slot = 0) {
+  const pane = dom.runPanes[slot];
+  if (!pane) return;
+  const prompt = pane.input.value.trim();
   if (!prompt && !state.attachedImage) return;
-
-  const harnessOverride = dom.harnessOverride.value;
 
   const payload = {
     type: 'dispatch',
     prompt: prompt || 'Analysiere dieses beigefügte Bild / diesen Screenshot und führe die erforderlichen Anpassungen im Code durch.',
-    harnessOverride,
-    projectPath: state.activeProject,
+    harnessOverride: dom.harnessOverride.value,
+    projectPath: pane.target.value || state.activeProject,
     imagePath: state.attachedImage ? state.attachedImage.path : null
   };
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));
-    dom.promptInput.value = '';
+    pane.input.value = '';
     removeAttachedImage();
     refreshRunPool();
   } else {
@@ -2662,10 +2749,11 @@ function setupMobileAndVoice() {
 
           recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            if (transcript && dom.promptInput) {
-              const currentVal = dom.promptInput.value.trim();
-              dom.promptInput.value = currentVal ? `${currentVal} ${transcript}` : transcript;
-              dom.promptInput.focus();
+            const feld = dom.runPanes[state.lastPaneSlot];
+            if (transcript && feld) {
+              const currentVal = feld.input.value.trim();
+              feld.input.value = currentVal ? `${currentVal} ${transcript}` : transcript;
+              feld.input.focus();
             }
           };
 

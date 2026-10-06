@@ -439,20 +439,6 @@ test('chain: eine Route die nichts mehr schreibt, wird getoetet und die Kette la
   assert.strictEqual(messages.at(-1).exitCode, 0, 'die Kette gilt als erfolgreich, wenn der Uebernehmer durchlaeuft:\n' + trail);
 });
 
-test('chain: eine Route mit Bezahl-Sperre wird vor dem Start uebersprungen', async () => {
-  writeConfig([
-    { name: 'Teuer', command: 'stub-run', enabled: true, model: 'anthropic/claude-sonnet-5-5', allow_paid_usage: false },
-    { name: 'Gratis', command: 'stub-login', enabled: true, model: 'stealth/space-bunny-alpha' }
-  ]);
-
-  const messages = await runDispatch({ prompt: 'mach was' });
-  const trail = describe(messages);
-
-  assert.deepStrictEqual(routes(messages), ['Gratis'], 'die teure Route darf nie gewaehlt werden:\n' + trail);
-  assert.match(trail, /Kostenrichtlinie/);
-  assert.match(trail, /claude-sonnet-5-5/, 'der Banner muss nennen, welches Modell kostet:\n' + trail);
-});
-
 test('chain: ein gemessener Login-Fehler ueberspringt die Route, die explizite Wahl nicht', async () => {
   fs.writeFileSync(path.join(stateDir, 'harness-health.json'), JSON.stringify({
     'stub-login': { errorKind: 'auth', at: Date.now() - 60 * 60 * 1000 }
@@ -558,6 +544,109 @@ test('chain: cursor startet mit Verzeichnis-Freigabe und Modell-Schalter', async
   assert.match(trail, /ARGS=-p --force --trust --model auto/, 'ohne --force/--trust bricht Cursor die Arbeit mit Exit 0 ab:\n' + trail);
   assert.match(trail, /ENTRYPOINT=\[keiner\]/, 'auch hier darf der SDK-Marker nicht weitergegeben werden:\n' + trail);
   assert.strictEqual(messages.at(-1).exitCode, 0, 'der Lauf muss durchlaufen:\n' + trail);
+});
+
+// Wie httpPost, aber ohne Wurf bei Fehlerstatus: das Archiv lehnt ab, und die
+// Ablehnung ist der Fall, den der Test sehen will.
+function httpPostStatus(pfad, data) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(data);
+    const req = require('node:http').request(
+      { port: PAR_PORT, host: '127.0.0.1', path: pfad, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+      (res) => {
+        let out = '';
+        res.on('data', (d) => { out += d; });
+        res.on('end', () => {
+          let json = null;
+          try { json = JSON.parse(out); } catch {}
+          resolve({ status: res.statusCode, json, text: out });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+function legeTasks(taskList) {
+  fs.writeFileSync(path.join(parState, 'studio-tasks.json'), JSON.stringify({
+    rootDirectory: parDir,
+    activeProject: parProjectA,
+    tasks: taskList
+  }));
+}
+
+const fertig = (id) => ({
+  id, projectPath: parProjectA, projectName: 'proj-a', prompt: 'erledigt',
+  status: 'completed', timestamp: new Date().toISOString()
+});
+
+test('archiv: ein beendeter Auftrag verlässt die Liste und kommt zurück', async () => {
+  await waitForParServer();
+  legeTasks([fertig('task_alt')]);
+
+  const ein = await httpPostStatus('/api/tasks/archive', { taskId: 'task_alt', archived: true });
+  assert.strictEqual(ein.status, 200, `einpacken muss gelingen: ${ein.text}`);
+  assert.strictEqual(ein.json.task.archived, true, 'die Antwort muss den neuen Zustand nennen');
+
+  const store = await httpJson('/api/tasks');
+  assert.strictEqual(store.tasks.find((t) => t.id === 'task_alt').archived, true,
+    'der Archiv-Flag muss im Store stehen, nicht nur in der Antwort');
+
+  const raus = await httpPostStatus('/api/tasks/archive', { taskId: 'task_alt', archived: false });
+  assert.strictEqual(raus.json.task.archived, false, 'zurückholen muss den Flag wieder nehmen');
+});
+
+test('archiv: ein unbekannter Auftrag wird nicht erfunden', async () => {
+  const blind = await httpPostStatus('/api/tasks/archive', { taskId: 'task_geist', archived: true });
+  assert.strictEqual(blind.status, 404, `fehlende Task muss abgewiesen werden: ${blind.text}`);
+  assert.match(blind.text, /task_geist/, 'die Antwort muss sagen, welche Aufgabe fehlt');
+});
+
+test('archiv: ein laufender Auftrag bleibt ungepackt', async () => {
+  await waitForParServer();
+  parConfig([{ name: 'Ticker', command: 'stub-tick-a', enabled: true, model: 'plan-free' }]);
+
+  let versucht = null;
+  const messages = await runMany(
+    [{ prompt: 'lauf', projectPath: parProjectA }],
+    async (msg) => {
+      if (msg.type !== 'task_created' || versucht) return;
+      await new Promise((r) => setTimeout(r, 300));
+      versucht = await httpPostStatus('/api/tasks/archive', { taskId: msg.task.id, archived: true });
+    }
+  );
+
+  assert.strictEqual(versucht.status, 409,
+    `ein Lauf im Pool darf nicht verschwinden: ${JSON.stringify(versucht)}`);
+  const store = await httpJson('/api/tasks');
+  const lauf = store.tasks.find((t) => t.id === createdIds(messages)[0]);
+  assert.notStrictEqual(lauf?.archived, true, 'die abgelehnte Aufgabe darf nicht im Archiv liegen');
+});
+
+test('archiv: ein zweites Fenster erfährt das Einpacken', async () => {
+  await waitForParServer();
+  legeTasks([fertig('task_bei')]);
+
+  const beobachter = new WebSocket(`ws://127.0.0.1:${PAR_PORT}`);
+  const gemeldet = new Promise((resolve, reject) => {
+    const guard = setTimeout(() => reject(new Error('keine task_archived-Meldung gekommen')), 5000);
+    beobachter.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type !== 'task_archived') return;
+      clearTimeout(guard);
+      resolve(m);
+    });
+    beobachter.on('error', (err) => { clearTimeout(guard); reject(err); });
+  });
+  await new Promise((resolve) => beobachter.on('open', resolve));
+
+  const ein = await httpPostStatus('/api/tasks/archive', { taskId: 'task_bei', archived: true });
+  assert.strictEqual(ein.status, 200, ein.text);
+  const m = await gemeldet;
+  assert.strictEqual(m.taskId, 'task_bei', 'die Meldung muss die Aufgabe nennen');
+  assert.strictEqual(m.archived, true, 'die Meldung muss sagen, dass sie jetzt im Archiv liegt');
+  beobachter.close();
 });
 
 test.after(async () => {

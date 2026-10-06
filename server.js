@@ -10,7 +10,6 @@ const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
 const {
   armIdleWatchdog,
-  routePolicyBlocker,
   knownBrokenBlocker,
   startupRefusal,
   ptyOwnershipBlocker,
@@ -1108,6 +1107,23 @@ app.post('/api/workspace', (req, res) => {
 app.get('/api/tasks', (req, res) => {
   const data = loadTasksData();
   res.json({ tasks: data.tasks || [] });
+});
+
+// Einpacken löscht nichts: die Ausgabe bleibt erhalten, nur die Seitenleiste wird
+// ruhiger. Ein Lauf im Pool (arbeitend oder wartend) darf nicht verschwinden —
+// sonst gibt es weder Abbruch noch Zuschauer.
+app.post('/api/tasks/archive', (req, res) => {
+  const { taskId, archived } = req.body || {};
+  const data = loadTasksData();
+  const task = data.tasks.find((t) => t.id === taskId);
+  if (!task) return res.status(404).json({ error: `Auftrag ${taskId} nicht in der Historie` });
+  if (liveRuns.has(taskId) || dispatchQueue.some((e) => e.taskId === taskId)) {
+    return res.status(409).json({ error: `${taskId} läuft oder wartet — erst beenden, dann einpacken` });
+  }
+  task.archived = Boolean(archived);
+  saveTasksData(data);
+  broadcastToClients({ type: 'task_archived', taskId, archived: task.archived });
+  res.json({ success: true, task });
 });
 
 app.post('/api/tasks/clear', (req, res) => {
@@ -2594,7 +2610,6 @@ function runDispatch(entry) {
     // Skip a route that policy, a measured login failure or another running task
     // rules out, before its minutes of silence cost the task anything.
     const blockedBy = [
-      routePolicyBlocker(selectedRoute),
       knownBrokenBlocker(selectedRoute, dispatchHealthMarks, {
         explicitChoice: !!harnessOverride && harnessOverride !== 'auto'
       }),

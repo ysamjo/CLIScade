@@ -64,7 +64,15 @@ const ANTWORTEN = {
       { name: "proj-b", path: "/tmp/proj-b" },
       { name: "proj-c", path: "/tmp/proj-c" }
     ],
-    tasks: []
+    // Ein archivierter Auftrag aus der Liste: er darf nicht in der Seitenleiste
+    // auftauchen, solange das Archiv zu ist.
+    tasks: [
+      {
+        id: "old_task", prompt: "Auftrag aus dem Archiv", projectPath: "/tmp/proj-a",
+        projectName: "proj-a", harness: "Cline", model: "plan-free",
+        status: "completed", archived: true, outputHtml: ""
+      }
+    ]
   },
   "GET /api/model-presets": {},
   "GET /api/agents-md": {},
@@ -283,8 +291,8 @@ sag({ type: "output", taskId: A.id, html: "AUSGABE-A" });
 await ruhen(4);
 
 pruefe("Auftrag A sitzt im ersten Feld", (konsole(0)?.textContent || "").includes("AUSGABE-A"), konsole(0)?.innerHTML);
-pruefe("der Ausführen-Knopf bleibt während des Laufs benutzbar",
-  document.querySelector("#send-prompt-btn")?.disabled === false);
+pruefe("der Senden-Knopf bleibt während des Laufs benutzbar",
+  [...document.querySelectorAll(".run-pane-send")].every((b) => b.disabled === false));
 
 frames.length = 0;
 sag({ type: "task_created", taskId: B.id, task: B });
@@ -348,6 +356,113 @@ const gespeichert = fetches.find((f) => f.schluessel === "POST /api/config");
 const gesendet = gespeichert ? JSON.parse(gespeichert.body) : {};
 pruefe("Speichern schickt die Kappe mit", gesendet.dispatch?.max_concurrent === 5, gespeichert?.body);
 pruefe("und behält die Harness-Routen dabei", (gesendet.clis || []).length === 3);
+
+// --- 11. Zwei Eingabefelder: jede Konsole hat ihren eigenen Composer -----
+// Ein Feld pro Konsole, weil der Nutzer sehen will, wohin der nächste Auftrag schaut:
+// Text und Zielordner gehören zum Feld, nicht zur Oberfläche.
+
+const gemeinsameEingabe = document.querySelector("#prompt-input");
+pruefe("das gemeinsame Eingabefeld ist raus", gemeinsameEingabe === null);
+pruefe("der gemeinsame Ausführen-Knopf ist raus", document.querySelector("#send-prompt-btn") === null);
+pruefe("der Zielordner-Pill ist raus", document.querySelector("#prompt-target-folder") === null);
+pruefe("jedes Feld hat ein eigenes Eingabefeld",
+  document.querySelectorAll("#run-split .run-pane-input").length === 2);
+pruefe("jedes Feld hat einen eigenen Senden-Knopf",
+  document.querySelectorAll("#run-split .run-pane-send").length === 2);
+pruefe("jedes Feld hat einen eigenen Zielordner",
+  document.querySelectorAll("#run-split .run-pane-target").length === 2);
+pruefe("der Zielordner nennt die Projekte",
+  [...(konsole(0)?.querySelectorAll(".run-pane-target option") || [])].some((o) => o.value === "/tmp/proj-b"),
+  konsole(0)?.querySelector(".run-pane-target")?.innerHTML);
+
+const tippe = (slot, text) => { konsole(slot).querySelector(".run-pane-input").value = text; };
+const ziel = (slot, pfad) => { konsole(slot).querySelector(".run-pane-target").value = pfad; };
+const senden = (slot) => konsole(slot).querySelector(".run-pane-send").click();
+const enter = (slot) => konsole(slot).querySelector(".run-pane-input")
+  .dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+const sendungen = () => frames.filter((f) => f.type === "dispatch");
+
+frames.length = 0;
+ziel(0, "/tmp/proj-a");
+tippe(0, "Erster Paneel-Auftrag");
+senden(0);
+await ruhen(3);
+const s0 = sendungen()[0];
+pruefe("Feld 1 schickt seinen eigenen Text", s0?.prompt === "Erster Paneel-Auftrag", JSON.stringify(s0));
+pruefe("Feld 1 schickt in seinen eigenen Ordner", s0?.projectPath === "/tmp/proj-a", JSON.stringify(s0));
+
+frames.length = 0;
+ziel(1, "/tmp/proj-b");
+tippe(1, "Zweiter Paneel-Auftrag");
+enter(1);
+await ruhen(3);
+const s1 = sendungen()[0];
+pruefe("Enter im zweiten Feld schickt von dort", s1?.prompt === "Zweiter Paneel-Auftrag", JSON.stringify(s1));
+pruefe("das zweite Feld nimmt seinen eigenen Zielordner", s1?.projectPath === "/tmp/proj-b", JSON.stringify(s1));
+pruefe("das erste Feld ist nach dem Senden leer",
+  konsole(0).querySelector(".run-pane-input").value === "");
+pruefe("das gesendete Feld ist danach leer",
+  konsole(1).querySelector(".run-pane-input").value === "");
+
+frames.length = 0;
+tippe(0, "Nur Text, kein Senden");
+senden(1);
+await ruhen(3);
+pruefe("Senden leert nur das eigene Feld",
+  konsole(0).querySelector(".run-pane-input").value === "Nur Text, kein Senden");
+pruefe("und schickt nicht den Text des anderen Feldes",
+  !sendungen().some((f) => f.prompt === "Nur Text, kein Senden"), JSON.stringify(sendungen()));
+
+// --- 12. Die Bezahlnutzung ist aus den Einstellungen raus ----------------
+
+pruefe("keine Bezahl-Spalte in der Kopfzeile", document.querySelector(".col-paid") === null);
+pruefe("keine Bezahl-Kästchen in den Routen",
+  document.querySelectorAll("#harness-config-list .harness-paid-chk").length === 0);
+pruefe("pro Route bleibt nur das Aktiv-Kästchen",
+  [...document.querySelectorAll("#harness-config-list .harness-row")]
+    .every((row) => row.querySelectorAll('input[type="checkbox"]').length === 1),
+  document.querySelector("#harness-config-list .harness-row")?.innerHTML);
+
+// --- 13. Tasks lassen sich archivieren -----------------------------------
+
+pruefe("Archiv-Schalter in der Seitenleiste", document.querySelector("#archive-filter-btn") !== null);
+pruefe("archivierte Aufträge sind standardmäßig raus",
+  document.querySelector('.task-item[data-task-id="old_task"]') === null);
+
+fetches.length = 0;
+document.querySelector('.task-item[data-task-id="task_b"] .task-archive-btn')?.click();
+await ruhen(6);
+const archiviert = fetches.find((f) => f.schluessel === "POST /api/tasks/archive");
+pruefe("Archivieren meldet die Task-ID an den Server",
+  JSON.parse(archiviert?.body || "{}").taskId === "task_b", archiviert?.body);
+pruefe("und bittet ums Einpacken",
+  JSON.parse(archiviert?.body || "{}").archived === true, archiviert?.body);
+sag({ type: "task_archived", taskId: "task_b", archived: true });
+await ruhen(4);
+pruefe("der archivierte Auftrag verschwindet aus der Liste",
+  document.querySelector('.task-item[data-task-id="task_b"]') === null);
+
+document.querySelector("#archive-filter-btn").click();
+await ruhen(4);
+pruefe("das Archiv zeigt den eingepackten Auftrag",
+  document.querySelector('.task-item[data-task-id="task_b"]') !== null);
+pruefe("und den bereits archivierten aus der Historie",
+  document.querySelector('.task-item[data-task-id="old_task"]') !== null);
+pruefe("im Archiv gibt es ein Zurück",
+  document.querySelector('.task-item[data-task-id="task_b"] .task-restore-btn') !== null);
+
+fetches.length = 0;
+document.querySelector('.task-item[data-task-id="old_task"] .task-restore-btn')?.click();
+await ruhen(6);
+const zurueck = fetches.find((f) => f.schluessel === "POST /api/tasks/archive");
+pruefe("Zurück meldet archived:false",
+  JSON.parse(zurueck?.body || "{}").archived === false, zurueck?.body);
+document.querySelector("#archive-filter-btn").click();
+await ruhen(4);
+pruefe("zurückgekehrt steht der Auftrag wieder in der Liste",
+  document.querySelector('.task-item[data-task-id="old_task"]') !== null);
+pruefe("ein laufender Auftrag hat keinen Archiv-Knopf",
+  document.querySelector('.task-item[data-task-id="task_a"] .task-archive-btn') === null);
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

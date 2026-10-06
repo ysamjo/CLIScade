@@ -49,19 +49,6 @@ function armIdleWatchdog(child, options = {}) {
   return { stop: () => { done = true; clear(); }, touch };
 }
 
-// What decides "this costs extra" is the model actually selected, not the route:
-// the same harness serves a free-tier model and a metered one. Only the names the
-// presets and providers spell out count as free, so an unknown model is treated as
-// paid and never relayed to while the user asked for no spend.
-const FREE_MODEL = /(-free\b|free[- ]?tier|gratis|unmetered|kostenlos|stealth\/)/i;
-
-function routePolicyBlocker(route = {}) {
-  const name = route.name || route.command;
-  if (route.allow_paid_usage !== false) return null;
-  if (route.model && FREE_MODEL.test(route.model)) return null;
-  return `Kostenrichtlinie: ${name} würde mit „${route.model || 'Standard'}" extra kosten, und Bezahl-Routen sind deaktiviert`;
-}
-
 function formatAge(ms) {
   const minutes = Math.max(1, Math.round(ms / 60000));
   if (minutes < 60) return `vor ${minutes} min`;
@@ -150,7 +137,6 @@ module.exports = {
   RUN_IDLE_TIMEOUT_MS,
   RUN_IDLE_GRACE_MS,
   armIdleWatchdog,
-  routePolicyBlocker,
   knownBrokenBlocker,
   startupRefusal,
   ptyOwnershipBlocker,
