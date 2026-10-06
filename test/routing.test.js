@@ -8,7 +8,9 @@ const {
   routePolicyBlocker,
   knownBrokenBlocker,
   startupRefusal,
-  ptyOwnershipBlocker
+  ptyOwnershipBlocker,
+  dispatchSlotDecision,
+  busyHarnessBlocker
 } = require('../routing');
 
 // Waet until a process is gone, so no test leaves orphans behind.
@@ -86,8 +88,10 @@ test('Frist liesst HARNESS_IDLE_TIMEOUT_MS, damit ein End-to-End-Test nicht drei
     cwd: path.join(__dirname, '..'),
     env: { ...process.env, HARNESS_IDLE_TIMEOUT_MS: '2500' },
     encoding: 'utf8'
-  }).trim();
-  assert.strictEqual(out, '2500');
+  });
+  // FORCE_COLOR faerbt Node's -p-Ausgabe gelb; der Wert selbst bleibt derselbe.
+  const wert = out.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').trim();
+  assert.strictEqual(wert, '2500');
 });
 
 test('blockiert eine Route, die Bezahl-Nutzung ablehnt', () => {
@@ -192,4 +196,88 @@ test('gilt nur fuer Einkonto-Befehle', () => {
     clientId: 'B'
   });
   assert.strictEqual(holder, null);
+});
+
+test('laesst einen Task warten, wenn die Kappe voll ist', () => {
+  const running = [
+    { taskId: 't1', command: 'opencode', projectPath: '/a' },
+    { taskId: 't2', command: 'cline', projectPath: '/b' }
+  ];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 2,
+    running,
+    incoming: { projectPath: '/c', candidateCommands: ['claude'] }
+  });
+  assert.strictEqual(block.reason, 'capacity');
+});
+
+test('laesst zwei Tasks im selben Ordner nicht gleichzeitig arbeiten', () => {
+  const running = [{ taskId: 't1', command: 'opencode', projectPath: '/a' }];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 3,
+    running,
+    incoming: { projectPath: '/a', candidateCommands: ['cline'] }
+  });
+  assert.strictEqual(block.reason, 'project');
+  assert.strictEqual(block.blocker.taskId, 't1', 'der wartende Task muss nennen, wer den Ordner haelt');
+});
+
+test('laesst einen frei gewaehlten Harness warten, wenn er schon arbeitet', () => {
+  const running = [{ taskId: 't1', command: 'cline', projectPath: '/a' }];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 3,
+    running,
+    incoming: { projectPath: '/b', requires: ['cline'] }
+  });
+  assert.strictEqual(block.reason, 'harness');
+});
+
+test('startet auto, solange wenigstens eine Kette frei ist', () => {
+  const running = [{ taskId: 't1', command: 'cline', projectPath: '/a' }];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 3,
+    running,
+    incoming: { projectPath: '/b', candidateCommands: ['cline', 'claude'] }
+  });
+  assert.strictEqual(block, null, 'auto darf starten und weicht in der Kette auf claude aus');
+});
+
+test('laesst auto warten, wenn die ganze Kette belegt ist', () => {
+  const running = [
+    { taskId: 't1', command: 'cline', projectPath: '/a' },
+    { taskId: 't2', command: 'claude', projectPath: '/b' }
+  ];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 5,
+    running,
+    incoming: { projectPath: '/c', candidateCommands: ['cline', 'claude'] }
+  });
+  assert.strictEqual(block.reason, 'harness');
+});
+
+test('reserviert fuer Konsens beide Engines', () => {
+  const running = [{ taskId: 't1', command: 'claude', projectPath: '/a' }];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 3,
+    running,
+    incoming: { projectPath: '/b', requires: ['cline', 'claude'] }
+  });
+  assert.strictEqual(block.reason, 'harness', 'Konsens braucht beide — eine belegte heisst warten');
+  assert.strictEqual(block.blocker.taskId, 't1');
+});
+
+test('startet Konsens, wenn beide Engines frei sind', () => {
+  const running = [{ taskId: 't1', command: 'opencode', projectPath: '/a' }];
+  const block = dispatchSlotDecision({
+    maxConcurrent: 3,
+    running,
+    incoming: { projectPath: '/b', requires: ['cline', 'claude'] }
+  });
+  assert.strictEqual(block, null);
+});
+
+test('meldet einen belegten Harness als Grund, in der Kette weiterzuruecken', () => {
+  const running = [{ taskId: 't1', command: 'cline', projectPath: '/a' }];
+  assert.match(busyHarnessBlocker({ command: 'cline', name: 'Cline' }, running), /Cline/);
+  assert.strictEqual(busyHarnessBlocker({ command: 'claude', name: 'Claude Code' }, running), null);
 });

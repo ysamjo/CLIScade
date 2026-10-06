@@ -14,6 +14,8 @@ const {
   knownBrokenBlocker,
   startupRefusal,
   ptyOwnershipBlocker,
+  dispatchSlotDecision,
+  busyHarnessBlocker,
   RUN_IDLE_TIMEOUT_MS
 } = require('./routing');
 let pty = null;
@@ -367,6 +369,7 @@ function loadConfig() {
     const data = yaml.load(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
     if (!data.clis) data.clis = [];
     if (!data.remote) data.remote = {};
+    if (!data.dispatch) data.dispatch = { max_concurrent: DEFAULT_MAX_CONCURRENT };
     if (!data.remote.telegram) {
       data.remote.telegram = { enabled: false, botToken: '', allowedUsers: [] };
     }
@@ -1615,15 +1618,227 @@ app.post('/api/schedules/:id/run', (req, res) => {
   }
 });
 
-// Active running process tracking
-let activeProcess = null;
-// WS-Zuordnung pro Task (nicht persistiert): "Abbrechen" trifft nur UI-Läufe,
-// geplante Hintergrund-Jobs (ws = null) werden nie überschrieben.
-const taskWsMap = new WeakMap();
+// --- RUN POOL ---
+// Ein Auftrag erhält seine Task-ID beim Einreichen und startet, sobald Kappe, Ordner
+// und Harness frei sind. Bis dahin liegt er in der Warteschlange. Alle Meldungen eines
+// Laufs tragen seine Task-ID, damit zwei gleichzeitige Konsolen trennbar bleiben.
+const liveRuns = new Map();
+const dispatchQueue = [];
+let runIdSeq = 0;
+const DEFAULT_MAX_CONCURRENT = 3;
 
 // A user cancel ends the whole chain, while a watchdog kill hands over to the next
 // harness. Both arrive as a non-zero exit, so the cancelled children are tracked.
 const userCancelledProcesses = new Set();
+
+function maxConcurrentRuns() {
+  const dispatch = loadConfig().dispatch;
+  const n = dispatch && Number(dispatch.max_concurrent);
+  return Number.isInteger(n) && n >= 1 ? n : DEFAULT_MAX_CONCURRENT;
+}
+
+function nextTaskId(kind) {
+  return `${kind}_${Date.now().toString(36)}${(runIdSeq += 1).toString(36)}`;
+}
+
+// Wer gerade arbeitet, blockiert seinen Ordner und die Harnesses, die er wirklich
+// hält. Ein auto-Lauf meldet erst einen Harness an, sobald eine Route gewählt ist.
+function runningForGate() {
+  return [...liveRuns.values()].map((r) => ({
+    taskId: r.taskId,
+    projectPath: r.workingDir,
+    commands: r.commands
+  }));
+}
+
+function gateInputs(payload, clis) {
+  const enabled = clis.filter((c) => c.enabled !== false);
+  if (payload.harnessOverride === 'consensus') {
+    return { requires: enabled.slice(0, 2).map((c) => c.command), candidates: [] };
+  }
+  if (payload.harnessOverride && payload.harnessOverride !== 'auto') {
+    const specific = enabled.find((c) => c.name === payload.harnessOverride);
+    return { requires: specific ? [specific.command] : [], candidates: [] };
+  }
+  return { requires: [], candidates: enabled.map((c) => c.command) };
+}
+
+function queueMessage(decision) {
+  const blocker = decision.blocker;
+  if (decision.reason === 'capacity') {
+    return `Warteschlange: alle ${maxConcurrentRuns()} Plätze belegt`;
+  }
+  if (decision.reason === 'project') {
+    return `Warteschlange: in ${path.basename(blocker.projectPath)} arbeitet bereits ein Auftrag`;
+  }
+  return `Warteschlange: ${blocker.commands.join(' + ')} arbeitet bereits in ${path.basename(blocker.projectPath)}`;
+}
+
+// Der erste eintragbare Auftrag gewinnt; ein blockierter bleibt liegen, weil ein
+// späterer Auftrag einen anderen Ordner oder Harness brauchen kann.
+function pumpRuns() {
+  const max = maxConcurrentRuns();
+  let startedOne = true;
+
+  while (startedOne) {
+    startedOne = false;
+    for (const entry of dispatchQueue) {
+      const decision = dispatchSlotDecision({
+        maxConcurrent: max,
+        running: runningForGate(),
+        incoming: {
+          projectPath: entry.workingDir,
+          requires: entry.requires,
+          candidates: entry.candidates
+        }
+      });
+      if (decision) {
+        if (!entry.queuedNotified) {
+          entry.queuedNotified = true;
+          const text = queueMessage(decision);
+          sendRunMessage(entry.ws, entry.taskId, {
+            type: 'queued',
+            reason: decision.reason,
+            blockerTaskId: decision.blocker ? decision.blocker.taskId : null,
+            message: text
+          });
+        }
+        continue;
+      }
+      dispatchQueue.splice(dispatchQueue.indexOf(entry), 1);
+      liveRuns.set(entry.taskId, entry);
+      startedOne = true;
+      startRun(entry);
+      break;
+    }
+  }
+}
+
+function startRun(entry) {
+  entry.record.status = 'running';
+  writeTask(entry.record);
+  const isConsensus = entry.payload.harnessOverride === 'consensus';
+  // Der Lauf gibt seine Plätze erst zurück, wenn er wirklich geendet hat — danach
+  // rückt die Warteschlange nach.
+  entry.finish = (err, record) => {
+    liveRuns.delete(entry.taskId);
+    if (entry.onComplete) entry.onComplete(err, record);
+    pumpRuns();
+  };
+  if (isConsensus) runConsensusDispatch(entry);
+  else runDispatch(entry);
+}
+
+function trackChild(taskId, child) {
+  const run = liveRuns.get(taskId);
+  if (!run) return;
+  run.children.add(child);
+  const forget = () => run.children.delete(child);
+  child.once('close', forget);
+  child.once('error', forget);
+}
+
+function sendRunMessage(ws, taskId, obj) {
+  const msg = { ...obj, taskId: obj.taskId || taskId };
+  const json = JSON.stringify(msg);
+  if (ws && ws.readyState === 1) {
+    try { ws.send(json); } catch {}
+  }
+  broadcastToClients(msg, ws);
+}
+
+// Nur der eigene Eintrag wird zurückgeschrieben: ein Snapshot der ganzen Liste würde
+// die Tasks anderer Läufe mit deren Stand beim Start überschreiben.
+function writeTask(taskRecord) {
+  try {
+    const data = loadTasksData();
+    const idx = data.tasks.findIndex((t) => t.id === taskRecord.id);
+    if (idx === -1) data.tasks.unshift(taskRecord);
+    else data.tasks[idx] = taskRecord;
+    saveTasksData(data);
+  } catch (err) {
+    console.error('Task-Historie nicht geschrieben:', err.message);
+  }
+}
+
+function submitDispatch(payload, ws, onComplete) {
+  const clis = loadConfig().clis || [];
+  const workingDir = payload.projectPath && fs.existsSync(payload.projectPath)
+    ? payload.projectPath
+    : process.env.HOME;
+  const isConsensus = payload.harnessOverride === 'consensus';
+  const gate = gateInputs(payload, clis);
+  const enabledRoutes = clis.filter((c) => c.enabled !== false);
+  const initialRoute = enabledRoutes[0] || { name: '—', command: '—', model: 'Standard' };
+  const { agentsSources } = buildAgentsContext(workingDir);
+  const consensusPair = enabledRoutes.slice(0, 2).map((c) => c.name).join(' ↔ ');
+
+  const entry = {
+    taskId: nextTaskId(isConsensus ? 'consensus' : 'task'),
+    payload: { ...payload, projectPath: workingDir },
+    workingDir,
+    ws,
+    onComplete,
+    requires: gate.requires,
+    candidates: gate.candidates,
+    commands: gate.requires.slice(),
+    children: new Set(),
+    queuedNotified: false,
+    record: null
+  };
+
+  entry.record = {
+    id: entry.taskId,
+    projectPath: workingDir,
+    projectName: path.basename(workingDir),
+    prompt: payload.prompt,
+    imagePath: payload.imagePath || null,
+    harness: isConsensus ? `Konsens (${consensusPair})` : initialRoute.name,
+    command: isConsensus ? 'consensus' : initialRoute.command,
+    model: isConsensus
+      ? enabledRoutes.map((c) => c.model || 'Standard').join(' ↔ ')
+      : ((payload.modelOverride && payload.modelOverride !== 'Standard') ? payload.modelOverride : (initialRoute.model || 'Standard')),
+    agentsInfo: agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine',
+    timestamp: new Date().toISOString(),
+    status: 'queued',
+    outputHtml: ''
+  };
+
+  writeTask(entry.record);
+  dispatchQueue.push(entry);
+  sendRunMessage(ws, entry.taskId, { type: 'task_created', task: entry.record });
+  pumpRuns();
+  return entry;
+}
+
+// Abbrechen gilt immer genau einen Auftrag: der eigene kind-Prozess, oder bei einem
+// Auftrag in der Warteschlange dessen Platz dort.
+function cancelDispatch(taskId, ws) {
+  const queuedIdx = dispatchQueue.findIndex((e) => e.taskId === taskId);
+  if (queuedIdx !== -1) {
+    const [entry] = dispatchQueue.splice(queuedIdx, 1);
+    entry.record.status = 'cancelled';
+    writeTask(entry.record);
+    sendRunMessage(ws || entry.ws, taskId, {
+      type: 'done',
+      exitCode: 130,
+      message: 'Auftrag aus der Warteschlange genommen'
+    });
+    return;
+  }
+
+  const run = liveRuns.get(taskId);
+  if (!run) return;
+  if (run.children.size === 0) return;
+  run.children.forEach((child) => {
+    userCancelledProcesses.add(child);
+    try { child.kill('SIGINT'); } catch {}
+  });
+  sendRunMessage(ws || run.ws, taskId, {
+    type: 'output',
+    html: '<span style="color:var(--danger)">\n[Abgebrochen durch Benutzer]</span>\n'
+  });
+}
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -1829,12 +2044,7 @@ wss.on('connection', (ws) => {
       if (handlePtyMessage(ws, data)) return;
 
       if (data.type === 'cancel') {
-        if (activeProcess) {
-          userCancelledProcesses.add(activeProcess);
-          activeProcess.kill('SIGINT');
-          broadcastToClients({ type: 'output', html: '<span style="color:var(--danger)">\n[Abgebrochen durch Benutzer]</span>\n' });
-          activeProcess = null;
-        }
+        cancelDispatch(data.taskId, ws);
         return;
       }
 
@@ -1848,7 +2058,7 @@ wss.on('connection', (ws) => {
       }
 
       if (data.type === 'dispatch') {
-        runDispatch(data, ws);
+        submitDispatch(data, ws);
       }
     } catch (err) {
       if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', error: err.message }));
@@ -1960,17 +2170,12 @@ function buildAgentsContext(workingDir) {
 }
 
 // Consensus Mode Dispatch (Dual-Agent Collaboration & Synthesis)
-function runConsensusDispatch(payload, ws, onComplete) {
-  const notify = (obj) => {
-    if (ws && ws.readyState === 1) {
-      try { ws.send(JSON.stringify(obj)); } catch {}
-      broadcastToClients(obj, ws); // an alle anderen, Sender nicht doppelt
-    } else {
-      broadcastToClients(obj);
-    }
-  };
+function runConsensusDispatch(entry) {
+  const { taskId, ws } = entry;
+  const onComplete = entry.finish;
+  const notify = (obj) => sendRunMessage(ws, taskId, obj);
 
-  const { prompt, imagePath, projectPath } = payload;
+  const { prompt, imagePath } = entry.payload;
   const config = loadConfig();
   const clis = config.clis || [];
   const enabledRoutes = clis.filter(c => c.enabled !== false);
@@ -1980,40 +2185,21 @@ function runConsensusDispatch(payload, ws, onComplete) {
       type: 'error',
       message: 'Konsens-Modus benötigt mindestens 2 aktive Harnesses in den Einstellungen.'
     });
-    if (onComplete) onComplete(new Error('Zu wenige Harnesses für Konsens-Modus'), null);
+    onComplete(new Error('Zu wenige Harnesses für Konsens-Modus'), entry.record);
     return;
   }
 
   const routeA = enabledRoutes[0];
   const routeB = enabledRoutes[1];
-  const workingDir = projectPath && fs.existsSync(projectPath) ? projectPath : process.env.HOME;
+  const workingDir = entry.workingDir;
 
-  const { agentsContext, agentsSources } = buildAgentsContext(workingDir);
-  const agentsInfo = agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine';
+  const { agentsContext } = buildAgentsContext(workingDir);
+  const agentsInfo = entry.record.agentsInfo;
   const guidelinePrompt = agentsContext.trim() ? `${agentsContext.trim()}\n\n[Aufgabe]\n${prompt}` : prompt;
 
-  const taskId = 'consensus_' + Date.now();
-  const taskRecord = {
-    id: taskId,
-    projectPath: workingDir,
-    projectName: path.basename(workingDir),
-    prompt: prompt,
-    imagePath: imagePath || null,
-    harness: `Konsens (${routeA.name} ↔ ${routeB.name})`,
-    command: 'consensus',
-    model: `${routeA.model || 'Standard'} ↔ ${routeB.model || 'Standard'}`,
-    agentsInfo: `Konsens · ${agentsInfo}`,
-    timestamp: new Date().toISOString(),
-    status: 'running',
-    outputHtml: ''
-  };
+  const taskRecord = entry.record;
+  entry.commands = [routeA.command, routeB.command];
 
-  const tasksData = loadTasksData();
-  tasksData.tasks.unshift(taskRecord);
-  saveTasksData(tasksData);
-  if (ws) taskWsMap.set(taskRecord, ws);
-
-  notify({ type: 'task_created', task: taskRecord });
   notify({
     type: 'route_selected',
     taskId: taskId,
@@ -2118,7 +2304,7 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
         taskRecord.outputHtml += finishBanner;
         notify({ type: 'output', html: finishBanner });
 
-        saveTasksData(tasksData);
+        writeTask(taskRecord);
         notify({
           type: 'done',
           taskId: taskId,
@@ -2126,7 +2312,7 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
           message: complete ? 'Konsens erfolgreich abgeschlossen' : `Konsens mit Ausfall abgeschlossen — ${phaseFailures.join(' · ')}`
         });
 
-        if (onComplete) onComplete(null, taskRecord);
+        onComplete(null, taskRecord);
       });
     });
   });
@@ -2163,7 +2349,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
       // otherwise stay pointing at this server's own launch directory.
       env: harnessEnv({ PWD: workingDir })
     });
-    if (taskWsMap.get(taskRecord)) activeProcess = child;
+    trackChild(taskRecord.id, child);
 
     if (child.stdin) child.stdin.end();
 
@@ -2195,7 +2381,6 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     });
 
     child.on('close', (code) => {
-      if (activeProcess === child) activeProcess = null;
       if (userCancelledProcesses.delete(child)) {
         return callback(new Error('Abgebrochen durch Benutzer'), collectedOutput, code);
       }
@@ -2203,7 +2388,6 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     });
 
     child.on('error', (err) => {
-      if (activeProcess === child) activeProcess = null;
       callback(err, collectedOutput);
     });
   } catch (err) {
@@ -2212,26 +2396,18 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
 }
 
 // Standard Dispatch with Automatic Forward-Routing (Priority Fallback Chain)
-function runDispatch(payload, ws, onComplete) {
-  const notify = (obj) => {
-    if (ws && ws.readyState === 1) {
-      try { ws.send(JSON.stringify(obj)); } catch {}
-      broadcastToClients(obj, ws); // an alle anderen, Sender nicht doppelt
-    } else {
-      broadcastToClients(obj);
-    }
-  };
+// Die Kette läuft nur noch für einen Auftrag aus dem Pool: Task-ID, Ordner und
+// Meldungsweg kommen aus dem Eintrag, damit mehrere Ketten einander nicht überschreiben.
+function runDispatch(entry) {
+  const { taskId, ws } = entry;
+  const onComplete = entry.finish;
+  const notify = (obj) => sendRunMessage(ws, taskId, obj);
 
-  const { prompt, harnessOverride, modelOverride, projectPath, imagePath } = payload;
-
-  // Consensus Mode check
-  if (harnessOverride === 'consensus') {
-    return runConsensusDispatch(payload, ws, onComplete);
-  }
+  const { prompt, harnessOverride, modelOverride, imagePath } = entry.payload;
+  const workingDir = entry.workingDir;
 
   const config = loadConfig();
   const clis = config.clis || [];
-  const workingDir = projectPath && fs.existsSync(projectPath) ? projectPath : process.env.HOME;
 
   // Determine candidate routes
   let candidateRoutes = [];
@@ -2248,7 +2424,7 @@ function runDispatch(payload, ws, onComplete) {
       type: 'error',
       message: 'Kein aktives Harness gefunden. Bitte im Tab "Harness & Modelle" mindestens ein Harness aktivieren.'
     });
-    if (onComplete) onComplete(new Error('Kein aktives Harness gefunden'), null);
+    onComplete(new Error('Kein aktives Harness gefunden'), entry.record);
     return;
   }
 
@@ -2257,9 +2433,8 @@ function runDispatch(payload, ws, onComplete) {
   const dispatchHealthMarks = loadHarnessHealthMarks();
 
   // Read Hierarchical AGENTS.md
-  const { agentsContext, agentsSources } = buildAgentsContext(workingDir);
-  const agentsInfo = agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine';
-  const tasksData = loadTasksData();
+  const { agentsContext } = buildAgentsContext(workingDir);
+  const agentsInfo = entry.record.agentsInfo;
 
   let fullPrompt = prompt;
   if (agentsContext.trim()) {
@@ -2278,28 +2453,7 @@ function runDispatch(payload, ws, onComplete) {
     }
   }
 
-  const taskId = 'task_' + Date.now();
-  const initialRoute = candidateRoutes[0];
-  const taskRecord = {
-    id: taskId,
-    projectPath: workingDir,
-    projectName: path.basename(workingDir),
-    prompt: prompt,
-    imagePath: imagePath || null,
-    harness: initialRoute.name,
-    command: initialRoute.command,
-    model: (modelOverride && modelOverride !== 'Standard') ? modelOverride : (initialRoute.model || 'Standard'),
-    agentsInfo: agentsInfo,
-    timestamp: new Date().toISOString(),
-    status: 'running',
-    outputHtml: ''
-  };
-
-  tasksData.tasks.unshift(taskRecord);
-  saveTasksData(tasksData);
-  if (ws) taskWsMap.set(taskRecord, ws);
-
-  notify({ type: 'task_created', task: taskRecord });
+  const taskRecord = entry.record;
 
   // Function to execute routes sequentially in priority chain with Smart Context Handoff (Relay)
   function tryRoute(routeIndex, relayContext = null) {
@@ -2309,9 +2463,9 @@ function runDispatch(payload, ws, onComplete) {
       taskRecord.outputHtml += failBanner;
       notify({ type: 'output', raw: errMsg, html: failBanner });
       taskRecord.status = 'failed';
-      saveTasksData(tasksData);
+      writeTask(taskRecord);
       notify({ type: 'done', taskId, exitCode: 1, message: errMsg });
-      if (onComplete) onComplete(new Error(errMsg), taskRecord);
+      onComplete(new Error(errMsg), taskRecord);
       return;
     }
 
@@ -2343,13 +2497,14 @@ function runDispatch(payload, ws, onComplete) {
       return tryRoute(routeIndex + 1, relayContext);
     }
 
-    // Skip a route that policy or a measured login failure rules out, before its
-    // minutes of silence cost the task anything.
+    // Skip a route that policy, a measured login failure or another running task
+    // rules out, before its minutes of silence cost the task anything.
     const blockedBy = [
       routePolicyBlocker(selectedRoute),
       knownBrokenBlocker(selectedRoute, dispatchHealthMarks, {
         explicitChoice: !!harnessOverride && harnessOverride !== 'auto'
-      })
+      }),
+      busyHarnessBlocker(selectedRoute, runningForGate().filter((r) => r.taskId !== taskId))
     ].filter(Boolean);
     if (blockedBy.length) {
       const skipNotice = `\n<div class="route-fallback-banner"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) wird vorab übersprungen: ${escapeHtml(blockedBy.join('; '))}.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
@@ -2362,6 +2517,8 @@ function runDispatch(payload, ws, onComplete) {
     taskRecord.harness = selectedRoute.name;
     taskRecord.command = selectedRoute.command;
     taskRecord.model = effectiveModel;
+    // Ab jetzt hält dieser Lauf den Harness — auch für die Warteschlange.
+    entry.commands = [selectedRoute.command];
 
     notify({
       type: 'route_selected',
@@ -2416,7 +2573,7 @@ function runDispatch(payload, ws, onComplete) {
         cwd: workingDir,
         env: harnessEnv({ PWD: workingDir })
       });
-      if (ws) activeProcess = child;
+      trackChild(taskId, child);
 
       if (child.stdin) child.stdin.end();
 
@@ -2447,13 +2604,11 @@ function runDispatch(payload, ws, onComplete) {
       });
 
       child.on('close', (code) => {
-        if (activeProcess === child) activeProcess = null;
-
         if (userCancelledProcesses.delete(child)) {
           taskRecord.status = 'cancelled';
-          saveTasksData(tasksData);
+          writeTask(taskRecord);
           notify({ type: 'done', taskId, exitCode: code, message: 'Abgebrochen durch Benutzer' });
-          if (onComplete) onComplete(new Error('Abgebrochen'), taskRecord);
+          onComplete(new Error('Abgebrochen'), taskRecord);
           return;
         }
 
@@ -2566,12 +2721,7 @@ function runDispatch(payload, ws, onComplete) {
         }
 
         // Save
-        const td = loadTasksData();
-        const idx = td.tasks.findIndex(t => t.id === taskId);
-        if (idx !== -1) {
-          td.tasks[idx] = taskRecord;
-          saveTasksData(td);
-        }
+        writeTask(taskRecord);
 
         notify({
           type: 'done',
@@ -2581,11 +2731,10 @@ function runDispatch(payload, ws, onComplete) {
           message: refusal ? `Start verweigert: ${refusal}` : (code === 0 ? 'Erfolgreich abgeschlossen' : `Beendet mit Code ${code}`)
         });
 
-        if (onComplete) onComplete(null, taskRecord);
+        onComplete(null, taskRecord);
       });
 
       child.on('error', (err) => {
-        if (activeProcess === child) activeProcess = null;
         if (routeIndex + 1 < candidateRoutes.length) {
           const nextRelayContext = {
             prevHarness: selectedRoute.name,
@@ -2615,14 +2764,14 @@ function runDispatch(payload, ws, onComplete) {
           taskId: taskId,
           message: `Fehler beim Ausführen von ${cmd}: ${err.message}`
         });
-        if (onComplete) onComplete(err, taskRecord);
+        onComplete(err, taskRecord);
       });
     } catch (err) {
       if (routeIndex + 1 < candidateRoutes.length) {
         return tryRoute(routeIndex + 1, relayContext);
       }
       notify({ type: 'error', message: err.message });
-      if (onComplete) onComplete(err, null);
+      onComplete(err, taskRecord);
     }
   }
 
@@ -2661,7 +2810,7 @@ function runScheduledJob(job) {
   job.lastStatus = 'running';
   saveSchedules(loadSchedules().map(s => s.id === job.id ? job : s));
 
-  runDispatch(
+  submitDispatch(
     {
       prompt: job.prompt,
       harnessOverride: job.harness || 'auto',
@@ -3060,8 +3209,8 @@ async function handleTelegramUpdate(update, token) {
 
     await sendTelegramMessage(token, chatId, startText);
 
-    // Dispatch
-    runDispatch(
+    // Dispatch — durch dieselbe Warteschlange wie die Oberfläche
+    submitDispatch(
       {
         prompt: prompt,
         harnessOverride: harnessOverride,
@@ -3280,7 +3429,9 @@ if (process.argv.includes('sync-skills')) {
 function reconcileOrphanedTasks() {
   try {
     const data = loadTasksData();
-    const orphans = (data.tasks || []).filter(t => t.status === 'running');
+    // queued zählt mit: ein Auftrag in der Warteschlange hat nie gearbeitet, aber
+    // der Client sieht ihn als offen und wartet auf ein done.
+    const orphans = (data.tasks || []).filter(t => t.status === 'running' || t.status === 'queued');
     if (orphans.length === 0) return;
     orphans.forEach(t => {
       t.status = 'error';

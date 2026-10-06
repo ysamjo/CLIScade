@@ -100,6 +100,38 @@ function ptyOwnershipBlocker({ singleSessionCommands, sessions = [], command, cl
   return sessions.find((s) => s.command === command && s.clientId !== clientId) || null;
 }
 
+// Ein Auftrag startet nur, wenn drei Dinge frei sind: ein Platz an der Kappe, der
+// Ordner (zwei Agenten im selben Repo ueberschreiben sich gegenseitig) und der Harness
+// (die Kontingente sollen nicht gebuendelt angezapft werden). `requires` sind die
+// Befehle, die der Auftrag fest braucht — eine Route, ein freier Wille, zwei Engines
+// im Konsens. „auto" hat keine Vorgabe, sondern weicht auf eine freie Route der Kette
+// aus und wartet erst, wenn die ganze Kette belegt ist.
+function dispatchSlotDecision({ maxConcurrent, running = [], incoming = {} } = {}) {
+  if (maxConcurrent && running.length >= maxConcurrent) return { reason: 'capacity' };
+
+  const sameFolder = running.find((r) => r.projectPath === incoming.projectPath);
+  if (sameFolder) return { reason: 'project', blocker: sameFolder };
+
+  const required = incoming.requires || [];
+  const busyRequired = running.find((r) => required.includes(r.command));
+  if (busyRequired) return { reason: 'harness', blocker: busyRequired };
+  if (required.length) return null;
+
+  const candidates = incoming.candidateCommands || [];
+  const allBusy = candidates.length > 0 && candidates.every((c) => running.some((r) => r.command === c));
+  if (allBusy) return { reason: 'harness', blocker: running.find((r) => r.command === candidates[0]) };
+  return null;
+}
+
+// Dieselbe Regel noch einmal im laufenden Ausweichen: ein Harness, der schon in einem
+// anderen Task arbeitet, gilt als Grund, eine Route zu ueberspringen — nie zwei Tasks
+// auf ein Konto.
+function busyHarnessBlocker(route = {}, running = []) {
+  const busy = running.find((r) => r.command === route.command);
+  if (!busy) return null;
+  return `${route.name || route.command} arbeitet bereits in einem anderen Task`;
+}
+
 module.exports = {
   RUN_IDLE_TIMEOUT_MS,
   RUN_IDLE_GRACE_MS,
@@ -108,5 +140,7 @@ module.exports = {
   knownBrokenBlocker,
   startupRefusal,
   ptyOwnershipBlocker,
+  dispatchSlotDecision,
+  busyHarnessBlocker,
   formatAge
 };
