@@ -911,6 +911,7 @@ function renderHarnessConfigList() {
     row.innerHTML = `
       <div><span class="order-badge">${index + 1}</span></div>
       <div><input type="checkbox" class="harness-active-chk" data-idx="${index}" ${isChecked} title="Aktivieren / Deaktivieren" /></div>
+      <div><input type="checkbox" class="harness-paid-chk" data-idx="${index}" ${item.allow_paid_usage === false ? '' : 'checked'} title="Bezahlnutzung erlaubt — aus hält die Kette diese Route zurück, wenn das Modell extra kostet" /></div>
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
@@ -968,6 +969,13 @@ function renderHarnessConfigList() {
       const idx = parseInt(chk.dataset.idx, 10);
       state.clis[idx].enabled = chk.checked;
       renderHarnessOverrideSelect();
+    });
+  });
+
+  dom.harnessConfigList.querySelectorAll('.harness-paid-chk').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const idx = parseInt(chk.dataset.idx, 10);
+      state.clis[idx].allow_paid_usage = chk.checked;
     });
   });
 

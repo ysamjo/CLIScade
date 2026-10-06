@@ -1,0 +1,89 @@
+// Pure routing decisions for the dispatch chain. No fs, no express, no spawn-side
+// effects, so each rule is testable with the functions below.
+
+// Three minutes covers a model that thinks and writes in long bursts; anything
+// past that is waiting for a human approval that never arrives in a relay run.
+// HARNESS_IDLE_TIMEOUT_MS shortens the deadline so the chain can be checked
+// end-to-end without waiting out the real timeout.
+const RUN_IDLE_TIMEOUT_MS = Number(process.env.HARNESS_IDLE_TIMEOUT_MS) || 180000;
+const RUN_IDLE_GRACE_MS = 5000;
+
+// A route that stops writing is stuck on an approval prompt or a dead connection.
+// Only the process is known here, so killing, logging and chain advance stay with
+// the caller, which owns the routing chain.
+function armIdleWatchdog(child, options = {}) {
+  const idleMs = options.idleMs || RUN_IDLE_TIMEOUT_MS;
+  const graceMs = options.graceMs || RUN_IDLE_GRACE_MS;
+  const onFire = options.onFire || (() => {});
+
+  let timer = null;
+  let killTimer = null;
+  let done = false;
+  let fired = false;
+
+  const clear = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (killTimer) { clearTimeout(killTimer); killTimer = null; }
+  };
+
+  const arm = () => {
+    if (done || fired) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (done || fired) return;
+      fired = true;
+      onFire({ idleMs });
+      try { child.kill('SIGTERM'); } catch {}
+      killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, graceMs);
+    }, idleMs);
+  };
+
+  const touch = () => { if (!done && !fired) arm(); };
+  touch();
+
+  child.on('close', () => { done = true; clear(); });
+  child.on('error', () => { done = true; clear(); });
+  if (child.stdout) child.stdout.on('data', touch);
+  if (child.stderr) child.stderr.on('data', touch);
+
+  return { stop: () => { done = true; clear(); }, touch };
+}
+
+// What decides "this costs extra" is the model actually selected, not the route:
+// the same harness serves a free-tier model and a metered one. Only the names the
+// presets and providers spell out count as free, so an unknown model is treated as
+// paid and never relayed to while the user asked for no spend.
+const FREE_MODEL = /(-free\b|free[- ]?tier|gratis|unmetered|kostenlos|stealth\/)/i;
+
+function routePolicyBlocker(route = {}) {
+  const name = route.name || route.command;
+  if (route.allow_paid_usage !== false) return null;
+  if (route.model && FREE_MODEL.test(route.model)) return null;
+  return `Kostenrichtlinie: ${name} würde mit „${route.model || 'Standard'}" extra kosten, und Bezahl-Routen sind deaktiviert`;
+}
+
+function formatAge(ms) {
+  const minutes = Math.max(1, Math.round(ms / 60000));
+  if (minutes < 60) return `vor ${minutes} min`;
+  return `vor ${Math.round(minutes / 60)} h`;
+}
+
+// Marks are written by the harness test endpoint, so "broken" means "already
+// measured", not inferred. Only a login failure removes a route from the chain;
+// a quota failure can clear on its own while the task is running.
+function knownBrokenBlocker(route = {}, broken = {}, options = {}) {
+  if (options.explicitChoice) return null;
+  const mark = broken[route.command];
+  if (!mark || mark.errorKind !== 'auth') return null;
+  const name = route.name || route.command;
+  return `${name}: Login fehlgeschlagen (${formatAge(Date.now() - mark.at)}) — erneut in den Einstellungen testen`;
+}
+
+module.exports = {
+  RUN_IDLE_TIMEOUT_MS,
+  RUN_IDLE_GRACE_MS,
+  armIdleWatchdog,
+  routePolicyBlocker,
+  knownBrokenBlocker,
+  formatAge
+};

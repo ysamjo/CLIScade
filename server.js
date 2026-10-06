@@ -8,6 +8,12 @@ const { spawn, execSync, exec } = require('child_process');
 const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
+const {
+  armIdleWatchdog,
+  routePolicyBlocker,
+  knownBrokenBlocker,
+  RUN_IDLE_TIMEOUT_MS
+} = require('./routing');
 let pty = null;
 try {
   pty = require('node-pty');
@@ -40,6 +46,7 @@ const STATE_DIR = path.join(process.env.HOME, '.harness-dispatch');
 const CONFIG_FILE = path.join(STATE_DIR, 'config.yaml');
 const AGENTS_MD_FILE = path.join(STATE_DIR, 'AGENTS.md');
 const TASKS_FILE = path.join(STATE_DIR, 'studio-tasks.json');
+const HARNESS_HEALTH_FILE = path.join(STATE_DIR, 'harness-health.json');
 const DEFAULT_ROOT_DIR = fs.existsSync(path.join(process.env.HOME, 'Developer')) 
   ? path.join(process.env.HOME, 'Developer') 
   : process.env.HOME;
@@ -368,6 +375,29 @@ function loadConfig() {
 function saveConfig(configData) {
   const serialized = yaml.dump(configData, { lineWidth: -1 });
   fs.writeFileSync(CONFIG_FILE, serialized, 'utf8');
+}
+
+// Measured harness failures, keyed by command. Only the harness test writes here,
+// so a dispatch chain never re-discovers a broken login by burning minutes on it.
+function loadHarnessHealthMarks() {
+  try {
+    return JSON.parse(fs.readFileSync(HARNESS_HEALTH_FILE, 'utf8')) || {};
+  } catch {
+    return {};
+  }
+}
+
+function markHarnessHealth(command, errorKind, detail) {
+  const marks = loadHarnessHealthMarks();
+  marks[command] = { errorKind, detail: detail || '', at: Date.now() };
+  try { fs.writeFileSync(HARNESS_HEALTH_FILE, JSON.stringify(marks, null, 2)); } catch {}
+}
+
+function clearHarnessHealthMark(command) {
+  const marks = loadHarnessHealthMarks();
+  if (!marks[command]) return;
+  delete marks[command];
+  try { fs.writeFileSync(HARNESS_HEALTH_FILE, JSON.stringify(marks, null, 2)); } catch {}
 }
 
 // Helper: load tasks & workspace data
@@ -1118,6 +1148,11 @@ app.post('/api/harness/test', (req, res) => {
     settled = true;
     clearTimeout(timer);
     fs.rmSync(workDir, { recursive: true, force: true });
+    if (payload.ok) {
+      clearHarnessHealthMark(command);
+    } else if (payload.errorKind === 'auth') {
+      markHarnessHealth(command, 'auth', payload.error || '');
+    }
     res.json({
       ...payload,
       latencyMs: Date.now() - startedAt,
@@ -1549,6 +1584,10 @@ let activeProcess = null;
 // geplante Hintergrund-Jobs (ws = null) werden nie überschrieben.
 const taskWsMap = new WeakMap();
 
+// A user cancel ends the whole chain, while a watchdog kill hands over to the next
+// harness. Both arrive as a non-zero exit, so the cancelled children are tracked.
+const userCancelledProcesses = new Set();
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -1731,6 +1770,7 @@ wss.on('connection', (ws) => {
 
       if (data.type === 'cancel') {
         if (activeProcess) {
+          userCancelledProcesses.add(activeProcess);
           activeProcess.kill('SIGINT');
           broadcastToClients({ type: 'output', html: '<span style="color:#ef4444">\n[Abgebrochen durch Benutzer]</span>\n' });
           activeProcess = null;
@@ -2051,6 +2091,17 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
 
     if (child.stdin) child.stdin.end();
 
+    // A consensus phase that never returns would leave the whole run on "Läuft…",
+    // so the silence guard covers this path too, not only the fallback chain.
+    const watchdog = armIdleWatchdog(child, {
+      idleMs: RUN_IDLE_TIMEOUT_MS,
+      onFire: ({ idleMs }) => {
+        const text = `\n<div class="route-fallback-banner">⏱ <strong>Keine Ausgabe seit ${Math.round(idleMs / 1000)} s</strong> — ${escapeHtml(selectedRoute.name)} gilt als festgefressen und wird abgebrochen.</div>\n`;
+        taskRecord.outputHtml += text;
+        notify({ type: 'output', raw: '', html: text });
+      }
+    });
+
     child.stdout.on('data', (data) => {
       const text = data.toString();
       collectedOutput += text;
@@ -2069,6 +2120,9 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
 
     child.on('close', (code) => {
       if (activeProcess === child) activeProcess = null;
+      if (userCancelledProcesses.delete(child)) {
+        return callback(new Error('Abgebrochen durch Benutzer'), collectedOutput, code);
+      }
       callback(null, collectedOutput, code);
     });
 
@@ -2121,6 +2175,10 @@ function runDispatch(payload, ws, onComplete) {
     if (onComplete) onComplete(new Error('Kein aktives Harness gefunden'), null);
     return;
   }
+
+  // Read once per dispatch so a chain of routes judges every harness against the
+  // same snapshot instead of mid-run changing its mind.
+  const dispatchHealthMarks = loadHarnessHealthMarks();
 
   // Read Hierarchical AGENTS.md
   const { agentsContext, agentsSources } = buildAgentsContext(workingDir);
@@ -2209,6 +2267,21 @@ function runDispatch(payload, ws, onComplete) {
       return tryRoute(routeIndex + 1, relayContext);
     }
 
+    // Skip a route that policy or a measured login failure rules out, before its
+    // minutes of silence cost the task anything.
+    const blockedBy = [
+      routePolicyBlocker(selectedRoute),
+      knownBrokenBlocker(selectedRoute, dispatchHealthMarks, {
+        explicitChoice: !!harnessOverride && harnessOverride !== 'auto'
+      })
+    ].filter(Boolean);
+    if (blockedBy.length) {
+      const skipNotice = `\n<div class="route-fallback-banner"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) wird vorab übersprungen: ${escapeHtml(blockedBy.join('; '))}.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
+      taskRecord.outputHtml += skipNotice;
+      notify({ type: 'output', raw: '', html: skipNotice });
+      return tryRoute(routeIndex + 1, relayContext);
+    }
+
     // Update taskRecord details
     taskRecord.harness = selectedRoute.name;
     taskRecord.command = selectedRoute.command;
@@ -2260,6 +2333,7 @@ function runDispatch(payload, ws, onComplete) {
 
     const { cmd, args } = buildCliCommand(selectedRoute, effectivePrompt, effectiveModel);
     let currentRunRawOutput = '';
+    let watchdogIdleMs = null;
 
     try {
       const child = spawn(cmd, args, {
@@ -2269,6 +2343,16 @@ function runDispatch(payload, ws, onComplete) {
       if (ws) activeProcess = child;
 
       if (child.stdin) child.stdin.end();
+
+      const watchdog = armIdleWatchdog(child, {
+        idleMs: RUN_IDLE_TIMEOUT_MS,
+        onFire: ({ idleMs }) => {
+          watchdogIdleMs = idleMs;
+          const text = `\n<div class="route-fallback-banner">⏱ <strong>${escapeHtml(selectedRoute.name)}</strong> schreibt seit ${Math.round(idleMs / 1000)} s nichts mehr (hängt meist an eine Freigabe) — Abbruch und Übergabe.</div>\n`;
+          taskRecord.outputHtml += text;
+          notify({ type: 'output', raw: '', html: text });
+        }
+      });
 
       child.stdout.on('data', (data) => {
         const text = data.toString();
@@ -2289,10 +2373,20 @@ function runDispatch(payload, ws, onComplete) {
       child.on('close', (code) => {
         if (activeProcess === child) activeProcess = null;
 
+        if (userCancelledProcesses.delete(child)) {
+          taskRecord.status = 'cancelled';
+          saveTasksData(tasksData);
+          notify({ type: 'done', taskId, exitCode: code, message: 'Abgebrochen durch Benutzer' });
+          if (onComplete) onComplete(new Error('Abgebrochen'), taskRecord);
+          return;
+        }
+
         // If failed and more routes exist, auto-fallback with SMART CONTEXT HANDOFF!
         if (code !== 0 && routeIndex + 1 < candidateRoutes.length) {
           let reason = `Fehlercode ${code}`;
-          if (currentRunRawOutput.match(/429|rate\s*limit|quota|credit|insufficient|budget|overloaded/i)) {
+          if (watchdogIdleMs) {
+            reason = `Keine Ausgabe seit ${Math.round(watchdogIdleMs / 1000)} s`;
+          } else if (currentRunRawOutput.match(/429|rate\s*limit|quota|credit|insufficient|budget|overloaded/i)) {
             reason = 'Quota / Rate-Limit erreicht (429 / Guthaben erschöpft)';
           } else if (currentRunRawOutput.match(/context.*(length|window|limit|exceeded|too long)/i)) {
             reason = 'Kontextfenster-Limit überschritten';

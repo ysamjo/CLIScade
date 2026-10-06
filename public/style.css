@@ -982,7 +982,7 @@ textarea#prompt-input::-webkit-scrollbar {
 
 .harness-table-header {
   display: grid;
-  grid-template-columns: 50px 50px 140px 110px minmax(0, 1fr) 100px;
+  grid-template-columns: 50px 50px 54px 132px 104px minmax(0, 1fr) 100px;
   padding: 10px 14px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -999,7 +999,7 @@ textarea#prompt-input::-webkit-scrollbar {
 
 .harness-row {
   display: grid;
-  grid-template-columns: 50px 50px 140px 110px minmax(0, 1fr) 100px;
+  grid-template-columns: 50px 50px 54px 132px 104px minmax(0, 1fr) 100px;
   padding: 8px 14px;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
@@ -2750,7 +2750,7 @@ kbd {
 
   .harness-table-header,
   .harness-row {
-    grid-template-columns: 38px 42px minmax(88px, 1.1fr) minmax(76px, 100px) minmax(0, 1.5fr) 82px;
+    grid-template-columns: 38px 40px 42px minmax(80px, 1fr) 76px minmax(0, 1.4fr) 82px;
     padding-left: 12px;
     padding-right: 12px;
   }

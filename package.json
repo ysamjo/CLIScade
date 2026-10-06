@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_consensus.js"
+    "test": "node test_consensus.js",
+    "test:routing": "node --test \"test/*.test.js\""
   },
   "keywords": [
     "harness",
