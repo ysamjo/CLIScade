@@ -52,6 +52,10 @@ const barrierStub = (self, other) => makeStub(self,
   `if [ -f "$HARNESS_MARK_DIR/${other}" ]; then echo "UEBERLAPPUNG"; else echo "SERIELL"; fi`);
 barrierStub('stub-bar-a', 'stub-bar-b');
 barrierStub('stub-bar-b', 'stub-bar-a');
+// So biegt das Terminal claude auf den eigenen Gateway: Exporte der Login-Shell. Der
+// Server-Prozess sieht sie nie — er soll sie sich aber bei der Shell holen koennen.
+makeStub('stub-shell', 'echo "ANTHROPIC_BASE_URL=http://gateway.stub/v1"; echo "TERM_PROGRAM=iTerm.app"');
+makeStub('claude', 'echo "BASE=[${ANTHROPIC_BASE_URL:-keiner}]"');
 
 function writeConfig(clis, extra = {}) {
   // JSON is valid YAML, so the stub config needs no formatter.
@@ -67,6 +71,7 @@ const server = spawn(process.execPath, ['server.js'], {
   env: {
     HOME: sandbox,
     PATH: `${binDir}:/usr/bin:/bin`,
+    SHELL: path.join(binDir, 'stub-shell'),
     PORT: String(PORT),
     HARNESS_IDLE_TIMEOUT_MS: String(IDLE_MS),
     QODER_AGENT_SDK_ENTRYPOINT: 'sdk-node'
@@ -525,6 +530,21 @@ test('chain: der SDK-Entrypoint-Marker des Hosts darf nicht im Agent-CLI landen'
 
   assert.match(trail, /ENTRYPOINT=\[keiner\]/, 'der Server laeuft oft aus einer Agent-Sitzung; das Kind darf den Marker nicht erben:\n' + trail);
   assert.strictEqual(messages.at(-1).exitCode, 0, 'die Route muss durchlaufen:\n' + trail);
+});
+
+test('chain: claude läuft über denselben Gateway wie im Terminal', async () => {
+  await waitForServer();
+  writeConfig([
+    { name: 'Claude Code', harness: 'claude_code', command: 'claude', model: 'Standard', enabled: true }
+  ]);
+
+  const messages = await runDispatch({ prompt: 'mach was' });
+  const trail = describe(messages);
+
+  // Ohne den Export aus der Login-Shell redet claude mit dem Hersteller und nicht mit OmniRoute.
+  assert.match(trail, /BASE=\[http:\/\/gateway\.stub\/v1\]/,
+    'die Gateway-Adresse der Shell muss im Lauf stehen:\n' + trail);
+  assert.strictEqual(messages.at(-1).exitCode, 0, 'der Lauf muss durchlaufen:\n' + trail);
 });
 
 test('chain: cursor startet mit Verzeichnis-Freigabe und Modell-Schalter', async () => {

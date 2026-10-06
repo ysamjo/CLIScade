@@ -10,7 +10,8 @@ const {
   startupRefusal,
   ptyOwnershipBlocker,
   dispatchSlotDecision,
-  busyHarnessBlocker
+  busyHarnessBlocker,
+  gatewayEnvFromShell
 } = require('../routing');
 
 // Waet until a process is gone, so no test leaves orphans behind.
@@ -291,4 +292,34 @@ test('meldet einen belegten Harness als Grund, in der Kette weiterzuruecken', ()
   const running = [{ taskId: 't1', projectPath: '/a', commands: ['cline'] }];
   assert.match(busyHarnessBlocker({ command: 'cline', name: 'Cline' }, running), /Cline/);
   assert.strictEqual(busyHarnessBlocker({ command: 'claude', name: 'Claude Code' }, running), null);
+});
+
+// --- Was das Terminal auf den eigenen Gateway biegt -----------------------
+
+const GATEWAY = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_MODEL'];
+
+test('holt die Gateway-Variablen aus der Shell-Umgebung des Terminals', () => {
+  const picked = gatewayEnvFromShell({
+    shellEnv: { ANTHROPIC_BASE_URL: 'http://localhost:20128/v1', ANTHROPIC_MODEL: 'c1', TERM_PROGRAM: 'iTerm.app' },
+    currentEnv: {},
+    names: GATEWAY
+  });
+  assert.deepStrictEqual(picked, {
+    ANTHROPIC_BASE_URL: 'http://localhost:20128/v1',
+    ANTHROPIC_MODEL: 'c1'
+  }, 'nur die genannten Variablen, keine Shell-Kosmetik');
+});
+
+test('laesst eine bereits gesetzte Gateway-Variable in Ruhe', () => {
+  const picked = gatewayEnvFromShell({
+    shellEnv: { ANTHROPIC_BASE_URL: 'http://localhost:20128/v1' },
+    currentEnv: { ANTHROPIC_BASE_URL: 'http://router.internal:8080/v1' },
+    names: GATEWAY
+  });
+  assert.deepStrictEqual(picked, {}, 'der Startprozess weiss mehr als die Shell');
+});
+
+test('ueberspringt Gateway-Variablen, die auch die Shell nicht kennt', () => {
+  const picked = gatewayEnvFromShell({ shellEnv: { ANTHROPIC_API_KEY: '' }, currentEnv: {}, names: GATEWAY });
+  assert.deepStrictEqual(picked, {});
 });

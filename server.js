@@ -4,7 +4,7 @@ const { WebSocketServer } = require('ws');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn, execSync, exec } = require('child_process');
+const { spawn, execFileSync, execSync, exec } = require('child_process');
 const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
@@ -16,6 +16,7 @@ const {
   ptyOwnershipBlocker,
   dispatchSlotDecision,
   busyHarnessBlocker,
+  gatewayEnvFromShell,
   RUN_IDLE_TIMEOUT_MS
 } = require('./routing');
 let pty = null;
@@ -2106,8 +2107,48 @@ wss.on('connection', (ws) => {
 
 // This server is often started from inside an agent session. That marker would make
 // a child qodercli expect the SDK control protocol and abort before it ever calls a model.
+// Das Terminal biegt claude über seine Login-Shell auf den eigenen Gateway um. Ein per
+// Doppelklick, Launchservices oder Agent-Shell gestarteter Server sieht diese Exporte nie —
+// also einmal die Shell selbst fragen, denn sie ist die einzige Quelle, die genau das
+// nachbaut, was im Terminal gilt. Nur die Gateway-Namen wandern mit, nie die Shell-Kosmetik.
+const GATEWAY_ENV_NAMES = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL'];
+let shellGatewayEnv = null;
+
+function readShellGatewayEnv() {
+  const shell = process.env.SHELL || '/bin/zsh';
+  try {
+    const ausgabe = execFileSync(shell, ['-lic', 'env'], {
+      encoding: 'utf8',
+      timeout: 6000,
+      env: {
+        HOME: process.env.HOME,
+        USER: process.env.USER,
+        LOGNAME: process.env.LOGNAME,
+        PATH: process.env.PATH,
+        TERM: 'xterm-256color'
+      },
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
+    const shellEnv = {};
+    for (const zeile of ausgabe.split('\n')) {
+      const treffer = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(zeile);
+      if (treffer && GATEWAY_ENV_NAMES.includes(treffer[1])) shellEnv[treffer[1]] = treffer[2];
+    }
+    return shellEnv;
+  } catch (err) {
+    console.error('[Gateway] Login-Shell nicht befragt, claude läuft ohne Umbiegung:', err.message);
+    return {};
+  }
+}
+
 function harnessEnv(overrides = {}) {
-  const env = { ...process.env, FORCE_COLOR: '1', ...overrides };
+  if (!shellGatewayEnv) shellGatewayEnv = readShellGatewayEnv();
+  const env = {
+    ...gatewayEnvFromShell({ shellEnv: shellGatewayEnv, currentEnv: process.env, names: GATEWAY_ENV_NAMES }),
+    ...process.env,
+    FORCE_COLOR: '1',
+    ...overrides
+  };
   delete env.QODER_AGENT_SDK_ENTRYPOINT;
   return env;
 }

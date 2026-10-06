@@ -134,6 +134,18 @@ function busyHarnessBlocker(route = {}, running = []) {
   return `${route.name || route.command} arbeitet bereits in einem anderen Task`;
 }
 
+// Nur die genannten Variablen wandern aus der Shell-Umgebung in den Lauf: ein Marker des
+// Startprozesses (QODER_*) oder die PATH-Kosmetik der Shell darf den Harness nie erreichen.
+// Was der Startprozess selbst schon weiss, bleibt vorn — die Shell ist nur der Ersatz.
+function gatewayEnvFromShell({ shellEnv = {}, currentEnv = {}, names = [] } = {}) {
+  const picked = {};
+  for (const name of names) {
+    const value = shellEnv[name];
+    if (value && !currentEnv[name]) picked[name] = value;
+  }
+  return picked;
+}
+
 module.exports = {
   RUN_IDLE_TIMEOUT_MS,
   RUN_IDLE_GRACE_MS,
@@ -144,5 +156,6 @@ module.exports = {
   ptyOwnershipBlocker,
   dispatchSlotDecision,
   busyHarnessBlocker,
+  gatewayEnvFromShell,
   formatAge
 };
