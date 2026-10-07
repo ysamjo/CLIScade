@@ -31,11 +31,22 @@ self.addEventListener('activate', (e) => {
 });
 
 // Network-first strategy (prefer live updates, fallback to cache)
+// Der Fallback muss den Stand zeigen, den der Nutzer zuletzt wirklich sah:
+// deshalb wandert jede frische Antwort in den Cache — sonst bleibt der bei
+// einem Abschalten des Servers auf dem Stand der Installation stehen.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || e.request.url.includes('/api/') || e.request.url.startsWith('ws')) {
     return;
   }
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(e.request)
+      .then((res) => {
+        if (res.ok) {
+          const kopie = res.clone();
+          e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(e.request, kopie)));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
