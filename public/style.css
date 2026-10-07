@@ -680,6 +680,7 @@ body {
   background: var(--danger);
 }
 
+/* Der Auftrag ist der Name des Felds — er darf zuletzt gekürzt werden. */
 .run-pane-title {
   font-size: 11.5px;
   font-weight: 600;
@@ -687,10 +688,12 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 8ch;
 }
 
-/* Harness und Modell sind die Art des Laufs, nicht sein Name — darum als Marke. */
+/* Harness und Modell sind die Art des Laufs, nicht sein Name — darum als Marke.
+   Sie darf schrumpfen, sonst steht am Ende nur noch der Anfang des Auftrags. */
 .run-pane-harness {
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -699,7 +702,10 @@ body {
   border-radius: var(--radius-sm);
   padding: 0 5px;
   white-space: nowrap;
-  flex: 0 0 auto;
+  flex: 0 4 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .run-pane-harness:empty {
@@ -711,6 +717,8 @@ body {
   color: var(--text-dim);
   font-family: var(--font-mono);
   white-space: nowrap;
+  flex: 0 2 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -846,7 +854,8 @@ body {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 2px 14px;
   font-size: 11.5px;
   color: var(--text-muted);
   margin-bottom: 8px;
