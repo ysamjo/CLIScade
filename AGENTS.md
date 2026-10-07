@@ -9,7 +9,7 @@ Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, c
 | **Server** | `server.js` | Express 5 + `ws`: `/api/*`, Run-Pool, Dispatch-Queue, PTY, Einstellungen, Task-Historie |
 | **Entscheidung** | `routing.js` | Reine Logik ohne IO: `dispatchSlotDecision`, `busyHarnessBlocker`, `knownBrokenBlocker`, `armIdleWatchdog`, `ptyOwnershipBlocker`, `startupRefusal`, `gatewayEnvFromShell` |
 | **Oberfläche** | `public/` | Vanilla JS ohne Bundler: `app.js` (Zustand + Rendering), `index.html`, `style.css`, `icons.js`, `sw.js` |
-| **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js` (Service Worker in erfundener Scope-Welt) |
+| **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js` (Service Worker in erfundener Scope-Welt), `konsole_queue.test.js` (zwei Aufträge in einem Ordner vor der echten Seite) |
 
 **Laufzeitumgebung**: Node-Prozess auf Port `3000`, bindet `0.0.0.0` (im LAN sichtbar).
 Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.yaml`
@@ -33,7 +33,8 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 ```bash
 npm start                        # Server auf http://localhost:3000
 node test/ui-smoke.mjs           # 107 Prüfungen im jsdom (Struktur + Verhalten)
-npm run test:routing             # 48 Tests: 25 Entscheidungen + 19 Dispatch-Ketten + 4 Service Worker
+npm run test:routing             # 54 Tests: 28 Entscheidungen + 19 Dispatch-Ketten
+                                 #            + 4 Service Worker + 3 Konsolen-Schichtung
 npm test                         # alter Konsens-Test (test_consensus.js)
 
 # Wegwerf-Instanz für Browser-Prüfungen — NIE die Instanz auf 3000 anfassen:

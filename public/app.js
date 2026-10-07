@@ -11,6 +11,8 @@ let state = {
   paneTarget: [null, null],
   // Das Protokoll eines fortgesetzten Auftrags: der neue Lauf zieht zurück in sein Feld.
   fortsetzung: [],
+  // Auftrag => Feld, in dessen Ordner er wartet. Er bekommt kein eigenes Feld.
+  wartendIn: {},
   lastPaneSlot: 0,
   clis: [],
   dispatch: { max_concurrent: 0 },
@@ -408,16 +410,36 @@ function setupWebSocket() {
       // Der Auftrag hat sofort beim Einreichen sein Feld — auch wenn er danach wartet.
       // Die Harness-Bezeichnung kommt erst mit route_selected, vorher wäre sie geraten.
       const Stelle = state.fortsetzung.findIndex((f) => f.prompt === data.task.prompt);
-      const born = openRunPane(data.task.id, {
-        prompt: data.task.prompt,
-        folder: data.task.projectName || '',
-        startedAt: Date.parse(data.task.timestamp) || Date.now(),
-        fortsetzung: Stelle === -1 ? null : state.fortsetzung.splice(Stelle, 1)[0]
-      });
-      renderRunPane(born.slot);
+      const besitzerSlot = Stelle === -1 ? slotFuerOrdner(data.task.projectPath) : undefined;
+      if (besitzerSlot !== undefined) {
+        const besitzer = streamAtSlot(besitzerSlot);
+        besitzer.wartende = (besitzer.wartende || []).concat([{ taskId: data.task.id, prompt: data.task.prompt }]);
+        state.wartendIn[data.task.id] = besitzerSlot;
+        renderRunPane(besitzerSlot);
+      } else {
+        const born = openRunPane(data.task.id, {
+          prompt: data.task.prompt,
+          folder: data.task.projectName || '',
+          path: data.task.projectPath || '',
+          startedAt: Date.parse(data.task.timestamp) || Date.now(),
+          fortsetzung: Stelle === -1 ? null : state.fortsetzung.splice(Stelle, 1)[0]
+        });
+        renderRunPane(born.slot);
+      }
       renderProjectTree();
     } else if (data.type === 'route_selected') {
-      const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
+      const feld = state.wartendIn[data.taskId];
+      let uebergabe = null;
+      if (feld !== undefined) {
+        delete state.wartendIn[data.taskId];
+        const besitzer = streamAtSlot(feld);
+        if (besitzer) {
+          besitzer.wartende = (besitzer.wartende || []).filter((w) => w.taskId !== data.taskId);
+          uebergabe = { slot: feld, buffer: besitzer.buffer, folge: besitzer.folge, naht: RUN_UEBERGABE };
+        }
+      }
+      const stream = state.streams.get(data.taskId)
+        || openRunPane(data.taskId, { prompt: (state.tasks.find((t) => t.id === data.taskId) || {}).prompt || '', fortsetzung: uebergabe });
       stream.status = 'running';
       stream.title = `${data.harness} · ${data.model || 'Standard'}`;
       const pane = dom.runPanes[stream.slot];
@@ -433,10 +455,18 @@ function setupWebSocket() {
       renderRunPane(stream.slot);
       renderProjectTree();
     } else if (data.type === 'queued') {
-      const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
-      stream.status = 'queued';
-      appendRunOutput(stream, `<div class="run-queue-note">[${escapeHtml(data.message || 'Warteschlange')}]</div>\n`);
-      renderRunPane(stream.slot);
+      const feld = state.wartendIn[data.taskId];
+      if (feld !== undefined) {
+        const besitzer = streamAtSlot(feld);
+        const eintrag = (besitzer?.wartende || []).find((w) => w.taskId === data.taskId);
+        if (eintrag) eintrag.message = data.message || 'Warteschlange';
+        if (besitzer) renderRunPane(feld);
+      } else {
+        const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
+        stream.status = 'queued';
+        appendRunOutput(stream, `<div class="run-queue-note">[${escapeHtml(data.message || 'Warteschlange')}]</div>\n`);
+        renderRunPane(stream.slot);
+      }
     } else if (data.type === 'output') {
       const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
       appendRunOutput(stream, data.html || data.raw);
@@ -582,6 +612,7 @@ const RUN_LEERTEXT = {
 
 // Die Naht zwischen dem übernommenen Protokoll und dem neuen Lauf.
 const RUN_FORTSETZUNG = '<div class="run-pane-fortsetzung">↓ fortgesetzt</div>';
+const RUN_UEBERGABE = '<div class="run-pane-fortsetzung">↓ aus der Warteschlange</div>';
 
 function streamAtSlot(slot) {
   const taskId = state.panes[slot];
@@ -603,6 +634,22 @@ function freeSlot() {
   const links = state.streams.get(state.panes[0]);
   const rechts = state.streams.get(state.panes[1]);
   return (links?.startedAt ?? 0) <= (rechts?.startedAt ?? 0) ? 0 : 1;
+}
+
+// Ein Ordner gehört in eine Konsole: arbeitet dort schon ein Auftrag, wartet der
+// nächste unter ihm in demselben Feld, statt in das andere zu wandern.
+function slotFuerOrdner(path) {
+  if (!path) return undefined;
+  return [0, 1].find((i) => {
+    const s = streamAtSlot(i);
+    return s && s.path === path && s.status !== 'done' && s.status !== 'error';
+  });
+}
+
+function wartendeHtml(stream) {
+  return (stream.wartende || [])
+    .map((w) => `<div class="run-wartende">⏳ <strong>${escapeHtml((w.prompt || '').slice(0, 46))}</strong>${w.message ? ` — ${escapeHtml(w.message)}` : ''}</div>`)
+    .join('');
 }
 
 function openRunPane(taskId, init = {}) {
@@ -627,7 +674,7 @@ function openRunPane(taskId, init = {}) {
   delete stream.fortsetzung;
   if (gewollt && slot === gewollt.slot) {
     stream.folge = gewollt.folge;
-    stream.buffer = `${gewollt.buffer}${RUN_FORTSETZUNG}`;
+    stream.buffer = `${gewollt.buffer}${gewollt.naht || RUN_FORTSETZUNG}`;
   }
   state.streams.set(taskId, stream);
   state.panes[slot] = taskId;
@@ -658,9 +705,10 @@ function renderRunPane(slot) {
   pane.title.textContent = stream.title || (stream.prompt ? stream.prompt.slice(0, 40) : 'Auftrag');
   pane.folder.textContent = stream.folder || '';
   pane.cancel.hidden = stream.status === 'done' || stream.status === 'error';
-  pane.body.innerHTML = stream.buffer
+  const grund = stream.buffer
     ? formatReasoningAndOutput(stream.buffer)
     : `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
+  pane.body.innerHTML = grund + wartendeHtml(stream);
   scrollRunPaneToBottom(slot);
 }
 
@@ -668,7 +716,7 @@ function appendRunOutput(stream, htmlContent) {
   const pane = dom.runPanes[stream.slot];
   stream.buffer += htmlContent;
   if (!pane) return;
-  pane.body.innerHTML = formatReasoningAndOutput(stream.buffer);
+  pane.body.innerHTML = formatReasoningAndOutput(stream.buffer) + wartendeHtml(stream);
   scrollRunPaneToBottom(stream.slot);
   // Ersetzt der Chunk den Inhalt, wird neu umgebrochen: die Endhöhe kennt das Layout
   // erst im nächsten Frame, also einmal nachziehen.
@@ -742,6 +790,7 @@ function showTaskInPane(task) {
   const stream = openRunPane(task.id, {
     prompt: task.prompt,
     folder: task.projectName || (task.projectPath ? task.projectPath.split('/').pop() : ''),
+    path: task.projectPath || '',
     title: task.harness ? `${task.harness} · ${task.model || 'Standard'}` : '',
     buffer: task.outputHtml || '',
     status,
@@ -784,7 +833,7 @@ async function refreshRunPool() {
     ...(pool.queued || []).map((r) => ({ ...r, laufStatus: 'queued' }))
   ];
   for (const lauf of laeufe) {
-    if (!lauf.taskId || state.panes.includes(lauf.taskId)) continue;
+    if (!lauf.taskId || state.panes.includes(lauf.taskId) || state.wartendIn[lauf.taskId] !== undefined) continue;
     const task = state.tasks.find((t) => t.id === lauf.taskId);
     if (!task) continue;
     showTaskInPane({ ...task, status: lauf.laufStatus });

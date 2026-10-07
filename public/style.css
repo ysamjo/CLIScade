@@ -703,6 +703,24 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Der Wartende unter dem Laufenden: derselbe Ordner, dieselbe Konsole, eine Zeile. */
+.run-wartende {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-wartende strong {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
 .run-queue-note {
   color: var(--warning);
   font-weight: 600;
