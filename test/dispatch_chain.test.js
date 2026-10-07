@@ -305,7 +305,7 @@ test('parallel: derselbe Ordner laeuft nie doppelt', async () => {
   assert.strictEqual(typeof pool.maxConcurrent, 'number');
 });
 
-test('parallel: derselbe Harness arbeitet nie in zwei Ordnern', async () => {
+test('parallel: derselbe Harness läuft in zwei Ordnern gleichzeitig', async () => {
   await waitForParServer();
   parConfig([
     { name: 'Takt A', command: 'stub-tick-a', enabled: true, model: 'plan-free' },
@@ -320,12 +320,9 @@ test('parallel: derselbe Harness arbeitet nie in zwei Ordnern', async () => {
   const seq = startStopSeq(messages);
 
   const queued = messages.find((m) => m.type === 'queued');
-  assert.ok(queued, 'zwei Aufträge auf ein Konto dürfen nicht gleichzeitig laufen:\n' + describe(messages));
-  assert.strictEqual(queued.reason, 'harness');
-  assert.match(queued.message, /stub-tick-a/, 'die Meldung muss nennen, welcher Harness belegt ist:\n' + describe(messages));
-  assert.match(queued.message, /proj-a/, 'und in welchem Ordner er arbeitet:\n' + describe(messages));
-  assert.ok(seq.indexOf(`route_selected:${second}`) > seq.indexOf(`done:${first}`),
-    `der zweite Lauf darf erst nach dem Abschluss starten:\n${seq.join(' ')}`);
+  assert.strictEqual(queued, undefined, 'zwei gewöhnliche Harnesses in zwei Ordnern dürfen parallel laufen:\n' + describe(messages));
+  assert.ok(seq.indexOf(`route_selected:${second}`) < seq.indexOf(`done:${first}`),
+    `der zweite Lauf muss starten, bevor der erste endet:\n${seq.join(' ')}`);
 });
 
 test('parallel: die Kappe haelt weitere Laeufe zurueck', async () => {
@@ -364,7 +361,7 @@ test('parallel: die Kappe ist ein Schalter in den Einstellungen', async () => {
     'die Einstellungen lesen die Kappe aus dem Status — sonst zeigt das Feld beim nächsten Öffnen einen alten Wert');
 
   await httpPost('/api/config', { clis, dispatch: { max_concurrent: 0 } });
-  assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 1, 'null würde jeden Auftrag festsetzen');
+  assert.strictEqual((await httpJson('/api/runs')).maxConcurrent, 0, 'null heisst ab jetzt: keine Kappe');
 
   await httpPost('/api/config', { clis, dispatch: { max_concurrent: 3 } });
 });

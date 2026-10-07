@@ -13,7 +13,7 @@ let state = {
   fortsetzung: [],
   lastPaneSlot: 0,
   clis: [],
-  dispatch: { max_concurrent: 3 },
+  dispatch: { max_concurrent: 0 },
   health: [],
   modelPresets: {},
   modelTests: {},
@@ -773,10 +773,10 @@ async function refreshRunPool() {
   } catch {
     return;
   }
-  const max = pool.maxConcurrent || 1;
+  const max = Number(pool.maxConcurrent) || 0;
   const belegt = (pool.running || []).length + (pool.queued || []).length;
   if (dom.runCapacityText) {
-    dom.runCapacityText.textContent = `${Math.max(0, max - belegt)}/${max}`;
+    dom.runCapacityText.textContent = max ? `${Math.max(0, max - belegt)}/${max}` : '∞';
   }
 
   const laeufe = [
@@ -1123,8 +1123,9 @@ async function loadStatus() {
     state.clis = data.clis || [];
     state.dispatch = data.dispatch || state.dispatch;
     // Das Feld soll zeigen, was gespeichert ist — nicht, was zuletzt geklickt wurde.
-    if (dom.maxConcurrentInput && state.dispatch.max_concurrent) {
-      dom.maxConcurrentInput.value = state.dispatch.max_concurrent;
+    if (dom.maxConcurrentInput) {
+      const kappe = Number(state.dispatch && state.dispatch.max_concurrent) || 0;
+      dom.maxConcurrentInput.value = kappe ? String(kappe) : '';
     }
 
     renderHarnessStatusPills();
@@ -2366,7 +2367,7 @@ function setupEventListeners() {
         const kappe = Number(dom.maxConcurrentInput?.value);
         const body = { clis: state.clis };
         if (Number.isFinite(kappe)) {
-          body.dispatch = { max_concurrent: Math.min(8, Math.max(1, Math.round(kappe))) };
+          body.dispatch = { max_concurrent: Math.min(8, Math.max(0, Math.round(kappe || 0))) };
         }
         const res = await fetch('/api/config', {
           method: 'POST',

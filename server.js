@@ -1176,7 +1176,7 @@ app.post('/api/config', (req, res) => {
     // Die Kappe kommt aus der Oberfläche; alles unterhalb von 1 würde jeden Auftrag
     // in der Warteschlange festsetzen.
     if (dispatch && Number.isInteger(Number(dispatch.max_concurrent))) {
-      config.dispatch = { max_concurrent: Math.min(8, Math.max(1, Number(dispatch.max_concurrent))) };
+      config.dispatch = { max_concurrent: Math.min(8, Math.max(0, Number(dispatch.max_concurrent))) };
     }
     saveConfig(config);
     res.json({ success: true, config });
@@ -1680,7 +1680,7 @@ app.post('/api/schedules/:id/run', (req, res) => {
 const liveRuns = new Map();
 const dispatchQueue = [];
 let runIdSeq = 0;
-const DEFAULT_MAX_CONCURRENT = 3;
+const DEFAULT_MAX_CONCURRENT = 0; // 0 = keine Kappe
 
 // A user cancel ends the whole chain, while a watchdog kill hands over to the next
 // harness. Both arrive as a non-zero exit, so the cancelled children are tracked.
@@ -1740,6 +1740,7 @@ function pumpRuns() {
     for (const entry of dispatchQueue) {
       const decision = dispatchSlotDecision({
         maxConcurrent: max,
+        singleSessionCommands: SINGLE_SESSION_COMMANDS,
         running: runningForGate(),
         incoming: {
           projectPath: entry.workingDir,
@@ -2613,7 +2614,7 @@ function runDispatch(entry) {
       knownBrokenBlocker(selectedRoute, dispatchHealthMarks, {
         explicitChoice: !!harnessOverride && harnessOverride !== 'auto'
       }),
-      busyHarnessBlocker(selectedRoute, runningForGate().filter((r) => r.taskId !== taskId))
+      busyHarnessBlocker(selectedRoute, runningForGate().filter((r) => r.taskId !== taskId), SINGLE_SESSION_COMMANDS)
     ].filter(Boolean);
     if (blockedBy.length) {
       const skipNotice = `\n<div class="route-fallback-banner"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) wird vorab übersprungen: ${escapeHtml(blockedBy.join('; '))}.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;

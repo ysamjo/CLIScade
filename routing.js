@@ -87,35 +87,35 @@ function ptyOwnershipBlocker({ singleSessionCommands, sessions = [], command, cl
   return sessions.find((s) => s.command === command && s.clientId !== clientId) || null;
 }
 
-// Ein Auftrag startet nur, wenn drei Dinge frei sind: ein Platz an der Kappe, der
-// Ordner (zwei Agenten im selben Repo ueberschreiben sich gegenseitig) und der Harness
-// (die Kontingente sollen nicht gebuendelt angezapft werden). `requires` sind die
-// Befehle, die der Auftrag fest braucht — eine Route, ein freier Wille, zwei Engines
-// im Konsens. „auto" hat keine Vorgabe, sondern weicht auf eine freie Route der Kette
-// aus und wartet erst, wenn die ganze Kette belegt ist.
-function dispatchSlotDecision({ maxConcurrent, running = [], incoming = {} } = {}) {
+// Ein Auftrag startet nur, wenn zwei Dinge frei sind: ein Platz an der Kappe (0 oder
+// fehlend = keine Kappe) und der Ordner — zwei Agenten im selben Repo schreiben sich
+// gegenseitig in den Arbeitsbaum. Der Harness blockiert nur noch bei Einkonto-Befehlen
+// (`singleSessionCommands`): zwei Cline-Laeufe in zwei Ordner sind in Ordnung, zwei
+// Freebuff-Laeufe nicht, weil das Konto die zweite Session mit 409 session_superseded
+// killt. `requires` sind die Befehle, die der Auftrag fest braucht — eine Route, ein
+// freier Wille, zwei Engines im Konsens.
+function dispatchSlotDecision({ maxConcurrent, singleSessionCommands = new Set(), running = [], incoming = {} } = {}) {
   if (maxConcurrent && running.length >= maxConcurrent) return { reason: 'capacity' };
 
   const sameFolder = running.find((r) => r.projectPath === incoming.projectPath);
   if (sameFolder) return { reason: 'project', blocker: sameFolder };
 
   const usesCommand = (run, command) => (run.commands || []).includes(command);
-  const required = incoming.requires || [];
+  const allein = (command) => singleSessionCommands.has(command);
+  const required = (incoming.requires || []).filter(allein);
   const busyRequired = running.find((r) => required.some((c) => usesCommand(r, c)));
   if (busyRequired) return { reason: 'harness', blocker: busyRequired };
-  if (required.length) return null;
 
-  const candidates = incoming.candidates || [];
-  const isBusy = (r) => candidates.some((c) => usesCommand(r, c));
+  const candidates = (incoming.candidates || []).filter(allein);
   const allBusy = candidates.length > 0 && candidates.every((c) => running.some((r) => usesCommand(r, c)));
-  if (allBusy) return { reason: 'harness', blocker: running.find(isBusy) };
+  if (allBusy) return { reason: 'harness', blocker: running.find((r) => candidates.some((c) => usesCommand(r, c))) };
   return null;
 }
 
-// Dieselbe Regel noch einmal im laufenden Ausweichen: ein Harness, der schon in einem
-// anderen Task arbeitet, gilt als Grund, eine Route zu ueberspringen — nie zwei Tasks
-// auf ein Konto.
-function busyHarnessBlocker(route = {}, running = []) {
+// Dieselbe Regel noch einmal im laufenden Ausweichen: nur ein Einkonto-Befehl, der schon
+// in einem anderen Task arbeitet, gilt als Grund, eine Route zu ueberspringen.
+function busyHarnessBlocker(route = {}, running = [], singleSessionCommands = new Set()) {
+  if (!singleSessionCommands.has(route.command)) return null;
   const busy = running.find((r) => (r.commands || []).includes(route.command));
   if (!busy) return null;
   return `${route.name || route.command} arbeitet bereits in einem anderen Task`;
