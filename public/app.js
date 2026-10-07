@@ -9,6 +9,8 @@ let state = {
   panes: [null, null],
   // Jeder Composer gehört zu einem Feld: Zielordner und das zuletzt angefasste Feld.
   paneTarget: [null, null],
+  // Das Protokoll eines fortgesetzten Auftrags: der neue Lauf zieht zurück in sein Feld.
+  fortsetzung: [],
   lastPaneSlot: 0,
   clis: [],
   dispatch: { max_concurrent: 3 },
@@ -405,10 +407,12 @@ function setupWebSocket() {
       }
       // Der Auftrag hat sofort beim Einreichen sein Feld — auch wenn er danach wartet.
       // Die Harness-Bezeichnung kommt erst mit route_selected, vorher wäre sie geraten.
+      const Stelle = state.fortsetzung.findIndex((f) => f.prompt === data.task.prompt);
       const born = openRunPane(data.task.id, {
         prompt: data.task.prompt,
         folder: data.task.projectName || '',
-        startedAt: Date.parse(data.task.timestamp) || Date.now()
+        startedAt: Date.parse(data.task.timestamp) || Date.now(),
+        fortsetzung: Stelle === -1 ? null : state.fortsetzung.splice(Stelle, 1)[0]
       });
       renderRunPane(born.slot);
       renderProjectTree();
@@ -576,6 +580,9 @@ const RUN_LEERTEXT = {
   error: 'Keine Ausgabe für diesen Auftrag.'
 };
 
+// Die Naht zwischen dem übernommenen Protokoll und dem neuen Lauf.
+const RUN_FORTSETZUNG = '<div class="run-pane-fortsetzung">↓ fortgesetzt</div>';
+
 function streamAtSlot(slot) {
   const taskId = state.panes[slot];
   return taskId ? state.streams.get(taskId) || null : null;
@@ -602,7 +609,12 @@ function openRunPane(taskId, init = {}) {
   const bestehend = state.streams.get(taskId);
   if (bestehend && state.panes.includes(taskId)) return bestehend;
 
-  const slot = freeSlot();
+  // Ein Auftrag aus der Fortsetzung zieht in sein Feld zurück, damit das alte Protokoll
+  // nicht allein in einer Konsole steht — ist das Feld belegt, nimmt er den freien Platz.
+  const gewollt = init.fortsetzung;
+  const slot = gewollt && (state.panes[gewollt.slot] === null || isBeendet(state.panes[gewollt.slot]))
+    ? gewollt.slot
+    : freeSlot();
   const verdraengt = state.panes[slot];
   if (verdraengt && verdraengt !== taskId) state.streams.delete(verdraengt);
 
@@ -612,6 +624,11 @@ function openRunPane(taskId, init = {}) {
     init,
     { slot }
   );
+  delete stream.fortsetzung;
+  if (gewollt && slot === gewollt.slot) {
+    stream.folge = gewollt.folge;
+    stream.buffer = `${gewollt.buffer}${RUN_FORTSETZUNG}`;
+  }
   state.streams.set(taskId, stream);
   state.panes[slot] = taskId;
   runPaneFollow[slot] = true;
@@ -718,6 +735,7 @@ function syncPaneTargets() {
 }
 
 // Ein Auftrag aus der Historie kommt in ein Feld — das mit dem beendeten Lauf weicht.
+// Er richtet das Feld auch auf sein Ziel ein: wer ihn anklickt, will dort weitermachen.
 function showTaskInPane(task) {
   if (state.panes.includes(task.id)) return;
   const status = task.status === 'running' ? 'running' : (task.status === 'queued' ? 'queued' : 'done');
@@ -729,9 +747,16 @@ function showTaskInPane(task) {
     status,
     startedAt: Date.parse(task.timestamp) || Date.now()
   });
+  const pane = dom.runPanes[stream.slot];
+  if (task.projectPath && task.harness) {
+    stream.folge = { projectPath: task.projectPath, harness: task.harness, model: task.model || null };
+    state.paneTarget[stream.slot] = task.projectPath;
+    if (pane && [...pane.target.options].some((o) => o.value === task.projectPath)) {
+      pane.target.value = task.projectPath;
+    }
+  }
   renderRunPane(stream.slot);
   runPaneFollow[stream.slot] = false;
-  const pane = dom.runPanes[stream.slot];
   if (pane) {
     pane.body.scrollTop = 0;
     pane.root.title = task.agentsInfo || '';
@@ -1666,6 +1691,9 @@ function selectTask(task) {
   showTaskInPane(task);
   renderProjectTree();
   switchTab('studio');
+  // Der Modus ist eine eigene Achse zum Tab: ohne ihn liegt die Konsole hinter dem
+  // Terminal, und das gerade geladene Protokoll wäre unsichtbar.
+  setStudioMode('dispatch');
 }
 
 // Der neue Auftrag bekommt sein Feld erst mit task_created — hier wird nur der
@@ -1673,9 +1701,14 @@ function selectTask(task) {
 // sein Zielordner sind der angeklickte Ordner.
 function startNewTaskInProject(projectPath) {
   switchTab('studio');
+  setStudioMode('dispatch');
   const slot = freeSlot();
   const pane = dom.runPanes[slot];
   if (!pane) return;
+  // ＋ heißt Anfang: kein Auftrag aus der Historie leiht diesem Feld sein Ziel.
+  const stream = streamAtSlot(slot);
+  if (stream) delete stream.folge;
+  state.fortsetzung = state.fortsetzung.filter((f) => f.slot !== slot);
   if (projectPath) {
     state.paneTarget[slot] = projectPath;
     pane.target.value = projectPath;
@@ -2519,17 +2552,31 @@ function sendPrompt(slot = 0) {
   const prompt = pane.input.value.trim();
   if (!prompt && !state.attachedImage) return;
 
+  // Fortsetzung: der angeklickte Auftrag hat dem Feld sein Ziel geliehen. Sobald der
+  // Nutzer den Ordner selbst wählt, ist die Leihe vorbei und das globale Routing gilt.
+  const stream = streamAtSlot(slot);
+  const folge = stream?.folge && pane.target.value === stream.folge.projectPath ? stream.folge : null;
+
   const payload = {
     type: 'dispatch',
     prompt: prompt || 'Analysiere dieses beigefügte Bild / diesen Screenshot und führe die erforderlichen Anpassungen im Code durch.',
-    harnessOverride: dom.harnessOverride.value,
+    harnessOverride: folge ? folge.harness : dom.harnessOverride.value,
     projectPath: pane.target.value || state.activeProject,
     imagePath: state.attachedImage ? state.attachedImage.path : null
   };
+  if (folge?.model) payload.modelOverride = folge.model;
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));
     pane.input.value = '';
+    // Der neue Lauf zieht wieder in dieses Feld: nur so bleibt das alte Protokoll darüber.
+    // Angenommen wird die Fortsetzung über den Aufgabentext, weil die Task-ID hier noch fehlt.
+    state.fortsetzung = state.fortsetzung.filter((f) => Date.now() - f.at < 15000);
+    if (folge && stream) {
+      state.fortsetzung.push({
+        prompt: payload.prompt, slot, buffer: stream.buffer, folge: stream.folge, at: Date.now()
+      });
+    }
     removeAttachedImage();
     refreshRunPool();
   } else {

@@ -32,7 +32,7 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 
 ```bash
 npm start                        # Server auf http://localhost:3000
-node test/ui-smoke.mjs           # 84 Prüfungen im jsdom (Struktur + Verhalten)
+node test/ui-smoke.mjs           # 107 Prüfungen im jsdom (Struktur + Verhalten)
 npm run test:routing             # 44 Tests: 25 Entscheidungen + 19 Dispatch-Ketten
 npm test                         # alter Konsens-Test (test_consensus.js)
 

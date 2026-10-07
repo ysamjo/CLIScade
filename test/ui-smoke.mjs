@@ -71,6 +71,20 @@ const ANTWORTEN = {
         id: "old_task", prompt: "Auftrag aus dem Archiv", projectPath: "/tmp/proj-a",
         projectName: "proj-a", harness: "Cline", model: "plan-free",
         status: "completed", archived: true, outputHtml: ""
+      },
+      // Ein beendeter Auftrag mit Protokoll: ihn will der Nutzer fortsetzen.
+      {
+        id: "alt_lauf", prompt: "Alter Auftrag in proj-b", projectPath: "/tmp/proj-b",
+        projectName: "proj-b", harness: "Cline", model: "plan-free", status: "completed",
+        archived: false, timestamp: "2026-10-06T09:00:00.000Z",
+        outputHtml: "<div>ALTE AUSGABE</div>"
+      },
+      // Ein zweiter alter Auftrag in einem anderen Ordner und Harness.
+      {
+        id: "alt_lauf2", prompt: "Anderer alter Auftrag in proj-c", projectPath: "/tmp/proj-c",
+        projectName: "proj-c", harness: "Qoder", model: "auto", status: "completed",
+        archived: false, timestamp: "2026-10-06T10:00:00.000Z",
+        outputHtml: "<div>ZWEITE ALTE AUSGABE</div>"
       }
     ]
   },
@@ -463,6 +477,144 @@ pruefe("zurückgekehrt steht der Auftrag wieder in der Liste",
   document.querySelector('.task-item[data-task-id="old_task"]') !== null);
 pruefe("ein laufender Auftrag hat keinen Archiv-Knopf",
   document.querySelector('.task-item[data-task-id="task_a"] .task-archive-btn') === null);
+
+// --- 14. Alter Auftrag anklicken: die Konsole übernimmt sein Ziel ----------
+// Das Studio hat zwei Achsen: den Tab und den Modus. Der Klick entschied bisher nur
+// den Tab, also blieb das Protokoll hinter dem Terminal versteckt. Fortsetzen heißt
+// außerdem: Das Feld_ordner, Harness und Modell des alten Laufs — der neue Auftrag
+// startet dort, wo der alte endete, und das alte Protokoll bleibt darüber stehen.
+
+document.querySelector("#mode-interactive-btn").click();
+await new Promise((r) => setTimeout(r, 80));
+await ruhen(4);
+pruefe("vor dem Klick ist das Terminal offen",
+  document.querySelector("#dispatch-panel")?.classList.contains("hidden") === true);
+
+const altZeile = document.querySelector('.task-item[data-task-id="alt_lauf"]');
+pruefe("der alte Auftrag steht in der Seitenleiste", altZeile !== null);
+
+altZeile?.click();
+await ruhen(6);
+pruefe("Klick auf den Auftrag zeigt die Konsolen",
+  document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
+pruefe("Klick klappt das Terminal zu",
+  document.querySelector("#interactive-panel")?.classList.contains("hidden") === true);
+
+const folgeSlot = [0, 1].find((i) => (konsole(i)?.textContent || "").includes("ALTE AUSGABE"));
+pruefe("das alte Protokoll ist in einer Konsole sichtbar", folgeSlot !== undefined);
+const folge = konsole(folgeSlot);
+pruefe("das Feld nennt den alten Harness",
+  /Cline/.test(folge?.querySelector(".run-pane-title")?.textContent || ""),
+  folge?.querySelector(".run-pane-title")?.textContent);
+pruefe("das Feld zeigt den Ordner des alten Auftrags",
+  folge?.querySelector(".run-pane-target")?.value === "/tmp/proj-b",
+  folge?.querySelector(".run-pane-target")?.value);
+
+const anderes = folgeSlot === 0 ? 1 : 0;
+frames.length = 0;
+tippe(anderes, "Feld ohne alten Auftrag");
+enter(anderes);
+await ruhen(4);
+pruefe("ein Feld ohne alten Auftrag nimmt das globale Routing",
+  sendungen()[0]?.harnessOverride === "auto" && sendungen()[0]?.modelOverride === undefined,
+  JSON.stringify(sendungen()[0]));
+
+frames.length = 0;
+tippe(folgeSlot, "Fortsetzung: noch einen Test schreiben");
+enter(folgeSlot);
+await ruhen(4);
+const fort = sendungen()[0];
+pruefe("Enter schickt in den Ordner des alten Auftrags",
+  fort?.projectPath === "/tmp/proj-b", JSON.stringify(fort));
+pruefe("Enter nimmt den Harness des alten Auftrags",
+  fort?.harnessOverride === "Cline", JSON.stringify(fort));
+pruefe("Enter nimmt das Modell des alten Auftrags",
+  fort?.modelOverride === "plan-free", JSON.stringify(fort));
+
+sag({ type: "task_created", taskId: "task_f1", task: auftrag("task_f1", "proj-b", "Fortsetzung: noch einen Test schreiben") });
+sag({ type: "route_selected", taskId: "task_f1", harness: "Cline", command: "cline", model: "plan-free" });
+sag({ type: "output", taskId: "task_f1", html: "NEUE AUSGABE" });
+await ruhen(4);
+pruefe("das alte Protokoll bleibt über dem neuen stehen",
+  /ALTE AUSGABE/.test(konsole(folgeSlot)?.textContent || "") &&
+  /NEUE AUSGABE/.test(konsole(folgeSlot)?.textContent || ""),
+  konsole(folgeSlot)?.textContent);
+
+frames.length = 0;
+tippe(folgeSlot, "Und noch ein Auftrag");
+enter(folgeSlot);
+await ruhen(4);
+pruefe("das Feld bleibt für weitere Aufträge am alten Ziel",
+  sendungen()[0]?.harnessOverride === "Cline" && sendungen()[0]?.projectPath === "/tmp/proj-b",
+  JSON.stringify(sendungen()[0]));
+
+// Der Folgauftrag zieht in sein Feld zurück, auch wenn das andere Feld gerade
+// einen Platz frei hätte — das Protokoll soll nicht allein stehen bleiben.
+sag({ type: "done", taskId: "task_c" });
+await ruhen(3);
+const zweiteZeile = document.querySelector('.task-item[data-task-id="alt_lauf2"]');
+pruefe("der zweite alte Auftrag steht in der Seitenleiste", zweiteZeile !== null);
+zweiteZeile?.click();
+await ruhen(4);
+const zweiterSlot = folgeSlot === 0 ? 1 : 0;
+pruefe("der zweite alte Auftrag zieht in das andere Feld",
+  /ZWEITE ALTE AUSGABE/.test(konsole(zweiterSlot)?.textContent || ""),
+  konsole(zweiterSlot)?.textContent?.slice(0, 80));
+sag({ type: "done", taskId: "task_f1" });
+await ruhen(3);
+frames.length = 0;
+tippe(zweiterSlot, "Folgauftrag im zweiten Feld");
+enter(zweiterSlot);
+await ruhen(4);
+pruefe("der Folgauftrag nimmt den Harness des zweiten alten Auftrags",
+  sendungen()[0]?.harnessOverride === "Qoder" && sendungen()[0]?.projectPath === "/tmp/proj-c",
+  JSON.stringify(sendungen()[0]));
+sag({ type: "task_created", taskId: "task_f2", task: auftrag("task_f2", "proj-c", "Folgauftrag im zweiten Feld") });
+sag({ type: "route_selected", taskId: "task_f2", harness: "Qoder", command: "qoder", model: "auto" });
+sag({ type: "output", taskId: "task_f2", html: "NEUE AUSGABE ZWEI" });
+await ruhen(4);
+pruefe("der Folgauftrag bleibt im Feld seines alten Protokolls",
+  /ZWEITE ALTE AUSGABE/.test(konsole(zweiterSlot)?.textContent || "") &&
+  /NEUE AUSGABE ZWEI/.test(konsole(zweiterSlot)?.textContent || ""),
+  konsole(zweiterSlot)?.textContent?.replace(/\s+/g, ' ').slice(0, 120));
+pruefe("und das andere Feld bleibt unberührt",
+  !(konsole(folgeSlot)?.textContent || "").includes("NEUE AUSGABE ZWEI"));
+
+// Wer absichtlich woanders hin schickt, verlässt die Fortsetzung.
+ziel(zweiterSlot, "/tmp/proj-a");
+frames.length = 0;
+tippe(zweiterSlot, "Anderer Ordner, anderes Routing");
+enter(zweiterSlot);
+await ruhen(4);
+const manuell = sendungen()[0];
+pruefe("ein anderer Ordner löst die Fortsetzung ab",
+  manuell?.projectPath === "/tmp/proj-a" && manuell?.harnessOverride === "auto",
+  JSON.stringify(manuell));
+pruefe("ohne Fortsetzung geht kein Modell über", manuell?.modelOverride === undefined, JSON.stringify(manuell));
+
+// ＋ heißt Anfang: auch im Ordner des alten Auftrags leiht kein Historienlauf das Ziel.
+// Das andere Feld bleibt solange belegt, bis freeSlot sicher das fortgesetzte Feld wählt.
+sag({ type: "done", taskId: "task_f2", exitCode: 0, message: "Fertig" });
+await ruhen(3);
+sag({ type: "task_created", taskId: "task_h", task: auftrag("task_h", "proj-a", "Lauf im anderen Feld") });
+sag({ type: "route_selected", taskId: "task_h", harness: "Qoder", command: "qoder", model: "auto" });
+await ruhen(4);
+document.querySelector("#mode-interactive-btn").click();
+await new Promise((r) => setTimeout(r, 80));
+frames.length = 0;
+document.querySelector('.project-node[data-path="/tmp/proj-c"] .add-task-btn')?.click();
+await ruhen(3);
+pruefe("＋ öffnet die Konsole",
+  document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
+const aktiverSlot = [0, 1].find((i) => konsole(i).querySelector(".run-pane-input") === document.activeElement);
+pruefe("＋ stellt das fortgesetzte Feld bereit",
+  aktiverSlot === zweiterSlot && konsole(zweiterSlot).querySelector(".run-pane-target").value === "/tmp/proj-c",
+  String(aktiverSlot));
+tippe(zweiterSlot, "Frischer Auftrag im alten Ordner");
+enter(zweiterSlot);
+await ruhen(4);
+pruefe("＋ im selben Ordner ist ein Anfang statt einer Fortsetzung",
+  sendungen()[0]?.harnessOverride === "auto", JSON.stringify(sendungen()[0]));
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

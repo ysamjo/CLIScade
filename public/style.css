@@ -693,6 +693,16 @@ body {
   min-height: 0;
 }
 
+/* Die Naht unter dem übernommenen Protokoll — dünne Linie, damit sie nicht wie Ausgabe wirkt. */
+.run-pane-fortsetzung {
+  margin: 10px 0 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-sans);
+}
+
 .run-queue-note {
   color: var(--warning);
   font-weight: 600;
