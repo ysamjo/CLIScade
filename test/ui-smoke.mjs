@@ -42,9 +42,11 @@ const ruhen = async (n = 10) => {
 
 // --- Stubs ---------------------------------------------------------------
 
-// Ein Harness, den das Terminal auswählen kann. freebuff ist die Vorauswahl.
+// Ein Harness, den das Terminal auswählen kann. Nur freebuff ist tuiOnly —
+// das interaktive Terminal zeigt ausschließlich die TUI-only-CLIs, der Rest
+// (Claude, Qoder, …) gehört in den Auto-Route-Dispatch.
 const HEALTH = [
-  { name: "Freebuff", cmd: "freebuff", available: true, version: "1.0" },
+  { name: "Freebuff", cmd: "freebuff", available: true, version: "1.0", tuiOnly: true },
   { name: "Claude Code", cmd: "claude", available: true, version: "2.0" },
   { name: "Qoder", cmd: "qoder", available: false }
 ];
@@ -186,12 +188,22 @@ pruefe("kein #top-usage-btn / #top-usage-badge mehr",
 
 // --- 2. Was umgezogen ist, sitzt am neuen Platz -------------------------
 
-const status = document.querySelector("#connection-status");
-pruefe("#connection-status lebt weiter", status !== null);
-pruefe("#connection-status hängt in der Sidebar-Fußzeile",
-  status?.parentElement?.classList.contains("sidebar-footer-status") === true);
-pruefe("#connection-status trägt keinen Text (nur Punkt)",
-  (status?.textContent || "") === "");
+pruefe("kein #connection-status mehr (grüner Punkt raus)",
+  document.querySelector("#connection-status") === null);
+pruefe("keine .dot-green mehr in der Oberfläche",
+  document.querySelectorAll(".dot-green").length === 0);
+pruefe("kein .run-pane-dot mehr an den Konsolen",
+  document.querySelectorAll(".run-pane-dot").length === 0);
+pruefe("kein Bild-Upload-Knopf mehr",
+  document.querySelector("#image-upload-btn") === null);
+pruefe("kein Voice-Knopf mehr",
+  document.querySelector("#voice-input-btn") === null);
+pruefe("keine Bildvorschau mehr",
+  document.querySelector("#image-preview-tray") === null);
+pruefe("kein Bild-Dateiinput mehr",
+  document.querySelector("#image-upload-input") === null);
+pruefe("Archiv-Schalter ist ein Icon",
+  document.querySelector("#archive-filter-btn [data-icon='archive']") !== null);
 
 const drawer = document.querySelector("#mobile-sidebar-toggle");
 pruefe("#mobile-sidebar-toggle sitzt in der Modus-Leiste",
@@ -215,9 +227,17 @@ pruefe("Übernehmen ist im Ruhezustand versteckt", takeover?.hidden === true);
 // --- 4. Das Skript ist ohne Fehler durchgelaufen -------------------------
 
 pruefe("keine JS-Fehler beim Bootstrap", fehler.length === 0, fehler.join(" | "));
-pruefe("CLI-Auswahl wurde gefüllt", document.querySelectorAll("#interactive-cli-select option").length === 3);
+// Das interaktive Terminal listet nur noch die TUI-only-CLI (hier freebuff);
+// die Headless-CLIs (claude, qoder) gehören in den Auto-Route-Dispatch.
+pruefe("CLI-Auswahl zeigt nur die TUI-CLI (freebuff)",
+  document.querySelectorAll("#interactive-cli-select option").length === 1
+  && document.querySelector("#interactive-cli-select option")?.value === "freebuff");
+pruefe("Dispatch-Konsolen haben je ein Routing-Feld",
+  document.querySelectorAll("#run-split .run-pane-routing").length === 2);
+pruefe("Das globale Routing-Feld ist raus",
+  document.querySelector("#harness-override") === null);
 
-// --- 5. Auto-Start: Terminal läuft ohne Klick an -------------------------
+// --- 5. Default ist Auto-Route: kein Terminal-Autostart beim Laden -------
 
 const ws = WebSocketStub.last;
 pruefe("WebSocket wurde geöffnet", ws != null);
@@ -225,13 +245,19 @@ ws.readyState = WebSocketStub.OPEN;
 ws.onopen();
 await ruhen(4);
 
-const start = frames.find((f) => f.type === "pty_start");
-pruefe("Auto-Start hat einen pty_start geschickt", start != null, JSON.stringify(frames));
-pruefe("Auto-Start nutzt die gewählte CLI (freebuff)", start?.command === "freebuff");
-pruefe("Auto-Start übergibt Spalten/Zeilen", start?.cols === 100 && start?.rows === 30);
-pruefe("Status-Punkt steht auf verbunden", status?.classList.contains("connected") === true);
+pruefe("im Default-Modus kein pty_start (Auto-Route liegt vorn)",
+  !frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
 
-// --- 6. Beenden gibt frei, Auto-Start startet nicht von selbst neu -------
+// --- 6. Terminal-Modus: Betreten startet, Beenden gibt frei -------------
+
+frames.length = 0;
+document.querySelector("#mode-interactive-btn").click();
+// setStudioMode startet erst im nächsten Animationsframe — der kommt nicht in
+// setTimeout(0)-Schritten, also kurz echt warten.
+await new Promise((r) => setTimeout(r, 80));
+await ruhen(6);
+pruefe("Betreten des Modus startet die CLI",
+  frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
 
 frames.length = 0;
 ws.onmessage({ data: JSON.stringify({ type: "pty_started", sessionId: "s1", command: "freebuff", cwd: "/tmp/harness-router-gui" }) });
@@ -252,9 +278,11 @@ pruefe("Beenden ist danach wieder deaktiviert", stopp?.disabled === true);
 // --- 7. Erneutes Betreten des Modus startet wieder -----------------------
 
 frames.length = 0;
+// Zuerst in den Dispatch-Modus (entwaffnet), dann zurück — nur so stellt die
+// App den Auto-Start scharf und startet die CLI neu.
+document.querySelector("#mode-dispatch-btn").click();
+await new Promise((r) => setTimeout(r, 80));
 document.querySelector("#mode-interactive-btn").click();
-// setStudioMode startet erst im nächsten Animationsframe — der kommt nicht in
-// setTimeout(0)-Schritten, also kurz echt warten.
 await new Promise((r) => setTimeout(r, 80));
 await ruhen(6);
 pruefe("Klick auf den Modus-Knopf startet die CLI neu",

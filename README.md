@@ -56,8 +56,8 @@ Harness Router GUI verbindet modernste KI-Entwicklungsagenten in einer intuitive
   - QR-Code Scanner für sofortige LAN-Verbindung (`http://192.168.178.169:3000`).
   - Telegram-Bot Integration: Prompts von unterwegs senden, Aufgaben ausführen und Statusberichte empfangen.
 
-- **🖼️ Multimodale Bild- & Screenshot-Anhänge:**
-  - Drag & Drop, Zwischenablage (`Cmd+V` / Paste) oder Smartphone-Foto-Upload für UI-Bilder und Fehlermeldungen.
+- **🖼️ Multimodale Bild- & Screenshot-Anhänge (Telegram):**
+  - Fotos und Screenshots direkt an den Telegram-Bot senden — der Bildpfad wird an das gewählte Harness übergeben. Die Web-Oberfläche selbst hat keine Anhang-Knöpfe mehr.
 
 - **⏰ Geplante Tasks (Cron):**
   - Automatische Hintergrund-Jobs (stündlich, täglich, wöchentlich) mit Projektzuweisung und optionaler Telegram-Push-Benachrichtigung.

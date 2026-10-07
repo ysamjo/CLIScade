@@ -127,7 +127,6 @@ body {
 }
 
 .dot,
-.dot-green,
 .dot-orange {
   width: 6px;
   height: 6px;
@@ -137,7 +136,6 @@ body {
   background: var(--text-dim);
 }
 
-.dot-green { background: var(--success); }
 .dot-orange { background: var(--warning); }
 
 .projects-section {
@@ -314,6 +312,9 @@ body {
   padding: 2px 6px;
   cursor: pointer;
   transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .filter-chip strong {
@@ -335,7 +336,8 @@ body {
   color: var(--accent);
 }
 
-/* Immer da, aber leise: auf dem Handy gibt es kein Hover, das den Knopf erst zeigt. */
+/* Immer da, aber leise: auf dem Handy gibt es kein Hover, das den Knopf erst zeigt.
+   Archiv und Zurück sind reine Icons — der Titel trägt die Aussage. */
 .task-archive-btn,
 .task-restore-btn {
   margin-left: auto;
@@ -345,12 +347,13 @@ body {
   border: 1px solid transparent;
   color: var(--text-dim);
   cursor: pointer;
-  padding: 1px 5px;
-  font-size: 10px;
+  padding: 2px 4px;
   font-family: inherit;
-  letter-spacing: 0.3px;
   border-radius: 4px;
   transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .task-archive-btn:hover,
@@ -512,13 +515,6 @@ body {
   margin-bottom: 0 !important;
 }
 
-/* Status-Punkt rechtsbündig über dem Einstellungen-Knopf */
-.sidebar-footer-status {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 4px;
-}
-
 .footer-title {
   font-size: 10px;
   font-weight: 700;
@@ -565,31 +561,6 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* Verbindungs-Status: nur ein Punkt in der Sidebar-Fußzeile, Text steht im Tooltip */
-.status-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-indicator::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
-.status-indicator.connected::before {
-  background: var(--success);
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 
 /* TAB PANES */
@@ -652,32 +623,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* Der Punkt trägt den Zustand: laufend, wartend, beendet. */
-.run-pane-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: var(--text-dim);
-}
-
-.run-pane-dot.running {
-  background: var(--accent);
-  animation: pulse 1.5s infinite;
-}
-
-.run-pane-dot.queued {
-  background: var(--warning);
-}
-
-.run-pane-dot.done {
-  background: var(--success);
-}
-
-.run-pane-dot.error {
-  background: var(--danger);
 }
 
 /* Der Auftrag ist der Name des Felds — er darf zuletzt gekürzt werden. */
@@ -958,6 +903,14 @@ body {
   text-overflow: ellipsis;
 }
 
+.run-pane-routing {
+  flex: 0 0 auto;
+  max-width: 120px;
+  font-size: 11.5px;
+  padding: 5px 6px;
+  text-overflow: ellipsis;
+}
+
 .run-pane-composer textarea {
   flex: 1;
   min-width: 0;
@@ -984,37 +937,6 @@ body {
 
 .run-pane-composer textarea::-webkit-scrollbar {
   display: none;
-}
-
-.prompt-tools {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-}
-
-.btn-image-upload,
-.btn-voice {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-image-upload:hover,
-.btn-voice:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-focus);
-  color: var(--text-main);
 }
 
 .run-pane-send {
@@ -2057,50 +1979,6 @@ kbd {
   color: var(--text-main);
 }
 
-/* Voice Dictation Button */
-.btn-voice {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 42px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.btn-voice:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--accent);
-  color: var(--text-main);
-}
-
-.btn-voice.recording {
-  background: rgba(194, 98, 92, 0.14) !important;
-  border-color: var(--danger) !important;
-  color: var(--danger) !important;
-  animation: recordingPulse 1.2s infinite ease-in-out;
-}
-
-@keyframes recordingPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(194, 98, 92, 0.5);
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.04);
-  }
-  100% {
-    box-shadow: 0 0 0 10px rgba(194, 98, 92, 0);
-    transform: scale(1);
-  }
-}
-
 /* Remote Settings Elements */
 .remote-qr-row {
   display: flex;
@@ -2178,94 +2056,6 @@ kbd {
   justify-content: space-between;
   margin-bottom: 8px;
   gap: 12px;
-}
-
-/* Multimodal Image Upload & Preview */
-.btn-image-upload {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 42px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.btn-image-upload:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--accent);
-  color: var(--text-main);
-}
-
-.btn-image-upload.has-image {
-  background: var(--bg-card-hover) !important;
-  border-color: var(--border-focus) !important;
-  color: var(--text-main) !important;
-}
-
-.image-preview-tray {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: var(--bg-input);
-  border: 1px dashed var(--border-focus);
-  border-radius: var(--radius-md);
-  margin-bottom: 6px;
-}
-
-.image-preview-tray.hidden {
-  display: none;
-}
-
-.image-preview-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 100%;
-}
-
-.image-preview-item img {
-  width: 36px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.preview-filename {
-  font-size: 12px;
-  color: var(--text-main);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.btn-remove-image {
-  background: rgba(194, 98, 92, 0.2);
-  color: var(--danger);
-  border: none;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-remove-image:hover {
-  background: var(--danger);
-  color: var(--text-main);
 }
 
 /* Consensus Mode & Fallback Banners */
@@ -3002,22 +2792,6 @@ kbd {
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-  }
-
-  .btn-image-upload,
-  .btn-voice {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    border-radius: 8px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    color: var(--text-main);
   }
 
   /* Full screen settings dialog on mobile */

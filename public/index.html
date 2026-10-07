@@ -38,7 +38,6 @@
             <span data-icon="folder"></span> <span id="root-dir-text">Developer</span>
           </div>
           <div id="root-agents-badge" class="workspace-agents-badge" title="Übergeordnete Richtlinien in Einstellungen öffnen">
-            <span class="dot-green"></span>
             <span id="root-agents-text">AGENTS.md (8.7 KB)</span>
           </div>
         </div>
@@ -51,7 +50,7 @@
           <span class="section-title">PROJEKTE & TASKS</span>
           <span class="section-tools">
             <button id="archive-filter-btn" class="filter-chip" title="Archivierte Aufträge zeigen oder verbergen">
-              Archiv <strong id="archive-count-text">0</strong>
+              <span data-icon="archive"></span> <strong id="archive-count-text">0</strong>
             </button>
             <span id="projects-count-badge" class="count-badge">0</span>
           </span>
@@ -63,9 +62,6 @@
 
       <!-- SIDEBAR FOOTER: SETTINGS -->
       <div class="sidebar-footer">
-        <div class="sidebar-footer-status">
-          <span id="connection-status" class="status-indicator connected" title="Verbunden"></span>
-        </div>
         <button id="sidebar-settings-btn" class="sidebar-settings-btn" title="Einstellungen öffnen (⌘,)">
           <span data-icon="settings"></span>
           <span>Einstellungen</span>
@@ -79,16 +75,16 @@
       <section id="tab-studio" class="tab-pane active">
         <div class="studio-mode-switch">
           <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
-          <button id="mode-interactive-btn" class="mode-btn active" data-mode="interactive">
+          <button id="mode-interactive-btn" class="mode-btn" data-mode="interactive">
             <span data-icon="terminal"></span> Interaktives Terminal
           </button>
-          <button id="mode-dispatch-btn" class="mode-btn" data-mode="dispatch">
+          <button id="mode-dispatch-btn" class="mode-btn active" data-mode="dispatch">
             <span data-icon="send"></span> Auto-Route (KI-Dispatch)
           </button>
         </div>
 
-        <!-- INTERAKTIVES PTY-TERMINAL -->
-        <div id="interactive-panel" class="studio-container interactive-container">
+        <!-- INTERAKTIVES PTY-TERMINAL (nur freebuff) -->
+        <div id="interactive-panel" class="studio-container interactive-container hidden">
           <div class="interactive-toolbar">
             <div class="select-group">
               <label for="interactive-cli-select">CLI:</label>
@@ -113,12 +109,11 @@
         </div>
 
         <!-- AUTO-ROUTE (BESTEHENDER KI-DISPATCH) -->
-        <div id="dispatch-panel" class="studio-container hidden">
+        <div id="dispatch-panel" class="studio-container">
           <!-- KONSOLEN: zwei Aufträge nebeneinander, je einer pro Feld -->
           <div id="run-split" class="run-split">
             <div class="run-pane" id="run-pane-0">
               <div class="run-pane-head">
-                <span class="run-pane-dot"></span>
                 <span class="run-pane-title">Konsole 1</span>
                 <span class="run-pane-harness"></span>
                 <span class="run-pane-folder"></span>
@@ -132,13 +127,17 @@
               </div>
               <div class="run-pane-composer">
                 <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
+                <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
+                  <option value="auto">Auto-Route</option>
+                  <option value="consensus">Konsens</option>
+                  <!-- Populated dynamically with available harnesses -->
+                </select>
                 <textarea class="run-pane-input" rows="1" placeholder="Aufgabe für diese Konsole…" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
             </div>
             <div class="run-pane" id="run-pane-1">
               <div class="run-pane-head">
-                <span class="run-pane-dot"></span>
                 <span class="run-pane-title">Konsole 2</span>
                 <span class="run-pane-harness"></span>
                 <span class="run-pane-folder"></span>
@@ -152,23 +151,21 @@
               </div>
               <div class="run-pane-composer">
                 <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
+                <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
+                  <option value="auto">Auto-Route</option>
+                  <option value="consensus">Konsens</option>
+                  <!-- Populated dynamically with available harnesses -->
+                </select>
                 <textarea class="run-pane-input" rows="1" placeholder="Aufgabe für diese Konsole…" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
             </div>
           </div>
 
-          <!-- GEMEINSAME WERKZEUGE: Routing und Anhänge gelten für beide Konsolen -->
+          <!-- GEMEINSAME WERKZEUGE: Kontext und Kontingente gelten für beide Konsolen.
+               Routing ist pro Konsole im Composer gewählt. -->
           <div class="prompt-box">
             <div class="prompt-controls">
-              <div class="select-group">
-                <label for="harness-override">Routing:</label>
-                <select id="harness-override" class="custom-select">
-                  <option value="auto">Auto-Route (Prioritätskette)</option>
-                  <option value="consensus">Konsens-Modus (Dual-Agent)</option>
-                  <!-- Populated dynamically -->
-                </select>
-              </div>
               <div class="prompt-context-badges">
                 <span class="context-pill" id="agents-context-pill" title="Klicken, um AGENTS.md in den Einstellungen zu öffnen">
                   Kontext: <strong id="agents-context-text">Developer/AGENTS.md aktiv</strong>
@@ -180,23 +177,7 @@
                   Frei: <strong id="run-capacity-text">–</strong>
                 </span>
               </div>
-              <div class="prompt-tools">
-                <button id="image-upload-btn" class="btn btn-image-upload" title="Bild oder Screenshot anfügen (Multimodal: Kamera / Galerie / Datei)" data-icon="camera">
-                </button>
-                <button id="voice-input-btn" class="btn btn-voice" title="Befehl per Sprache diktieren (Web Speech API)" data-icon="mic">
-                </button>
-              </div>
             </div>
-
-            <!-- MULTIMODAL IMAGE PREVIEW TRAY -->
-            <div id="image-preview-tray" class="image-preview-tray hidden">
-              <div class="image-preview-item">
-                <img id="preview-thumbnail" src="" alt="Vorschau" />
-                <span id="preview-filename" class="preview-filename">bild.png</span>
-                <button id="remove-image-btn" class="btn-remove-image" title="Bild entfernen" data-icon="x"></button>
-              </div>
-            </div>
-            <input type="file" id="image-upload-input" accept="image/*" style="display:none;" />
           </div>
         </div>
       </section>
@@ -791,7 +772,7 @@
             <span data-icon="box"></span> <strong>8</strong> CLIs
           </span>
           <span id="summary-pill-installed" class="summary-pill installed">
-            <span class="dot-green"></span> <strong id="summary-installed-count">8</strong> Bereit
+            <strong id="summary-installed-count">8</strong> Bereit
           </span>
           <span id="summary-pill-missing" class="summary-pill missing">
             <span class="dot-orange"></span> <strong id="summary-missing-count">0</strong> Fehlen

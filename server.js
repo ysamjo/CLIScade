@@ -95,7 +95,6 @@ if (!fs.existsSync(SCHEDULES_FILE)) {
 }
 
 app.use(express.json({ limit: '50mb' }));
-app.use('/uploads', express.static(UPLOADS_DIR));
 // xterm.js is served straight from node_modules so no build step or CDN is needed.
 app.use('/vendor/xterm', express.static(path.join(__dirname, 'node_modules', '@xterm', 'xterm')));
 app.use('/vendor/xterm-addon-fit', express.static(path.join(__dirname, 'node_modules', '@xterm', 'addon-fit')));
@@ -613,7 +612,7 @@ function checkSingleCliHealth(meta) {
   } catch {
     available = false;
   }
-  return { ...meta, available, path: binaryPath, version };
+  return { ...meta, available, path: binaryPath, version, tuiOnly: TUI_ONLY_COMMANDS.has(meta.cmd) };
 }
 
 // Harness health check with memory cache
@@ -1538,37 +1537,6 @@ app.post('/api/skills/install', (req, res) => {
     // Automatically sync across all 8 CLIs
     const syncResult = syncAllSkills();
     res.json({ success: true, message: 'Skill erfolgreich für alle 9 CLIs installiert & synchronisiert!', sync: syncResult });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Image Upload endpoint
-app.post('/api/upload', (req, res) => {
-  try {
-    const { filename, data } = req.body;
-    if (!data) return res.status(400).json({ error: 'Keine Bilddaten übergeben' });
-
-    let buffer;
-    let ext = 'png';
-    const matches = data.match(/^data:image\/([A-Za-z-+]+);base64,(.+)$/);
-    if (matches && matches.length === 3) {
-      ext = matches[1];
-      buffer = Buffer.from(matches[2], 'base64');
-    } else {
-      buffer = Buffer.from(data, 'base64');
-    }
-
-    const safeName = `img_${Date.now()}_${(filename || `upload.${ext}`).replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const filePath = path.join(UPLOADS_DIR, safeName);
-    fs.writeFileSync(filePath, buffer);
-
-    res.json({
-      success: true,
-      filename: safeName,
-      filePath: filePath,
-      url: `/uploads/${safeName}`
-    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

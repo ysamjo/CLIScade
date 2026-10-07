@@ -9,11 +9,11 @@ let state = {
   panes: [null, null],
   // Jeder Composer gehört zu einem Feld: Zielordner und das zuletzt angefasste Feld.
   paneTarget: [null, null],
+  paneRouting: ['auto', 'auto'],
   // Das Protokoll eines fortgesetzten Auftrags: der neue Lauf zieht zurück in sein Feld.
   fortsetzung: [],
   // Auftrag => Feld, in dessen Ordner er wartet. Er bekommt kein eigenes Feld.
   wartendIn: {},
-  lastPaneSlot: 0,
   clis: [],
   dispatch: { max_concurrent: 0 },
   health: [],
@@ -29,13 +29,14 @@ let state = {
   agentsData: null,
   usageData: null,
   ws: null,
-  attachedImage: null,
   schedules: [],
   installerTools: [],
   installingTools: new Set(),
   isInstallingAll: false,
   // Interaktives PTY-Terminal (xterm.js)
-  studioMode: 'interactive',
+  // Default: Auto-Route / KI-Dispatch. Das interaktive Terminal (nur freebuff)
+  // ist bewusst der andere Modus, kein Ausgangspunkt.
+  studioMode: 'dispatch',
   terminal: null,
   fitAddon: null,
   interactiveRunning: false,
@@ -58,16 +59,12 @@ const dom = {
   projectTree: document.getElementById('project-tree'),
   projectsCountBadge: document.getElementById('projects-count-badge'),
 
-  // Sidebar-Footer (Status-Punkt) & Mobile-Drawer
-  connectionStatus: document.getElementById('connection-status'),
-
   // Studio & Konsolen (Split-View, zwei Felder — je eines zum Tippen)
   runPanes: [0, 1].map((i) => {
     const root = document.getElementById(`run-pane-${i}`);
     if (!root) return null;
     return {
       root,
-      dot: root.querySelector('.run-pane-dot'),
       title: root.querySelector('.run-pane-title'),
       harness: root.querySelector('.run-pane-harness'),
       folder: root.querySelector('.run-pane-folder'),
@@ -75,12 +72,12 @@ const dom = {
       copy: root.querySelector('.run-pane-copy'),
       cancel: root.querySelector('.run-pane-cancel'),
       target: root.querySelector('.run-pane-target'),
+      routing: root.querySelector('.run-pane-routing'),
       input: root.querySelector('.run-pane-input'),
       send: root.querySelector('.run-pane-send')
     };
   }),
   runCapacityText: document.getElementById('run-capacity-text'),
-  harnessOverride: document.getElementById('harness-override'),
   agentsContextPill: document.getElementById('agents-context-pill'),
   agentsContextText: document.getElementById('agents-context-text'),
   archiveFilterBtn: document.getElementById('archive-filter-btn'),
@@ -171,7 +168,6 @@ const dom = {
   sidebar: document.getElementById('sidebar'),
   mobileSidebarToggle: document.getElementById('mobile-sidebar-toggle'),
   mobileDrawerOverlay: document.getElementById('mobile-drawer-overlay'),
-  voiceInputBtn: document.getElementById('voice-input-btn'),
   remoteQrCode: document.getElementById('remote-qr-code'),
   remoteLanUrl: document.getElementById('remote-lan-url'),
   copyLanUrlBtn: document.getElementById('copy-lan-url-btn'),
@@ -184,14 +180,6 @@ const dom = {
   saveTelegramBtn: document.getElementById('save-telegram-btn'),
   testTelegramBtn: document.getElementById('test-telegram-btn'),
   telegramFeedback: document.getElementById('telegram-feedback'),
-
-  // Multimodal Image Attachment
-  imageUploadInput: document.getElementById('image-upload-input'),
-  imageUploadBtn: document.getElementById('image-upload-btn'),
-  imagePreviewTray: document.getElementById('image-preview-tray'),
-  previewThumbnail: document.getElementById('preview-thumbnail'),
-  previewFilename: document.getElementById('preview-filename'),
-  removeImageBtn: document.getElementById('remove-image-btn'),
 
   // Schedules (Cron)
   schedNameInput: document.getElementById('sched-name-input'),
@@ -358,25 +346,12 @@ function switchTab(tabId) {
 }
 
 // --- WEBSOCKET CONNECTION ---
-// Der Status ist nur noch ein Punkt in der Sidebar-Fußzeile: Text weg, Tooltip
-// trägt die Aussage. Sonst würde die Fußzeile bei jedem Reconnect umbrechen.
-function setConnectionState(online) {
-  const el = dom.connectionStatus;
-  if (!el) return;
-  el.className = online ? 'status-indicator connected' : 'status-indicator offline';
-  el.textContent = '';
-  const label = online ? 'Verbunden' : 'Getrennt – verbinde neu...';
-  el.title = label;
-  el.setAttribute('aria-label', label);
-}
-
 function setupWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}`;
   state.ws = new WebSocket(wsUrl);
 
   state.ws.onopen = () => {
-    setConnectionState(true);
     // Neue Verbindung, alter Prozess: der PTY ist auf dem Server langst weg,
     // wurde er doch nur iiber den ehemaligen Socket bekannt. Wurde er weiter als
     // laufend gefuehrt, friert das Terminal ein und der Nutzer kann nichts mehr starten.
@@ -391,7 +366,6 @@ function setupWebSocket() {
   };
 
   state.ws.onclose = () => {
-    setConnectionState(false);
     setTimeout(setupWebSocket, 2000);
   };
 
@@ -650,7 +624,6 @@ function renderRunPane(slot) {
   if (!pane) return;
 
   if (!stream) {
-    pane.dot.className = 'run-pane-dot';
     pane.title.textContent = `Konsole ${slot + 1}`;
     pane.harness.textContent = '';
     pane.folder.textContent = '';
@@ -658,7 +631,6 @@ function renderRunPane(slot) {
     return;
   }
 
-  pane.dot.className = `run-pane-dot ${stream.status}`;
   // Der Auftragstitel ist die Zeile, an der der Nutzer seinen Lauf wiedererkennt —
   // Harness und Modell daneben sind die Art, nicht der Name.
   pane.title.textContent = stream.prompt
@@ -727,10 +699,12 @@ function setupRunPanes() {
         sendPrompt(slot);
       }
     });
-    pane.input.addEventListener('focus', () => { state.lastPaneSlot = slot; });
-    pane.input.addEventListener('paste', handlePromptPaste);
     pane.target.addEventListener('change', () => {
       state.paneTarget[slot] = pane.target.value;
+    });
+    pane.routing.addEventListener('change', () => {
+      state.paneRouting[slot] = pane.routing.value;
+      updateRouteUsagePill();
     });
   });
 }
@@ -945,9 +919,14 @@ function renderInteractiveCliSelect() {
 
   const previous = select.value;
   const tools = state.health || [];
+  // Das interaktive Terminal ist den TUI-only-Harnesses vorbehalten (hier:
+  // freebuff). Headless-CLIs gehören in den Auto-Route-Dispatch, nicht in ein
+  // echtes PTY — daher keine Auswahl anderer CLIs, die Liste ist frei.
+  const tui = tools.filter(h => h.tuiOnly);
+  const list = tui.length ? tui : tools.filter(h => h.available);
   select.innerHTML = '';
 
-  if (tools.length === 0) {
+  if (list.length === 0) {
     const opt = document.createElement('option');
     opt.value = '';
     opt.textContent = 'Lade Harnesses...';
@@ -955,7 +934,7 @@ function renderInteractiveCliSelect() {
     return;
   }
 
-  tools.forEach(h => {
+  list.forEach(h => {
     const opt = document.createElement('option');
     opt.value = h.cmd;
     const ver = h.version ? ` · ${h.version}` : '';
@@ -966,7 +945,7 @@ function renderInteractiveCliSelect() {
     select.appendChild(opt);
   });
 
-  const available = tools.filter(h => h.available);
+  const available = list.filter(h => h.available);
   if (available.length > 0) {
     const preferred = available.find(h => h.cmd === 'freebuff');
     const keepPrevious = previous && available.some(h => h.cmd === previous);
@@ -1182,18 +1161,25 @@ function renderHarnessStatusPills() {
 }
 
 function renderHarnessOverrideSelect() {
-  dom.harnessOverride.innerHTML = `
-    <option value="auto">Auto-Route (Prioritätskette)</option>
-    <option value="consensus">Konsens-Modus (Dual-Agent)</option>
-  `;
-  state.clis.forEach(c => {
-    if (c.enabled !== false) {
-      const opt = document.createElement('option');
-      opt.value = c.name;
-      const modelStr = (c.model && c.model !== 'Standard') ? ` [${c.model}]` : '';
-      opt.textContent = `${c.name} (${c.command})${modelStr}`;
-      dom.harnessOverride.appendChild(opt);
-    }
+  // Routing ist pro Konsole: jeder Composer hat sein eigenes Feld (Default Auto).
+  const selects = dom.runPanes.map(p => p && p.routing).filter(Boolean);
+  selects.forEach((select) => {
+    const previous = select.value;
+    select.innerHTML = `
+      <option value="auto">Auto-Route</option>
+      <option value="consensus">Konsens</option>
+    `;
+    state.clis.forEach(c => {
+      if (c.enabled !== false) {
+        const opt = document.createElement('option');
+        opt.value = c.name;
+        const modelStr = (c.model && c.model !== 'Standard') ? ` [${c.model}]` : '';
+        opt.textContent = `${c.name} (${c.command})${modelStr}`;
+        select.appendChild(opt);
+      }
+    });
+    // Wählt der Nutzer gerade ein konkreter Harness aus, bleibt er; sonst Auto.
+    select.value = (previous && selects && [...select.options].some(o => o.value === previous)) ? previous : 'auto';
   });
   updateRouteUsagePill();
 }
@@ -1571,9 +1557,9 @@ function renderProjectTree() {
       // Ein laufender Auftrag bleibt unangetastet: einpacken würde ihn vor dem
       // Abbrechen verstecken. Erledigte dürfen ins Archiv.
       const aktion = task.archived
-        ? '<button class="task-restore-btn" title="Zurück in die Aufgabenliste">Zurück</button>'
+        ? '<button class="task-restore-btn" title="Zurück in die Aufgabenliste" data-icon="inbox"></button>'
         : (task.status === 'completed' || task.status === 'error'
-            ? '<button class="task-archive-btn" title="Ins Archiv legen — die Ausgabe bleibt erhalten">Archiv</button>'
+            ? '<button class="task-archive-btn" title="Ins Archiv legen — die Ausgabe bleibt erhalten" data-icon="archive"></button>'
             : '');
 
       taskItem.innerHTML = `
@@ -2082,33 +2068,13 @@ function renderUsageUI() {
 function updateRouteUsagePill() {
   if (!dom.routeUsageText || !state.usageData) return;
 
-  const currentSelection = dom.harnessOverride ? dom.harnessOverride.value : 'auto';
-
-  if (currentSelection === 'consensus') {
-    dom.routeUsageText.textContent = 'Dual-Engine Konsens';
-    if (dom.routeUsagePill) {
-      dom.routeUsagePill.title = 'Konsens-Modus: Zwei KI-Engines debattieren und erzeugen die optimale Synthese.';
-    }
-    return;
-  }
-
+  // Routing ist pro Konsole; die geteilte Pill zeigt die Auto-Route, die als
+  // Standard (Priority-Chain-Spitze) gilt, solange eine Konsole nicht selbst
+  // auf ein konkretes Harness gestellt ist.
+  const firstActive = state.clis.find(c => c.enabled !== false);
   let targetHarness = null;
-
-  if (currentSelection !== 'auto') {
-    const matchedRoute = state.clis.find(c => c.name === currentSelection);
-    if (matchedRoute) {
-      const key = getHarnessKey(matchedRoute);
-      targetHarness = state.usageData[key];
-    }
-  }
-
-  if (!targetHarness) {
-    // Pick the first enabled route
-    const firstActive = state.clis.find(c => c.enabled !== false);
-    if (firstActive) {
-      const key = getHarnessKey(firstActive);
-      targetHarness = state.usageData[key];
-    }
+  if (firstActive) {
+    targetHarness = state.usageData[getHarnessKey(firstActive)];
   }
 
   if (targetHarness) {
@@ -2241,19 +2207,6 @@ function setupEventListeners() {
       refreshHarnessModelsOnTabOpen(true);
     });
   }
-  if (dom.harnessOverride) {
-    dom.harnessOverride.addEventListener('change', () => updateRouteUsagePill());
-  }
-
-  // Multimodal Image Attachment Listeners
-  if (dom.imageUploadBtn && dom.imageUploadInput) {
-    dom.imageUploadBtn.addEventListener('click', () => dom.imageUploadInput.click());
-    dom.imageUploadInput.addEventListener('change', handleImageUpload);
-  }
-  if (dom.removeImageBtn) {
-    dom.removeImageBtn.addEventListener('click', removeAttachedImage);
-  }
-
   // Scheduled Tasks Listeners
   if (dom.addScheduleBtn) {
     dom.addScheduleBtn.addEventListener('click', handleAddSchedule);
@@ -2586,7 +2539,7 @@ function sendPrompt(slot = 0) {
   const pane = dom.runPanes[slot];
   if (!pane) return;
   const prompt = pane.input.value.trim();
-  if (!prompt && !state.attachedImage) return;
+  if (!prompt) return;
 
   // Fortsetzung: der angeklickte Auftrag hat dem Feld sein Ziel geliehen. Sobald der
   // Nutzer den Ordner selbst wählt, ist die Leihe vorbei und das globale Routing gilt.
@@ -2595,10 +2548,9 @@ function sendPrompt(slot = 0) {
 
   const payload = {
     type: 'dispatch',
-    prompt: prompt || 'Analysiere dieses beigefügte Bild / diesen Screenshot und führe die erforderlichen Anpassungen im Code durch.',
-    harnessOverride: folge ? folge.harness : dom.harnessOverride.value,
-    projectPath: pane.target.value || state.activeProject,
-    imagePath: state.attachedImage ? state.attachedImage.path : null
+    prompt,
+    harnessOverride: folge ? folge.harness : (pane.routing ? pane.routing.value : 'auto'),
+    projectPath: pane.target.value || state.activeProject
   };
   if (folge?.model) payload.modelOverride = folge.model;
 
@@ -2613,7 +2565,6 @@ function sendPrompt(slot = 0) {
         prompt: payload.prompt, slot, buffer: stream.buffer, folge: stream.folge, at: Date.now()
       });
     }
-    removeAttachedImage();
     refreshRunPool();
   } else {
     alert("Verbindung zum Server unterbrochen.");
@@ -2804,131 +2755,6 @@ function setupMobileAndVoice() {
   if (dom.testTelegramBtn) {
     dom.testTelegramBtn.addEventListener('click', testTelegramSettings);
   }
-
-  // Voice Dictation (Web Speech API)
-  if (dom.voiceInputBtn) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      let recognition = null;
-      let isRecording = false;
-
-      dom.voiceInputBtn.addEventListener('click', () => {
-        if (isRecording && recognition) {
-          recognition.stop();
-          return;
-        }
-
-        try {
-          recognition = new SpeechRecognition();
-          recognition.continuous = false;
-          recognition.interimResults = false;
-          recognition.lang = 'de-DE';
-
-          recognition.onstart = () => {
-            isRecording = true;
-            dom.voiceInputBtn.classList.add('recording');
-            dom.voiceInputBtn.title = 'Aufnahme läuft... Bitte sprechen (Klick zum Beenden)';
-          };
-
-          recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            const feld = dom.runPanes[state.lastPaneSlot];
-            if (transcript && feld) {
-              const currentVal = feld.input.value.trim();
-              feld.input.value = currentVal ? `${currentVal} ${transcript}` : transcript;
-              feld.input.focus();
-            }
-          };
-
-          recognition.onerror = (event) => {
-            console.warn('Speech recognition notice:', event.error);
-            isRecording = false;
-            dom.voiceInputBtn.classList.remove('recording');
-            dom.voiceInputBtn.title = 'Befehl per Sprache diktieren (Web Speech API)';
-          };
-
-          recognition.onend = () => {
-            isRecording = false;
-            dom.voiceInputBtn.classList.remove('recording');
-            dom.voiceInputBtn.title = 'Befehl per Sprache diktieren (Web Speech API)';
-          };
-
-          recognition.start();
-        } catch (err) {
-          console.error('Speech recognition error:', err);
-          isRecording = false;
-          dom.voiceInputBtn.classList.remove('recording');
-        }
-      });
-    } else {
-      dom.voiceInputBtn.addEventListener('click', () => {
-        alert('Spracheingabe wird von diesem Desktop-Browser nicht nativ unterstützt. Auf deinem Smartphone (Chrome / Safari / Edge) funktioniert das Mikrofon direkt!');
-      });
-    }
-  }
-}
-
-// --- MULTIMODAL IMAGE UPLOAD HELPERS ---
-
-function handleImageUpload(e) {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  uploadImageFile(file);
-}
-
-function handlePromptPaste(e) {
-  const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
-  if (!items) return;
-  for (let i = 0; i < items.length; i++) {
-    if (items[i].type && items[i].type.indexOf('image') !== -1) {
-      const file = items[i].getAsFile();
-      if (file) {
-        uploadImageFile(file);
-        break;
-      }
-    }
-  }
-}
-
-async function uploadImageFile(file) {
-  try {
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const base64Data = evt.target.result;
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: base64Data,
-          filename: file.name || 'screenshot.png'
-        })
-      });
-      const data = await res.json();
-      if (data.success && data.file) {
-        state.attachedImage = data.file;
-        showAttachedImage(data.file.url, file.name || 'screenshot.png');
-      }
-    };
-    reader.readAsDataURL(file);
-  } catch (err) {
-    console.error('Image upload failed:', err);
-  }
-}
-
-function showAttachedImage(url, name) {
-  if (dom.previewThumbnail) dom.previewThumbnail.src = url;
-  if (dom.previewFilename) dom.previewFilename.textContent = name;
-  if (dom.imagePreviewTray) dom.imagePreviewTray.classList.remove('hidden');
-  if (dom.imageUploadBtn) dom.imageUploadBtn.classList.add('has-image');
-}
-
-function removeAttachedImage() {
-  state.attachedImage = null;
-  if (dom.previewThumbnail) dom.previewThumbnail.src = '';
-  if (dom.previewFilename) dom.previewFilename.textContent = '';
-  if (dom.imagePreviewTray) dom.imagePreviewTray.classList.add('hidden');
-  if (dom.imageUploadBtn) dom.imageUploadBtn.classList.remove('has-image');
-  if (dom.imageUploadInput) dom.imageUploadInput.value = '';
 }
 
 // --- SCHEDULES & CRON MANAGEMENT ---

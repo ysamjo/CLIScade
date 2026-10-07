@@ -32,9 +32,9 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 
 ```bash
 npm start                        # Server auf http://localhost:3000
-node test/ui-smoke.mjs           # 129 Prüfungen im jsdom (Struktur + Verhalten)
+node test/ui-smoke.mjs           # 133 Prüfungen im jsdom (Struktur + Verhalten)
 node test/konsole_schichten.test.js
-                                 # 31 Behauptungen: Schichten aus echten Protokollen
+                                 # 34 Behauptungen: Schichten aus echten Protokollen
 npm run test:routing             # 55 Tests: 28 Entscheidungen + 19 Dispatch-Ketten
                                  #            + 4 Service Worker + 3 Konsolen-Schichtung
                                  #            + 1 Schichten-Modul
