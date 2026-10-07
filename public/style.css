@@ -426,6 +426,18 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Welches Feld diesen Auftrag gerade hält. */
+.task-konsole {
+  align-self: flex-start;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  margin-top: 1px;
+}
+
 .empty-task-hint {
   font-size: 11px;
   color: var(--text-dim);
@@ -625,6 +637,12 @@ body {
   overflow: hidden;
 }
 
+/* Ein Klick in der Seitenleiste zeigt, in welchem Feld der Auftrag liegt. */
+.run-pane.ist-fokus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-light);
+}
+
 .run-pane-head {
   height: 28px;
   flex: 0 0 28px;
@@ -670,6 +688,22 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+
+/* Harness und Modell sind die Art des Laufs, nicht sein Name — darum als Marke. */
+.run-pane-harness {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.run-pane-harness:empty {
+  display: none;
 }
 
 .run-pane-folder {
@@ -3135,116 +3169,109 @@ kbd {
 }
 
 /* ========================================== */
-/* REASONING VS OUTPUT VISUAL DIFFERENTIATION */
+/* KONSOLE: DREI LESESCHICHTEN                */
 /* ========================================== */
-.reasoning-drawer {
+/* Die Antwort ist der Grundtext: hell und in voller Größe. Was ein Harness über sich
+   selbst schreibt — Gedankengang, Werkzeug, Randnotiz — liegt darunter in einem
+   Ordner, damit der Strom keine Textwüste wird. Nur die Marken der Oberfläche. */
+.ko-antwort {
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ko-block {
   background: var(--bg-secondary);
   border: 1px solid var(--border-soft);
-  border-left: 2px solid var(--border-focus);
+  border-left: 2px solid var(--border-color);
   border-radius: var(--radius-md);
-  margin: 6px 0 10px 0;
+  margin: 4px 0 8px;
   overflow: hidden;
 }
 
-.reasoning-drawer[open] .reasoning-summary {
-  border-bottom: 1px solid var(--border-soft);
-}
+.ko-denke { border-left-color: var(--accent); }
+.ko-werkzeug { border-left-color: var(--border-focus); }
+.ko-notiz { border-left-color: var(--warning); }
 
-.reasoning-summary {
+.ko-kopf {
   list-style: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 4px 10px;
+  gap: 7px;
+  padding: 3px 9px;
   background: var(--bg-card);
   cursor: pointer;
   user-select: none;
 }
 
-.reasoning-summary::-webkit-details-marker {
+.ko-kopf::-webkit-details-marker {
   display: none;
 }
 
-.reasoning-summary:hover {
+.ko-kopf:hover {
   background: var(--bg-card-hover);
 }
 
-.reasoning-summary-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.reasoning-icon {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.reasoning-label {
+.ko-art {
+  font-size: 10px;
   font-weight: 600;
-  font-size: 11.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--text-muted);
+  flex: 0 0 auto;
 }
 
-.reasoning-pill {
+.ko-zaehler {
+  font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  background: transparent;
   color: var(--text-dim);
   border: 1px solid var(--border-color);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+  flex: 0 0 auto;
 }
 
-.reasoning-pill.streaming-pill {
-  color: var(--text-main);
-  border-color: var(--border-focus);
-  animation: pulsePill 1.2s infinite;
-}
-
-@keyframes pulsePill {
-  0% { opacity: 0.55; }
-  50% { opacity: 1; }
-  100% { opacity: 0.55; }
-}
-
-.reasoning-hint {
+/* Der Auszug zeigt, was im Ordner liegt, ohne ihn zu öffnen. */
+.ko-kurztitel {
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-dim);
-  font-family: var(--font-sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.reasoning-content {
-  padding: 8px 10px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.55;
-  color: var(--text-muted);
+.ko-inhalt {
+  padding: 6px 9px;
+  border-top: 1px solid var(--border-soft);
   background: var(--bg-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
-.pulse-brain {
-  animation: pulseBrain 1.2s infinite ease-in-out;
-}
-
-@keyframes pulseBrain {
-  0% { opacity: 0.55; }
-  50% { opacity: 1; }
-  100% { opacity: 0.55; }
-}
-
-.model-output-block {
-  color: var(--text-main);
+.ko-zeile {
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.55;
-  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Wachsender Gedankengang im laufenden Lauf: er atmet, damit sichtbar bleibt, dass
+   er noch wächst, statt auf halbem Weg stehen geblieben zu sein. */
+.ko-wachsend > .ko-kopf .ko-art {
+  animation: koAtmen 1.3s infinite ease-in-out;
+}
+
+@keyframes koAtmen {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 /* Consensus Mode Phasen */

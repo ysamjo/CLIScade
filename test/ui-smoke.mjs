@@ -164,7 +164,11 @@ window.fetch = async (pfad, optionen = {}) => {
   return { ok: true, status: 200, json: async () => daten, text: async () => JSON.stringify(daten) };
 };
 
+// jsdom kennt scrollIntoView nicht; die Oberfläche rollt beim Klick auf einen Auftrag.
+window.Element.prototype.scrollIntoView = () => {};
+
 window.eval(readFileSync(join(PUBLIC, "icons.js"), "utf8"));
+window.eval(readFileSync(join(PUBLIC, "konsole-schichten.js"), "utf8"));
 window.eval(readFileSync(join(PUBLIC, "app.js"), "utf8"));
 if (document.readyState !== "loading") {
   // Der Zuhörer auf DOMContentLoaded kam je nach jsdom-Timing zu spät.
@@ -503,9 +507,14 @@ pruefe("Klick klappt das Terminal zu",
 const folgeSlot = [0, 1].find((i) => (konsole(i)?.textContent || "").includes("ALTE AUSGABE"));
 pruefe("das alte Protokoll ist in einer Konsole sichtbar", folgeSlot !== undefined);
 const folge = konsole(folgeSlot);
-pruefe("das Feld nennt den alten Harness",
-  /Cline/.test(folge?.querySelector(".run-pane-title")?.textContent || ""),
+pruefe("das Feld nennt den alten Auftrag",
+  /Alter Auftrag/.test(folge?.querySelector(".run-pane-title")?.textContent || ""),
   folge?.querySelector(".run-pane-title")?.textContent);
+// Harness und Modell sind die Art des Laufs — sie stehen als Marke daneben, damit
+// zwei Konsolen desselben Harness trotzdem unterscheidbar bleiben.
+pruefe("die Marke nennt den alten Harness",
+  /Cline · plan-free/.test(folge?.querySelector(".run-pane-harness")?.textContent || ""),
+  folge?.querySelector(".run-pane-harness")?.textContent);
 pruefe("das Feld zeigt den Ordner des alten Auftrags",
   folge?.querySelector(".run-pane-target")?.value === "/tmp/proj-b",
   folge?.querySelector(".run-pane-target")?.value);
@@ -615,6 +624,135 @@ enter(zweiterSlot);
 await ruhen(4);
 pruefe("＋ im selben Ordner ist ein Anfang statt einer Fortsetzung",
   sendungen()[0]?.harnessOverride === "auto", JSON.stringify(sendungen()[0]));
+
+// --- 15. Die Konsole schichtet: Gedanke, Werkzeug, Antwort ---------------
+// Die Formen kommen aus den echten Protokollen in studio-tasks.json: Claude schreibt
+// eine &lt;think&gt;-Region, die erst nach zwei freien Zeilen endet; cline und freebuff
+// schreiben [thinking], [run_commands], ⎿-Folgezeilen und Tokens-Zeilen. Alles vorher
+// ungeordnet in einer Textwüste.
+
+document.querySelector("#mode-dispatch-btn")?.click();
+await ruhen(3);
+
+const CLAUDE_CHUNK =
+  '<div class="route-banner" style=""><span class="badge badge-accent">Priorität #1</span>' +
+  '<span><strong>Harness:</strong> Claude Code (claude)</span></div>\n\n' +
+  '&lt;think&gt;Der Nutzer fragt nach RAM.<br/><br/>Ich schaue ins Portfolio.' +
+  '<br/><br/><br/>ANTWORT-LAYER: 2 GB<br/><br/>Fertig.<br/>';
+
+// Beide Felder müssen frei sein: sonst hängt der neue Lauf hinter einem alten in
+// demselben Ordner, und seine Ausgabe liegt in einer anderen Konsole als der Marker.
+sag({ type: "done", taskId: "task_a", exitCode: 0, message: "Fertig" });
+sag({ type: "done", taskId: "task_h", exitCode: 0, message: "Fertig" });
+await ruhen(3);
+
+sag({ type: "task_created", taskId: "task_l", task: auftrag("task_l", "proj-a", "LAYER-MARKER Claude") });
+sag({ type: "route_selected", taskId: "task_l", harness: "Claude Code", command: "claude", model: "Standard" });
+sag({ type: "output", taskId: "task_l", html: CLAUDE_CHUNK });
+await ruhen(4);
+
+// Das Feld gehört dem Lauf, der mit LAYER-MARKER betitelt ist — welches der beiden
+// Konsolenfelder das ist, entscheidet der freie Platz, nicht der Test.
+const slotVon = (marker) => [0, 1].find((i) => (konsole(i)?.textContent || "").includes(marker)) ?? 0;
+const feld = () => konsole(slotVon("LAYER-MARKER"));
+const body = () => feld()?.querySelector(".run-pane-body");
+const inKeinemOrdner = (text) =>
+  [...(body()?.querySelectorAll("details") || [])].every((d) => !d.textContent.includes(text));
+
+const denk = body()?.querySelector("details.ko-denke");
+pruefe("der Gedankengang sitzt in einem Ordner", denk !== null && denk !== undefined, body()?.innerHTML?.slice(0, 200));
+pruefe("der Ordner ist automatisch zugeklappt", denk && !denk.hasAttribute("open"), denk?.outerHTML?.slice(0, 120));
+pruefe("beide Gedankenzeilen bleiben im Ordner",
+  /fragt nach RAM/.test(denk?.textContent || "") && /Portfolio/.test(denk?.textContent || ""));
+pruefe("die Antwort liegt außerhalb jedes Ordners", inKeinemOrdner("ANTWORT-LAYER: 2 GB"));
+pruefe("die Antwort steht in der Antwortebene",
+  /ANTWORT-LAYER: 2 GB/.test(body()?.querySelector(".ko-antwort")?.textContent || ""),
+  body()?.querySelector(".ko-antwort")?.textContent);
+pruefe("das Routing-Banner bleibt ein ganzes Element",
+  body()?.querySelectorAll(".route-banner").length === 1 &&
+  body()?.querySelector(".route-banner .badge") !== null,
+  body()?.querySelector(".route-banner")?.outerHTML?.slice(0, 160));
+
+const CLINE_CHUNK =
+  "ZWISCHENTEXT-EIN<br/>" +
+  '<span style="color:#7fa3ad">[run_commands]</span> ls -la | head -n 100<br/>' +
+  '<span style="color:#555">&#x23BF; </span>total 496 drwxr-xr-x<br/>' +
+  "[thinking] Analysing build config.<br/>" +
+  "ZWISCHENTEXT-ZWEI<br/>" +
+  "Tokens: 4,090 (2,446 Prompt / 1,644 Antwort)<br/>";
+sag({ type: "output", taskId: "task_l", html: CLINE_CHUNK });
+await ruhen(4);
+
+const werkzeug = body()?.querySelector("details.ko-werkzeug");
+pruefe("Werkzeugaufruf und ⎿-Zeile sammeln sich in einem Ordner",
+  werkzeug !== null && /\[run_commands\]/.test(werkzeug.textContent) && /total 496/.test(werkzeug.textContent),
+  werkzeug?.textContent);
+pruefe("der Werkzeugordner ist zu und zählt seine Zeilen",
+  werkzeug && !werkzeug.hasAttribute("open") && /2 Zeilen/.test(werkzeug.querySelector(".ko-kopf")?.textContent || ""),
+  werkzeug?.querySelector(".ko-kopf")?.textContent);
+pruefe("die [thinking]-Zeile kommt in einen Gedankengang-Ordner",
+  [...(body()?.querySelectorAll("details.ko-denke") || [])].some((d) => /Analysing build config/.test(d.textContent)),
+  [...(body()?.querySelectorAll("details.ko-denke") || [])].map((d) => d.textContent).join(" | "));
+pruefe("Tokens-Zeile wird Randnotiz",
+  /Tokens: 4,090/.test(body()?.querySelector("details.ko-notiz")?.textContent || ""),
+  body()?.querySelector("details.ko-notiz")?.textContent);
+pruefe("die Zwischentexte bleiben sichtbar",
+  inKeinemOrdner("ZWISCHENTEXT-EIN") && inKeinemOrdner("ZWISCHENTEXT-ZWEI"));
+
+// Faltzustand: jeder Chunk malt das ganze Feld neu — wer einen Ordner aufmacht,
+// darf ihn nicht beim nächsten Chunk wieder verloren haben.
+const ersterDenk = body()?.querySelector("details.ko-denke");
+ersterDenk.open = true;
+ersterDenk.dispatchEvent(new window.Event("toggle"));
+await ruhen(2);
+sag({ type: "output", taskId: "task_l", html: "SPAETER-CHUNK<br/>" });
+await ruhen(4);
+pruefe("ein aufgeklappter Ordner bleibt offen",
+  body()?.querySelector("details.ko-denke")?.open === true,
+  body()?.querySelector("details.ko-denke")?.outerHTML?.slice(0, 120));
+pruefe("ein zugeklappter Ordner bleibt zu",
+  body()?.querySelector("details.ko-werkzeug")?.open === false);
+
+// Ein Denkordner, der noch mitten im Lauf wächst, meldet das — sonst wirkt die
+// Konsole leer, obwohl der Harness gerade denkt.
+sag({ type: "output", taskId: "task_l", html: "&lt;think&gt;offener Gedanke ohne Ende<br/>" });
+await ruhen(4);
+pruefe("ein wachsender Gedankengang-Ordner ist als lebendig markiert",
+  body()?.querySelector("details.ko-denke.ko-wachsend") !== null,
+  [...(body()?.querySelectorAll("details") || [])].map((d) => d.className).join(" | "));
+sag({ type: "done", taskId: "task_l", exitCode: 0, message: "Fertig" });
+await ruhen(4);
+pruefe("nach dem Lauf ist kein Ordner mehr lebendig",
+  body()?.querySelector("details.ko-wachsend") === null);
+pruefe("nach dem Lauf bleiben die Ordner zugeklappt, die der Nutzer nicht öffnete",
+  [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).length <= 1);
+
+// --- 16. Ein Klick auf einen Auftrag zeigt sein Feld ---------------------
+// Zwei Konsolen desselben Harness waren nicht zu unterscheiden: der Titel trug nur
+// "harness · modell". Jetzt trägt das Feld den Auftrag, die Art steht als Marke
+// daneben, und die Seitenleiste sagt, in welchem Feld der Lauf liegt.
+const layerSlot = slotVon("LAYER-MARKER");
+pruefe("das Feld trägt den Auftrag als Titel",
+  /LAYER-MARKER/.test(konsole(layerSlot)?.querySelector(".run-pane-title")?.textContent || ""),
+  konsole(layerSlot)?.querySelector(".run-pane-title")?.textContent);
+pruefe("die Marke trägt Harness und Modell",
+  /Claude Code · Standard/.test(konsole(layerSlot)?.querySelector(".run-pane-harness")?.textContent || ""),
+  konsole(layerSlot)?.querySelector(".run-pane-harness")?.textContent);
+
+const seitenItem = () => document.querySelector('.task-item[data-task-id="task_l"]');
+pruefe("die Seitenleiste nennt das Feld des Laufs",
+  seitenItem()?.querySelector(".task-konsole")?.textContent === `Konsole ${layerSlot + 1}`,
+  seitenItem()?.querySelector(".task-konsole")?.textContent);
+
+document.querySelector("#mode-interactive-btn")?.click();
+await ruhen(2);
+seitenItem()?.click();
+await ruhen(4);
+const markiert = [0, 1].filter((i) => konsole(i)?.classList.contains("ist-fokus"));
+pruefe("Klick markiert genau das Feld des Auftrags",
+  markiert.length === 1 && markiert[0] === layerSlot, JSON.stringify(markiert));
+pruefe("Klick auf einen liegenden Auftrag holt die Konsole wieder hervor",
+  document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

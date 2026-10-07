@@ -1,11 +1,12 @@
 // Service Worker for Harness Studio Remote PWA
-const CACHE_NAME = 'harness-studio-v2';
+const CACHE_NAME = 'harness-studio-v3';
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
   '/icons.js',
+  '/konsole-schichten.js',
   '/icon.svg',
   '/manifest.json'
 ];

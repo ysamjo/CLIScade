@@ -69,6 +69,7 @@ const dom = {
       root,
       dot: root.querySelector('.run-pane-dot'),
       title: root.querySelector('.run-pane-title'),
+      harness: root.querySelector('.run-pane-harness'),
       folder: root.querySelector('.run-pane-folder'),
       body: root.querySelector('.run-pane-body'),
       copy: root.querySelector('.run-pane-copy'),
@@ -530,69 +531,24 @@ function setupWebSocket() {
   };
 }
 
-// --- TERMINAL HELPERS & REASONING FORMATTER ---
-// --- TERMINAL HELPERS & REASONING FORMATTER ---
-function formatReasoningAndOutput(html) {
-  if (!html) return '';
-
-  // 1. Explicit closed think tags (both raw <think> and escaped &lt;think&gt;)
-  const explicitThinkRegex = /(?:<think>|&lt;think&gt;)([\s\S]*?)(?:<\/think>|&lt;\/think&gt;)/gi;
-  if (explicitThinkRegex.test(html)) {
-    return html.replace(explicitThinkRegex, (match, thinkText) => {
-      const clean = thinkText.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").trim();
-      return '<details class="reasoning-drawer" open>' +
-        '<summary class="reasoning-summary">' +
-          '<div class="reasoning-summary-left">' +
-            '<span class="reasoning-icon">🧠</span>' +
-            '<span class="reasoning-label">Gedankengang (Reasoning)</span>' +
-            '<span class="reasoning-pill">Denkprozess</span>' +
-          '</div>' +
-          '<span class="reasoning-hint">Klicken zum Einklappen</span>' +
-        '</summary>' +
-        '<div class="reasoning-content">' + clean + '</div>' +
-      '</details>';
-    });
-  }
-
-  // 2. Open think tag (check if followed by double line break separating reasoning from final output)
-  const openThinkMatch = html.match(/(?:<think>|&lt;think&gt;)([\s\S]*)$/i);
-  if (openThinkMatch) {
-    const before = html.substring(0, openThinkMatch.index);
-    const allAfter = openThinkMatch[1];
-    const splitMatch = allAfter.match(/(?:<br\s*\/?>\s*){2,}|\n\s*\n/i);
-    if (splitMatch) {
-      const thought = allAfter.substring(0, splitMatch.index).replace(/&quot;/g, '"').replace(/&#x27;/g, "'").trim();
-      const answer = allAfter.substring(splitMatch.index + splitMatch[0].length).trim();
-      return before +
-        '<details class="reasoning-drawer" open>' +
-          '<summary class="reasoning-summary">' +
-            '<div class="reasoning-summary-left">' +
-              '<span class="reasoning-icon">🧠</span>' +
-              '<span class="reasoning-label">Gedankengang (Reasoning)</span>' +
-              '<span class="reasoning-pill">Denkprozess</span>' +
-            '</div>' +
-            '<span class="reasoning-hint">Klicken zum Einklappen</span>' +
-          '</summary>' +
-          '<div class="reasoning-content">' + thought + '</div>' +
-        '</details>' +
-        '<div class="model-output-block">' + answer + '</div>';
-    } else {
-      // Actively streaming live thinking
-      return before +
-        '<details class="reasoning-drawer is-streaming" open>' +
-          '<summary class="reasoning-summary">' +
-            '<div class="reasoning-summary-left">' +
-              '<span class="reasoning-icon pulse-brain">🧠</span>' +
-              '<span class="reasoning-label">Gedankengang (Reasoning)...</span>' +
-              '<span class="reasoning-pill streaming-pill">Denkt nach...</span>' +
-            '</div>' +
-            '<span class="reasoning-hint">Live</span>' +
-          '</summary>' +
-          '<div class="reasoning-content">' + allAfter + '</div>' +
-        '</details>';
-    }
-  }
-
+// --- KONSOLEN-LESART ---
+// Der Stream ist reiner Text; die Leseschichten stecken in den Markern, die die
+// Harnesses selbst schreiben. Das Zerlegen wohnt in konsole-schichten.js, damit es
+// ohne Browser prüfbar bleibt. Der Puffer malt bei jedem Chunk alles neu, also muss
+// sich der Lauf merken, was der Nutzer selbst aufgemacht hat — sonst fällt jeder
+// Ordner beim nächsten Textstück wieder zu.
+function konsoleHtml(stream) {
+  if (!stream.buffer) return '';
+  if (!stream.formatierer) stream.formatierer = new KonsoleSchichten.KonsoleFormatierer();
+  const html = stream.formatierer.HTML({
+    html: stream.buffer,
+    lebt: stream.status === 'running' || stream.status === 'queued',
+    offen: stream.falten
+  });
+  // Was gerade gemalt ist, ist keine Nutzerwahl: der Browser meldet das Einfügen
+  // eines offenen Ordners ebenfalls als toggle. Nur die Abweichung zählt.
+  stream.faltenspuren = {};
+  for (const block of stream.formatierer.blocks) stream.faltenspuren[block.schluessel] = block.offen;
   return html;
 }
 
@@ -666,7 +622,7 @@ function openRunPane(taskId, init = {}) {
   if (verdraengt && verdraengt !== taskId) state.streams.delete(verdraengt);
 
   const stream = Object.assign(
-    { taskId, slot, buffer: '', status: 'queued', title: '', folder: '', prompt: '', startedAt: Date.now() },
+    { taskId, slot, buffer: '', status: 'queued', title: '', folder: '', prompt: '', falten: {}, startedAt: Date.now() },
     bestehend || {},
     init,
     { slot }
@@ -696,18 +652,23 @@ function renderRunPane(slot) {
   if (!stream) {
     pane.dot.className = 'run-pane-dot';
     pane.title.textContent = `Konsole ${slot + 1}`;
+    pane.harness.textContent = '';
     pane.folder.textContent = '';
     pane.cancel.hidden = true;
     return;
   }
 
   pane.dot.className = `run-pane-dot ${stream.status}`;
-  pane.title.textContent = stream.title || (stream.prompt ? stream.prompt.slice(0, 40) : 'Auftrag');
+  // Der Auftragstitel ist die Zeile, an der der Nutzer seinen Lauf wiedererkennt —
+  // Harness und Modell daneben sind die Art, nicht der Name.
+  pane.title.textContent = stream.prompt
+    ? stream.prompt.replace(/\s+/g, ' ').trim()
+    : (stream.title || 'Auftrag');
+  pane.harness.textContent = stream.title || '';
   pane.folder.textContent = stream.folder || '';
   pane.cancel.hidden = stream.status === 'done' || stream.status === 'error';
-  const grund = stream.buffer
-    ? formatReasoningAndOutput(stream.buffer)
-    : `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
+  const grund = konsoleHtml(stream)
+    || `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
   pane.body.innerHTML = grund + wartendeHtml(stream);
   scrollRunPaneToBottom(slot);
 }
@@ -716,7 +677,7 @@ function appendRunOutput(stream, htmlContent) {
   const pane = dom.runPanes[stream.slot];
   stream.buffer += htmlContent;
   if (!pane) return;
-  pane.body.innerHTML = formatReasoningAndOutput(stream.buffer) + wartendeHtml(stream);
+  pane.body.innerHTML = konsoleHtml(stream) + wartendeHtml(stream);
   scrollRunPaneToBottom(stream.slot);
   // Ersetzt der Chunk den Inhalt, wird neu umgebrochen: die Endhöhe kennt das Layout
   // erst im nächsten Frame, also einmal nachziehen.
@@ -733,6 +694,18 @@ function setupRunPanes() {
       const b = pane.body;
       runPaneFollow[slot] = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
     });
+
+    // Was der Nutzer selbst aufklappt, überlebt den nächsten Chunk: toggle bubblt
+    // nicht, also im Erfassen zuhören. Ein Ordner, der beim Neusetzen aus dem Feld
+    // fällt, meldet noch einmal — wer nicht mehr im Feld liegt, schreibt nichts.
+    pane.body.addEventListener('toggle', (e) => {
+      const ordner = e.target.closest?.('[data-schluessel]');
+      const stream = streamAtSlot(slot);
+      if (!ordner || !stream || !ordner.isConnected) return;
+      const schluessel = ordner.dataset.schluessel;
+      if (stream.faltenspuren?.[schluessel] === ordner.open) return;
+      stream.falten[schluessel] = ordner.open;
+    }, true);
 
     pane.copy.addEventListener('click', () => {
       navigator.clipboard.writeText(pane.body.innerText);
@@ -784,6 +757,14 @@ function syncPaneTargets() {
 
 // Ein Auftrag aus der Historie kommt in ein Feld — das mit dem beendeten Lauf weicht.
 // Er richtet das Feld auch auf sein Ziel ein: wer ihn anklickt, will dort weitermachen.
+function zeigeKonsole(slot) {
+  if (slot === -1 || !dom.runPanes[slot]) return;
+  dom.runPanes.forEach((pane, i) => {
+    if (pane) pane.root.classList.toggle('ist-fokus', i === slot);
+  });
+  dom.runPanes[slot].root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function showTaskInPane(task) {
   if (state.panes.includes(task.id)) return;
   const status = task.status === 'running' ? 'running' : (task.status === 'queued' ? 'queued' : 'done');
@@ -1569,7 +1550,8 @@ function renderProjectTree() {
     taskList.className = `task-list ${isExpanded ? '' : 'hidden'}`;
 
     projectTasks.forEach(task => {
-      const isTaskActive = state.panes.includes(task.id);
+      const konsole = state.panes.indexOf(task.id);
+      const isTaskActive = konsole !== -1;
       const taskItem = document.createElement('div');
       taskItem.className = `task-item ${isTaskActive ? 'active' : ''}`;
       taskItem.dataset.taskId = task.id;
@@ -1599,6 +1581,7 @@ function renderProjectTree() {
         <div class="task-meta">
           <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
           <span class="task-badge">${statusIcon} ${escapeHtml(task.harness || 'cli')} · ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
+          ${isTaskActive ? `<span class="task-konsole">Konsole ${konsole + 1}</span>` : ''}
         </div>
         ${aktion}
       `;
@@ -1744,6 +1727,9 @@ function selectTask(task) {
   // Der Modus ist eine eigene Achse zum Tab: ohne ihn liegt die Konsole hinter dem
   // Terminal, und das gerade geladene Protokoll wäre unsichtbar.
   setStudioMode('dispatch');
+  // Klick auf einen Auftrag heißt: diese Konsole zeigen. Liegt sie schon in einem
+  // Feld, wird sie markiert und hergerollt — sonst fehlt das Gefühl, anzukommen.
+  zeigeKonsole(state.panes.indexOf(task.id));
 }
 
 // Der neue Auftrag bekommt sein Feld erst mit task_created — hier wird nur der
