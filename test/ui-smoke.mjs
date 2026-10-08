@@ -50,11 +50,14 @@ const HEALTH = [
   { name: "Claude Code", cmd: "claude", available: true, version: "2.0" },
   { name: "Qoder", cmd: "qoder", available: false }
 ];
+const MODEL_TEST_ROUTES = [
+  { name: "OpenCode", harnessId: "opencode", harness: "opencode", command: "opencode", model: "Standard", enabled: true }
+];
 
 const ANTWORTEN = {
   "GET /api/status": {
     health: HEALTH,
-    clis: HEALTH,
+    clis: [...HEALTH.slice(0, 2), ...MODEL_TEST_ROUTES],
     dispatch: { max_concurrent: 3 }
   },
   "GET /api/workspace": {
@@ -90,7 +93,12 @@ const ANTWORTEN = {
       }
     ]
   },
-  "GET /api/model-presets": {},
+  "GET /api/model-presets": {
+    opencode: [
+      { id: "Standard", label: "Standard" },
+      { id: "opencode/fledge-alpha-free", label: "Fledge Alpha (Free Tier)" }
+    ]
+  },
   "GET /api/agents-md": {},
   "GET /api/skills": [],
   "GET /api/usage": {},
@@ -162,6 +170,11 @@ window.FitAddon = { FitAddon: class { fit() {} } };
 window.fetch = async (pfad, optionen = {}) => {
   const schluessel = `${optionen.method || "GET"} ${pfad}`;
   fetches.push({ schluessel, body: optionen.body });
+  // Modell-Presets absichtlich später liefern als den Status: so wird die
+  // parallele Startreihenfolge und das anschließende UI-Update abgedeckt.
+  if (schluessel === "GET /api/model-presets") {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
   const daten = ANTWORTEN[schluessel] ?? ANTWORTEN[pfad] ?? {};
   return { ok: true, status: 200, json: async () => daten, text: async () => JSON.stringify(daten) };
 };
@@ -227,6 +240,8 @@ pruefe("Übernehmen ist im Ruhezustand versteckt", takeover?.hidden === true);
 // --- 4. Das Skript ist ohne Fehler durchgelaufen -------------------------
 
 pruefe("keine JS-Fehler beim Bootstrap", fehler.length === 0, fehler.join(" | "));
+pruefe("OpenCode-Modellliste erscheint auch bei verspätetem Preset-Laden",
+  [...document.querySelectorAll(".model-dropdown option")].some((option) => option.value === "opencode/fledge-alpha-free"));
 // Das interaktive Terminal listet nur noch die TUI-only-CLI (hier freebuff);
 // die Headless-CLIs (claude, qoder) gehören in den Auto-Route-Dispatch.
 pruefe("CLI-Auswahl zeigt nur die TUI-CLI (freebuff)",

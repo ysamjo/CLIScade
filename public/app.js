@@ -1043,6 +1043,11 @@ async function loadModelPresets(forceRefresh = false) {
     const url = forceRefresh ? '/api/model-presets?refresh=1' : '/api/model-presets';
     const res = await fetch(url);
     state.modelPresets = await res.json();
+    // Status und Modelllisten laden parallel beim Start. Wenn der Status zuerst
+    // eintrifft, wird die Einstellungsansicht zunächst mit dem Standard-Fallback
+    // gerendert. Nach dem Eintreffen der Presets muss sie erneut aufgebaut werden.
+    if (state.clis.length) renderHarnessConfigList();
+    updateNewRouteModelOptions();
     return state.modelPresets;
   } catch (err) {
     console.error("Fehler beim Laden der Modell-Presets:", err);
