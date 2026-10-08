@@ -232,10 +232,15 @@ pruefe("keine JS-Fehler beim Bootstrap", fehler.length === 0, fehler.join(" | ")
 pruefe("CLI-Auswahl zeigt nur die TUI-CLI (freebuff)",
   document.querySelectorAll("#interactive-cli-select option").length === 1
   && document.querySelector("#interactive-cli-select option")?.value === "freebuff");
+pruefe("Freebuff lässt sich nicht als Headless-Route hinzufügen",
+  document.querySelector('#new-route-harness option[value="freebuff"]') === null);
 pruefe("Dispatch-Konsolen haben je ein Routing-Feld",
   document.querySelectorAll("#run-split .run-pane-routing").length === 2);
 pruefe("Das globale Routing-Feld ist raus",
   document.querySelector("#harness-override") === null);
+pruefe("die gemeinsame Statuszeile unter den Konsolen ist entfernt",
+  document.querySelector(".prompt-box") === null
+  && document.querySelector("#agents-context-pill, #route-usage-pill, #run-capacity-pill") === null);
 
 // --- 5. Default ist Auto-Route: kein Terminal-Autostart beim Laden -------
 
@@ -383,10 +388,6 @@ konsole(0)?.querySelector(".run-pane-cancel")?.click();
 await ruhen(2);
 pruefe("Klick auf Abbrechen meldet genau diese Task-ID",
   frames.some((f) => f.type === "cancel" && f.taskId === A.id), JSON.stringify(frames));
-
-pruefe("der Zähler meldet die freie Kapazität",
-  (document.querySelector("#run-capacity-text")?.textContent || "").includes("1/3"),
-  document.querySelector("#run-capacity-text")?.textContent);
 
 // --- 10. Die Kappe ist ein Schalter in den Einstellungen ------------------
 

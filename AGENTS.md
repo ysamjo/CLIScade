@@ -6,10 +6,11 @@ Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, c
 
 | Modul | Pfad | Beschreibung |
 | :--- | :--- | :--- |
-| **Server** | `server.js` | Express 5 + `ws`: `/api/*`, Run-Pool, Dispatch-Queue, PTY, Einstellungen, Task-Historie |
+| **Server** | `server.js` | Express 5 + `ws`: `/api/*`, Run-Pool, Dispatch-Queue, Freebuff-PTY, Scheduler, Telegram, Einstellungen, Task-Historie |
 | **Entscheidung** | `routing.js` | Reine Logik ohne IO: `dispatchSlotDecision`, `busyHarnessBlocker`, `knownBrokenBlocker`, `armIdleWatchdog`, `ptyOwnershipBlocker`, `startupRefusal`, `gatewayEnvFromShell` |
+| **Runtime** | `runtime/` | Feste Harness-Registry, gemeinsamer Process Runner, `runHarness()`, Ereignisse, Fehlerklassen, Sessions und CLI-Adapter |
 | **Oberfläche** | `public/` | Vanilla JS ohne Bundler: `app.js` (Zustand + Rendering), `konsole-schichten.js` (Leseschichten der Konsole, reiner Text ohne DOM), `index.html`, `style.css`, `icons.js`, `sw.js` |
-| **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js` (Service Worker in erfundener Scope-Welt), `konsole_queue.test.js` (zwei Aufträge in einem Ordner vor der echten Seite), `konsole_schichten.test.js` (Schichten aus echten Protokollen) |
+| **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `runtime/*.test.js` (Adapter, Runner, Sessions, Sicherheit), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js`, `konsole_queue.test.js`, `konsole_schichten.test.js` |
 
 **Laufzeitumgebung**: Node-Prozess auf Port `3000`, bindet `0.0.0.0` (im LAN sichtbar).
 Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.yaml`
@@ -19,6 +20,9 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 ## Konventionen
 - **Entscheidungen gehören nach `routing.js`**, `server.js` verdrahtet nur. Ein Gate, das sich nicht
   ohne Kind-Prozess testen lässt, ist an der falschen Stelle.
+- **CLI-Wissen gehört nach `runtime/`**. `server.js` darf keine harness-spezifischen Argumentlisten,
+  Ausgabeparser oder Resume-Regeln enthalten. Normale Läufe gehen ausschließlich über `runHarness()`;
+  `node-pty` bleibt allein für Freebuff. Konfiguration speichert `harnessId`, nie ein frei gewähltes Executable.
 - **Test zuerst schreiben und scheitern lassen.** `ui-smoke.mjs` zählt `pruefe()`-Behauptungen und am
   Ende aus; die Ketten-Tests fahren einen echten Server in eigenem `HOME` mit Stub-CLIs.
 - `public/` wirkt nach einem Browser-Reload, `server.js` und `routing.js` erst nach einem
@@ -32,13 +36,11 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 
 ```bash
 npm start                        # Server auf http://localhost:3000
-node test/ui-smoke.mjs           # 133 Prüfungen im jsdom (Struktur + Verhalten)
+node test/ui-smoke.mjs           # Oberfläche im jsdom (Struktur + Verhalten)
 node test/konsole_schichten.test.js
                                  # 34 Behauptungen: Schichten aus echten Protokollen
-npm run test:routing             # 55 Tests: 28 Entscheidungen + 19 Dispatch-Ketten
-                                 #            + 4 Service Worker + 3 Konsolen-Schichtung
-                                 #            + 1 Schichten-Modul
-npm test                         # alter Konsens-Test (test_consensus.js)
+npm run test:routing             # Node-Tests inklusive runtime/ und Dispatch-Ketten
+npm test                         # Gesamtsuite inklusive UI-Smoke
 
 # Wegwerf-Instanz für Browser-Prüfungen — NIE die Instanz auf 3000 anfassen:
 mkdir -p /tmp/hrg/bin && printf '#!/bin/sh\necho stub\n' > /tmp/hrg/bin/stub-run && chmod +x /tmp/hrg/bin/*
@@ -53,8 +55,8 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
   eine per `$(...)` gebaute Zeichenkette zerlegt zsh **nicht**, der Server läuft dann trotzdem und
   vergiftet jedes `qodercli` mit `sdk_invalid_args`. Nachprüfen:
   `ps eww -p <PID> | tr ' ' '\n' | grep -cE '^QODER'` muss `0` sein.
-- **LAN-offen**: jeder Spawn-Pfad bleibt über `PTY_ALLOWED_COMMANDS` / `TESTABLE_COMMANDS`
-  (beide aus `CLI_INSTALL_REGISTRY` abgeleitet) auf die eingetragenen CLIs beschränkt.
+- **LAN-offen**: jeder Spawn-Pfad bleibt über die feste `HARNESS_REGISTRY` beziehungsweise deren
+  `PTY_ALLOWED_COMMANDS` / `TESTABLE_COMMANDS` auf eingetragene CLIs beschränkt.
   **Modell-Tests** laufen in einem Wegwerfverzeichnis (`harness-modeltest-…` unter `/tmp`),
   **Dispatches und PTY arbeiten direkt im gewählten Projektordner** — dort gibt es keine
   Isolation, der Auftrag schreibt im Original.

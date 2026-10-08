@@ -162,23 +162,6 @@
             </div>
           </div>
 
-          <!-- GEMEINSAME WERKZEUGE: Kontext und Kontingente gelten für beide Konsolen.
-               Routing ist pro Konsole im Composer gewählt. -->
-          <div class="prompt-box">
-            <div class="prompt-controls">
-              <div class="prompt-context-badges">
-                <span class="context-pill" id="agents-context-pill" title="Klicken, um AGENTS.md in den Einstellungen zu öffnen">
-                  Kontext: <strong id="agents-context-text">Developer/AGENTS.md aktiv</strong>
-                </span>
-                <span class="context-pill usage-pill" id="route-usage-pill" title="Klicken, um Kontingente in den Einstellungen anzuzeigen">
-                  Verbleibend: <strong id="route-usage-text">Lade...</strong>
-                </span>
-                <span class="context-pill" id="run-capacity-pill" title="Gleichzeitig laufende Aufträge — Kappe in den Einstellungen">
-                  Frei: <strong id="run-capacity-text">–</strong>
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
     </main>
@@ -244,7 +227,7 @@
             <span class="item-icon" data-icon="heart"></span>
             <div class="item-text">
               <span class="item-title">CLI-Diagnose & Status</span>
-              <span class="item-desc">Health-Check der 8 CLIs</span>
+              <span class="item-desc">Health-Check der 9 CLIs</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="remote">
@@ -385,7 +368,7 @@
               </div>
               <div style="display:flex; gap:8px; align-items:center;">
                 <button id="sync-skills-btn" class="btn btn-secondary" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
-                  <span data-icon="refresh"></span> Skills für alle 9 CLIs synchronisieren
+                  <span data-icon="refresh"></span> Skills für 8 CLI-Ziele synchronisieren
                 </button>
                 <button id="open-install-skill-btn" class="btn btn-primary" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
                   <span data-icon="plus"></span> Skill installieren
@@ -721,7 +704,6 @@
             <option value="opencode">OpenCode (opencode)</option>
             <option value="antigravity_cli">Antigravity (agy)</option>
             <option value="qoder">Qoder (qodercli)</option>
-            <option value="freebuff">Freebuff (freebuff)</option>
             <option value="codebuddy">CodeBuddy (codebuddy)</option>
             <option value="cursor">Cursor (agent)</option>
           </select>
@@ -798,7 +780,7 @@
       <!-- CARDS GRID -->
       <div class="installer-modal-body">
         <div id="installer-cards-grid" class="installer-cards-grid">
-          <!-- Dynamically populated cards for all 8 CLIs -->
+          <!-- Dynamisch befüllte Installationskarten für alle neun CLIs -->
         </div>
       </div>
 
@@ -821,7 +803,7 @@
       </div>
       <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
         <p style="font-size:12px; color:var(--text-muted); margin:0;">
-          Der Skill wird zentral unter <code>~/.agents/skills/</code> abgelegt und sofort automatisch als Symlink für alle 9 CLIs (Claude Code, OpenCode, Codex, Cline, Qoder, CodeBuddy, Antigravity, Cursor) freigeschaltet.
+          Der Skill wird zentral unter <code>~/.agents/skills/</code> abgelegt und als Symlink für acht CLI-Ziele (Claude Code, OpenCode, Codex, Cline, Qoder, CodeBuddy, Antigravity, Cursor) freigeschaltet.
         </p>
 
         <div style="display:flex; gap:8px; border-bottom:1px solid var(--border-color); padding-bottom:8px;">

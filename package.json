@@ -1,12 +1,12 @@
 {
   "name": "harness-router-gui",
   "version": "1.0.0",
-  "description": "Premium Web GUI & Orchestrator für 8 KI-Coding-Agenten (Claude Code, Codex, Cline, OpenCode, Antigravity, Qoder, Freebuff, CodeBuddy)",
+  "description": "Web-Oberfläche und Orchestrator für neun KI-Coding-Harnesses",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_consensus.js",
-    "test:routing": "node --test \"test/*.test.js\""
+    "test": "npm run test:routing && node test/ui-smoke.mjs",
+    "test:routing": "node --test \"test/*.test.js\" \"test/runtime/*.test.js\""
   },
   "keywords": [
     "harness",

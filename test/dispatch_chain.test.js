@@ -37,6 +37,8 @@ makeStub('stub-login', 'echo "angemeldet"');
 makeStub('stub-configfehler', 'echo "Configuration is invalid at /Users/family/.config/opencode/opencode.jsonc"');
 // Der echte Fall: qodercli bricht mit sdk_invalid_args ab, wenn der Host-Marker im Kind steht.
 makeStub('stub-env', 'echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
+makeStub('stub-codex-auth', 'echo \'{"type":"error","message":"Authentication failed"}\'; exit 1');
+makeStub('stub-codex-rate', 'echo \'{"type":"error","message":"429 Too Many Requests"}\'; exit 1');
 // Cursor lehnt ein untrusted Verzeichnis still ab (Exit 0) — die Flags sind der Auftrag.
 makeStub('agent', 'echo "ARGS=$*"; echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
 // Taktende Laeufe: bleiben unter der Idle-Frist und liefern ein Zeitfenster zum Eingreifen.
@@ -56,11 +58,35 @@ barrierStub('stub-bar-b', 'stub-bar-a');
 // Server-Prozess sieht sie nie — er soll sie sich aber bei der Shell holen koennen.
 makeStub('stub-shell', 'echo "ANTHROPIC_BASE_URL=http://gateway.stub/v1"; echo "TERM_PROGRAM=iTerm.app"');
 makeStub('claude', 'echo "BASE=[${ANTHROPIC_BASE_URL:-keiner}]"');
+makeStub('freebuff', 'echo DARF_NICHT_LAUFEN');
+
+// Die Konfiguration darf nur feste Harness-IDs enthalten. Jeder Test tauscht
+// deshalb die Implementierung bekannter Executables im Wegwerf-PATH aus.
+const stubHarnesses = {
+  'stub-bar-a': ['qoder', 'qodercli'], 'stub-bar-b': ['codebuddy', 'codebuddy'],
+  'stub-tick-a': ['qoder', 'qodercli'], 'stub-tick-b': ['codebuddy', 'codebuddy'],
+  'stub-hang': ['qoder', 'qodercli'], 'stub-run': ['codebuddy', 'codebuddy'],
+  'stub-login': ['qoder', 'qodercli'], 'stub-configfehler': ['qoder', 'qodercli'],
+  'stub-env': ['qoder', 'qodercli'], claude: ['claude', 'claude'], agent: ['cursor', 'agent'],
+  'stub-codex-auth': ['codex', 'codex'], 'stub-codex-rate': ['codex', 'codex'],
+  freebuff: ['freebuff', 'freebuff']
+};
+
+function knownRoutes(routes, targetBin) {
+  return routes.map((route) => {
+    const mapping = stubHarnesses[route.command];
+    assert.ok(mapping, `Test-Harness nicht zugeordnet: ${route.command}`);
+    fs.copyFileSync(path.join(binDir, route.command), path.join(targetBin, mapping[1]));
+    fs.chmodSync(path.join(targetBin, mapping[1]), 0o755);
+    const { command, harness, ...rest } = route;
+    return { ...rest, harnessId: mapping[0] };
+  });
+}
 
 function writeConfig(clis, extra = {}) {
   // JSON is valid YAML, so the stub config needs no formatter.
   fs.writeFileSync(path.join(stateDir, 'config.yaml'), JSON.stringify({
-    clis,
+    clis: knownRoutes(clis, binDir),
     remote: { telegram: { enabled: false } },
     ...extra
   }));
@@ -147,6 +173,7 @@ function httpJson(pfad) {
 
 function httpPost(pfad, data) {
   return new Promise((resolve, reject) => {
+    if (pfad === '/api/config') data = { ...data, clis: knownRoutes(data.clis, parBin) };
     const body = JSON.stringify(data);
     const req = require('node:http').request(
       { port: PAR_PORT, host: '127.0.0.1', path: pfad, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
@@ -196,7 +223,7 @@ parServer.stderr.on('data', (d) => parLog.push(d.toString()));
 
 function parConfig(clis, extra = {}) {
   fs.writeFileSync(path.join(parState, 'config.yaml'), JSON.stringify({
-    clis,
+    clis: knownRoutes(clis, parBin),
     remote: { telegram: { enabled: false } },
     ...extra
   }));
@@ -378,7 +405,7 @@ test('parallel: Abbrechen trifft nur den eigenen Task', async () => {
     { prompt: 'erster Auftrag', projectPath: parProjectA, harnessOverride: 'Takt A' },
     { prompt: 'zweiter Auftrag', projectPath: parProjectB, harnessOverride: 'Takt B' }
   ], (msg, ws) => {
-    if (sent || msg.type !== 'route_selected' || msg.command !== 'stub-tick-b') return;
+    if (sent || msg.type !== 'route_selected' || msg.command !== 'codebuddy') return;
     sent = true;
     ws.send(JSON.stringify({ type: 'cancel', taskId: msg.taskId }));
   });
@@ -393,6 +420,26 @@ test('parallel: Abbrechen trifft nur den eigenen Task', async () => {
   assert.strictEqual(other.exitCode, 0, 'der andere Lauf darf der Abbruch nicht etwas angehen:\n' + trail);
   assert.ok(messages.some((m) => m.type === 'output' && m.taskId === other.taskId && /FERTIG/.test(m.html || '')),
     'die Ausgabe des anderen Laufs muss bei seinem Task landen:\n' + trail);
+});
+
+test('Wartenden Auftrag abbrechen speichert den Abbruch-Code', async () => {
+  await waitForParServer();
+  parConfig([{ name: 'Takt', command: 'stub-tick-a', enabled: true }]);
+  let cancelledId;
+  const messages = await runMany([
+    { prompt: 'laufend', projectPath: parProjectA },
+    { prompt: 'wartend', projectPath: parProjectA }
+  ], (message, ws) => {
+    if (message.type === 'queued' && !cancelledId) {
+      cancelledId = message.taskId;
+      ws.send(JSON.stringify({ type: 'cancel', taskId: cancelledId }));
+    }
+  });
+  assert.ok(cancelledId);
+  const saved = (await httpJson('/api/tasks')).tasks.find((task) => task.id === cancelledId);
+  assert.equal(saved.status, 'cancelled');
+  assert.equal(saved.exitCode, 130);
+  assert.equal(messages.filter((message) => message.type === 'done').length, 2);
 });
 
 test('parallel: die Ausgabe eines tickenden Laufs bleibt Zeile fuer Zeile', async () => {
@@ -438,7 +485,7 @@ test('chain: eine Route die nichts mehr schreibt, wird getoetet und die Kette la
 
 test('chain: ein gemessener Login-Fehler ueberspringt die Route, die explizite Wahl nicht', async () => {
   fs.writeFileSync(path.join(stateDir, 'harness-health.json'), JSON.stringify({
-    'stub-login': { errorKind: 'auth', at: Date.now() - 60 * 60 * 1000 }
+    qodercli: { errorKind: 'auth', at: Date.now() - 60 * 60 * 1000 }
   }));
   writeConfig([
     { name: 'Kaputter Login', command: 'stub-login', enabled: true, model: 'plan-free' },
@@ -455,6 +502,20 @@ test('chain: ein gemessener Login-Fehler ueberspringt die Route, die explizite W
   assert.deepStrictEqual(routes(chosen), ['Kaputter Login'], 'eine explizite Wahl darf nie still uebersprungen werden:\n' + describe(chosen));
 
   fs.rmSync(path.join(stateDir, 'harness-health.json'));
+});
+
+test('chain: strukturierter Auth- und Rate-Limit-Fehler reichen an die nächste Route weiter', async () => {
+  await waitForServer();
+  for (const [stub, expected] of [['stub-codex-auth', 'Authentication failed'], ['stub-codex-rate', '429 Too Many Requests']]) {
+    writeConfig([
+      { name: 'Codex kaputt', command: stub, enabled: true },
+      { name: 'Übernehmer', command: 'stub-run', enabled: true }
+    ]);
+    const messages = await runDispatch({ prompt: 'Aufgabe' });
+    assert.deepEqual(routes(messages), ['Codex kaputt', 'Übernehmer']);
+    assert.match(describe(messages), new RegExp(expected));
+    assert.equal(messages.at(-1).exitCode, 0);
+  }
 });
 
 test('chain: ein Nutzerabbruch beendet die Kette, statt an die naechste Route weiterzureichen', async () => {
@@ -565,6 +626,14 @@ function httpPostStatus(pfad, data) {
   });
 }
 
+test('Skill-Installation führt Repository-URLs nicht als Shell-Befehl aus', async () => {
+  await waitForParServer();
+  const marker = path.join(sandbox, 'skill-injection-marker');
+  const payload = `ungueltig\"; touch ${marker}; #`;
+  await httpPostStatus('/api/skills/install', { mode: 'git', name: 'injection-test', repoUrl: payload });
+  assert.equal(fs.existsSync(marker), false);
+});
+
 function legeTasks(taskList) {
   fs.writeFileSync(path.join(parState, 'studio-tasks.json'), JSON.stringify({
     rootDirectory: parDir,
@@ -644,6 +713,111 @@ test('archiv: ein zweites Fenster erfährt das Einpacken', async () => {
   assert.strictEqual(m.taskId, 'task_bei', 'die Meldung muss die Aufgabe nennen');
   assert.strictEqual(m.archived, true, 'die Meldung muss sagen, dass sie jetzt im Archiv liegt');
   beobachter.close();
+});
+
+test('Sicherheit: unbekannter Befehl kann nicht gespeichert oder gestartet werden', async () => {
+  await waitForParServer();
+  const response = await httpPostStatus('/api/config', { clis: [{ name: 'Fremd', command: 'evil; touch /tmp/harness-injection' }] });
+  assert.equal(response.status, 400);
+  assert.match(response.text, /Unbekanntes Harness/);
+});
+
+test('Sicherheit: Konfiguration enthält keine Executables und API keinen Bot-Token', async () => {
+  parConfig([{ name: 'Takt A', command: 'stub-tick-a', enabled: true }], {
+    remote: { telegram: { enabled: false, botToken: 'geheimer-test-token' } }
+  });
+  const config = await httpJson('/api/config');
+  assert.equal(config.remote.telegram.hasToken, true);
+  assert.doesNotMatch(JSON.stringify(config), /geheimer-test-token/);
+  const stored = fs.readFileSync(path.join(parState, 'config.yaml'), 'utf8');
+  assert.doesNotMatch(stored, /command:/);
+  assert.match(stored, /harnessId/);
+});
+
+test('Sicherheit: ungültiger Projektpfad wird vor dem Dispatch abgelehnt', async () => {
+  parConfig([{ name: 'Takt A', command: 'stub-tick-a', enabled: true }]);
+  await assert.rejects(runMany([{ prompt: 'nicht starten', projectPath: path.join(parDir, 'fehlend') }]), /Projektpfad/);
+});
+
+test('Wiederholte Request-ID startet nur einen Auftrag', async () => {
+  await waitForParServer();
+  parConfig([{ name: 'Gesund', command: 'stub-run', enabled: true }]);
+  const messages = await new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${PAR_PORT}`);
+    const received = [];
+    const guard = setTimeout(() => { ws.close(); reject(new Error('Kein Abschluss')); }, 10000);
+    ws.on('error', reject);
+    ws.on('open', () => {
+      const payload = JSON.stringify({ type: 'dispatch', requestId: 'request-duplicate-123', prompt: 'Aufgabe', projectPath: parProjectA });
+      ws.send(payload);
+      ws.send(payload);
+    });
+    ws.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      received.push(message);
+      if (message.type === 'done') { clearTimeout(guard); ws.close(); resolve(received); }
+    });
+  });
+  const ids = createdIds(messages);
+  assert.equal(ids.length, 2);
+  assert.equal(ids[0], ids[1]);
+  assert.equal(messages.filter((message) => message.type === 'route_selected').length, 1);
+});
+
+test('Freebuff bleibt außerhalb von Auto-Route und Konsens', async () => {
+  parConfig([
+    { name: 'Freebuff', command: 'freebuff', enabled: true },
+    { name: 'Gesund', command: 'stub-run', enabled: true }
+  ]);
+  const automatic = await runMany([{ prompt: 'Aufgabe', projectPath: parProjectA }]);
+  assert.deepEqual(routes(automatic), ['Gesund']);
+  const consensus = await runMany([{ prompt: 'Aufgabe', projectPath: parProjectA, harnessOverride: 'consensus' }]);
+  assert.equal(consensus.at(-1).exitCode, 1);
+  assert.doesNotMatch(describe(consensus), /DARF_NICHT_LAUFEN/);
+});
+
+test('Konsens speichert einen Phasenausfall als unvollständig', async () => {
+  parConfig([
+    { name: 'Kaputte Konfig', command: 'stub-configfehler', enabled: true },
+    { name: 'Gesund', command: 'stub-run', enabled: true }
+  ]);
+  const messages = await runMany([{ prompt: 'Aufgabe', projectPath: parProjectA, harnessOverride: 'consensus' }]);
+  const taskId = createdIds(messages)[0];
+  const persisted = (await httpJson('/api/tasks')).tasks.find((task) => task.id === taskId);
+  assert.equal(messages.at(-1).exitCode, 1);
+  assert.equal(persisted.status, 'incomplete');
+});
+
+test('Konsens wählt zwei verschiedene Harnesses trotz doppelter Route', async () => {
+  await waitForParServer();
+  parConfig([
+    { name: 'Erster', command: 'stub-login', enabled: true },
+    { name: 'Zweiter', command: 'stub-login', enabled: true },
+    { name: 'Dritter', command: 'stub-run', enabled: true }
+  ]);
+  const messages = await runMany([{ prompt: 'Aufgabe', projectPath: parProjectA, harnessOverride: 'consensus' }]);
+  assert.match(messages.find((message) => message.type === 'route_selected').harness, /Erster ↔ Dritter/);
+});
+
+test('AGENTS-Editor schreibt nur in den gewählten Projektordner', async () => {
+  const outside = path.join(parDir, 'nicht-beschreiben.md');
+  fs.writeFileSync(outside, 'alt');
+  const response = await httpPostStatus('/api/agents-md', {
+    target: 'project', projectPath: parProjectA, customPath: outside, content: 'neuer Text'
+  });
+  assert.equal(response.status, 200, response.text);
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'alt');
+  assert.equal(fs.readFileSync(path.join(parProjectA, 'AGENTS.md'), 'utf8'), 'neuer Text');
+});
+
+test('Scheduler lehnt ungültige Pfade ab und beschriftet das effektive Intervall', async () => {
+  const invalid = await httpPostStatus('/api/schedules', { projectPath: path.join(parDir, 'fehlend'), interval: 'daily_08_00' });
+  assert.equal(invalid.status, 400);
+  const valid = await httpPostStatus('/api/schedules', { projectPath: parProjectA, interval: 'weekly_monday', enabled: false });
+  assert.equal(valid.status, 200, valid.text);
+  const job = valid.json.schedules[0];
+  assert.equal(job.intervalLabel, 'Wöchentlich (Montag 08:00)');
+  assert.ok(job.createdAt);
 });
 
 test.after(async () => {

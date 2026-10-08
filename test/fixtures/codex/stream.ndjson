@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"codex-session"}
+{"type":"item.started","item":{"id":"tool-1","type":"command_execution","command":"pwd"}}
+{"type":"item.completed","item":{"id":"tool-1","type":"command_execution","aggregated_output":"/tmp/projekt"}}
+{"type":"item.completed","item":{"type":"reasoning","text":"Überlegen"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"Antwort"}}
+{"type":"turn.completed"}

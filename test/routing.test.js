@@ -10,7 +10,8 @@ const {
   ptyOwnershipBlocker,
   dispatchSlotDecision,
   busyHarnessBlocker,
-  gatewayEnvFromShell
+  gatewayEnvFromShell,
+  isJobDue
 } = require('../routing');
 
 // Waet until a process is gone, so no test leaves orphans behind.
@@ -324,4 +325,12 @@ test('laesst eine bereits gesetzte Gateway-Variable in Ruhe', () => {
 test('ueberspringt Gateway-Variablen, die auch die Shell nicht kennt', () => {
   const picked = gatewayEnvFromShell({ shellEnv: { ANTHROPIC_API_KEY: '' }, currentEnv: {}, names: GATEWAY });
   assert.deepStrictEqual(picked, {});
+});
+
+test('neue Tages- und Wochenjobs laufen erst zum nächsten Termin', () => {
+  const createdAt = '2026-10-05T08:05:00';
+  assert.equal(isJobDue({ interval: 'daily_08_00', createdAt }, new Date('2026-10-05T08:06:00')), false);
+  assert.equal(isJobDue({ interval: 'daily_08_00', createdAt }, new Date('2026-10-06T08:00:00')), true);
+  assert.equal(isJobDue({ interval: 'weekly_monday', createdAt }, new Date('2026-10-05T08:06:00')), false);
+  assert.equal(isJobDue({ interval: 'weekly_monday', createdAt }, new Date('2026-10-12T08:00:00')), true);
 });

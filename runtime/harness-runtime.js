@@ -1,0 +1,105 @@
+const { execFileSync } = require('node:child_process');
+const { HARNESS_REGISTRY } = require('./registry');
+const { runProcess } = require('./process-runner');
+const { canonicalEvent } = require('./events');
+const { classifyError } = require('./errors');
+const { hasSession, acquireSession } = require('./session-store');
+
+const ADAPTERS = Object.freeze({
+  claude: require('./adapters/claude'), codex: require('./adapters/codex'),
+  cline: require('./adapters/cline'), opencode: require('./adapters/opencode'),
+  qoder: require('./adapters/qoder'), antigravity: require('./adapters/antigravity'),
+  codebuddy: require('./adapters/codebuddy'), cursor: require('./adapters/cursor')
+});
+
+function availableCommand(entry, env) {
+  for (const command of entry.commands) {
+    try { return execFileSync('which', [command], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || command; }
+    catch {}
+  }
+  return null;
+}
+
+async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previousSessionId, signal, env = process.env,
+  idleTimeoutMs = 180000, timeoutMs = 30 * 60 * 1000, onEvent, onSpawn, onIdle } = {}) {
+  const entry = HARNESS_REGISTRY[harnessId];
+  if (!entry || !entry.dispatchable) return {
+    status: 'failed', finalText: '', sessionId: null, model,
+    error: { kind: 'harness_failure', retryability: 'never', message: 'Harness ist nicht für Headless-Läufe freigegeben' }, events: [], exitCode: null
+  };
+  const adapter = ADAPTERS[harnessId];
+  const events = [];
+  let sessionId = null;
+  let finalText = '';
+  let explicitError = null;
+  let stdoutBuffer = '';
+  const emit = (rawEvent) => {
+    const event = canonicalEvent(rawEvent, harnessId);
+    if (!event) return;
+    if (events.length < 5000) events.push(event);
+    if (event.sessionId) sessionId = event.sessionId;
+    if (event.type === 'text') finalText += event.text || '';
+    if (event.type === 'result' && event.text) finalText = event.text;
+    if (event.type === 'error') explicitError = event.message || 'Harness-Lauf fehlgeschlagen';
+    try { onEvent?.(event); } catch {}
+  };
+
+  const resume = entry.resumable && previousSessionId && hasSession(harnessId, previousSessionId, env);
+  if (previousSessionId && !resume) emit({ type: 'session_lost', message: 'Gespeicherte Session fehlt; neuer CLI-Thread im selben Projekt' });
+  const release = acquireSession(harnessId, resume ? previousSessionId : null);
+  if (!release) return {
+    status: 'failed', finalText, sessionId: previousSessionId, model,
+    error: { kind: 'session_busy', retryability: 'never', message: 'Diese Session arbeitet bereits' }, events, exitCode: null
+  };
+  try {
+    const command = availableCommand(entry, env);
+    if (!command) return {
+      status: 'failed', finalText, sessionId, model,
+      error: { kind: 'not_installed', retryability: 'next_harness', message: `${entry.name} ist nicht installiert` }, events, exitCode: null
+    };
+    const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env });
+    const structured = entry.structuredOutput;
+    const consume = (line) => {
+      if (!line) return;
+      let parsed;
+      try { parsed = JSON.parse(line); } catch {
+        emit({ type: 'text', text: `${line}\n` });
+        return;
+      }
+      for (const event of adapter.normalize(parsed)) emit(event);
+    };
+    const processResult = await runProcess({
+      command, args, cwd, env: { ...env, PWD: cwd }, signal, idleTimeoutMs, timeoutMs, onIdle, onSpawn,
+      onChunk: ({ stream, text }) => {
+        if (stream === 'stderr') { emit({ type: 'warning', text }); return; }
+        if (!structured) { emit({ type: 'text', text }); return; }
+        stdoutBuffer += text;
+        let newline;
+        while ((newline = stdoutBuffer.indexOf('\n')) !== -1) {
+          consume(stdoutBuffer.slice(0, newline).trim());
+          stdoutBuffer = stdoutBuffer.slice(newline + 1);
+        }
+        if (stdoutBuffer.length > 1024 * 1024) {
+          emit({ type: 'warning', text: 'Zu lange Ausgabezeile abgeschnitten' });
+          stdoutBuffer = '';
+        }
+      }
+    });
+    if (structured && stdoutBuffer.trim()) consume(stdoutBuffer.trim());
+    const raw = `${processResult.stdoutTail}\n${processResult.stderrTail}`;
+    const error = classifyError({ explicit: explicitError || processResult.error?.message, raw,
+      stderr: events.some((event) => event.type === 'result') ? '' : processResult.stderrTail,
+      exitCode: processResult.exitCode, reason: processResult.reason })
+      || (!events.some((event) => ['text', 'result', 'tool_start', 'tool_result'].includes(event.type))
+        ? { kind: 'harness_failure', retryability: 'next_harness', message: 'Harness endete ohne Ergebnis' } : null);
+    return {
+      status: error?.kind === 'cancelled' ? 'cancelled' : error ? 'failed' : 'completed',
+      finalText, sessionId, model, error, events, exitCode: processResult.exitCode,
+      rawTail: raw.slice(-64 * 1024)
+    };
+  } finally {
+    release();
+  }
+}
+
+module.exports = { runHarness };

@@ -1,0 +1,5 @@
+{"type":"step_start","sessionID":"opencode-session"}
+{"type":"tool","part":{"type":"tool","callID":"tool-1","tool":"shell","state":{"status":"running","input":{"command":"pwd"}}}}
+{"type":"tool","part":{"type":"tool","callID":"tool-1","tool":"shell","state":{"status":"completed","output":"/tmp/projekt"}}}
+{"type":"reasoning","part":{"type":"reasoning","text":"Überlegen"}}
+{"type":"text","part":{"type":"text","text":"Antwort"}}

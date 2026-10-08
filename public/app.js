@@ -15,6 +15,7 @@ let state = {
   // Auftrag => Feld, in dessen Ordner er wartet. Er bekommt kein eigenes Feld.
   wartendIn: {},
   clis: [],
+  harnessRegistry: {},
   dispatch: { max_concurrent: 0 },
   health: [],
   modelPresets: {},
@@ -77,9 +78,6 @@ const dom = {
       send: root.querySelector('.run-pane-send')
     };
   }),
-  runCapacityText: document.getElementById('run-capacity-text'),
-  agentsContextPill: document.getElementById('agents-context-pill'),
-  agentsContextText: document.getElementById('agents-context-text'),
   archiveFilterBtn: document.getElementById('archive-filter-btn'),
   archiveCountText: document.getElementById('archive-count-text'),
 
@@ -154,8 +152,6 @@ const dom = {
   confirmAddRouteBtn: document.getElementById('confirm-add-route-btn'),
 
   // Usage & Quota & Telemetry
-  routeUsagePill: document.getElementById('route-usage-pill'),
-  routeUsageText: document.getElementById('route-usage-text'),
   usageTableBody: document.getElementById('usage-table-body'),
   refreshUsageBtn: document.getElementById('refresh-usage-btn'),
   statOmniCost: document.getElementById('stat-omni-cost'),
@@ -704,7 +700,6 @@ function setupRunPanes() {
     });
     pane.routing.addEventListener('change', () => {
       state.paneRouting[slot] = pane.routing.value;
-      updateRouteUsagePill();
     });
   });
 }
@@ -753,7 +748,7 @@ function showTaskInPane(task) {
   });
   const pane = dom.runPanes[stream.slot];
   if (task.projectPath && task.harness) {
-    stream.folge = { projectPath: task.projectPath, harness: task.harness, model: task.model || null };
+    stream.folge = { projectPath: task.projectPath, harness: task.harness, model: task.model || null, previousTaskId: task.id };
     state.paneTarget[stream.slot] = task.projectPath;
     if (pane && [...pane.target.options].some((o) => o.value === task.projectPath)) {
       pane.target.value = task.projectPath;
@@ -777,12 +772,6 @@ async function refreshRunPool() {
   } catch {
     return;
   }
-  const max = Number(pool.maxConcurrent) || 0;
-  const belegt = (pool.running || []).length + (pool.queued || []).length;
-  if (dom.runCapacityText) {
-    dom.runCapacityText.textContent = max ? `${Math.max(0, max - belegt)}/${max}` : '∞';
-  }
-
   const laeufe = [
     ...(pool.running || []).map((r) => ({ ...r, laufStatus: 'running' })),
     ...(pool.queued || []).map((r) => ({ ...r, laufStatus: 'queued' }))
@@ -923,7 +912,7 @@ function renderInteractiveCliSelect() {
   // freebuff). Headless-CLIs gehören in den Auto-Route-Dispatch, nicht in ein
   // echtes PTY — daher keine Auswahl anderer CLIs, die Liste ist frei.
   const tui = tools.filter(h => h.tuiOnly);
-  const list = tui.length ? tui : tools.filter(h => h.available);
+  const list = tui;
   select.innerHTML = '';
 
   if (list.length === 0) {
@@ -1129,6 +1118,7 @@ async function loadStatus() {
     const res = await fetch('/api/status');
     const data = await res.json();
     state.health = data.health || [];
+    state.harnessRegistry = Object.fromEntries((data.harnesses || []).map((entry) => [entry.id, entry]));
     state.clis = data.clis || [];
     state.dispatch = data.dispatch || state.dispatch;
     // Das Feld soll zeigen, was gespeichert ist — nicht, was zuletzt geklickt wurde.
@@ -1154,7 +1144,7 @@ function renderHarnessStatusPills() {
     pill.className = `status-pill ${h.available ? 'online' : 'offline'}`;
     pill.innerHTML = `
       <span class="dot"></span>
-      <span>${h.name}</span>
+      <span>${escapeHtml(h.name)}</span>
     `;
     dom.harnessStatusPills.appendChild(pill);
   });
@@ -1170,7 +1160,7 @@ function renderHarnessOverrideSelect() {
       <option value="consensus">Konsens</option>
     `;
     state.clis.forEach(c => {
-      if (c.enabled !== false) {
+      if (c.enabled !== false && c.capabilities?.dispatchable !== false) {
         const opt = document.createElement('option');
         opt.value = c.name;
         const modelStr = (c.model && c.model !== 'Standard') ? ` [${c.model}]` : '';
@@ -1181,10 +1171,12 @@ function renderHarnessOverrideSelect() {
     // Wählt der Nutzer gerade ein konkreter Harness aus, bleibt er; sonst Auto.
     select.value = (previous && selects && [...select.options].some(o => o.value === previous)) ? previous : 'auto';
   });
-  updateRouteUsagePill();
 }
 
 function getHarnessKey(item) {
+  if (item.harnessId === 'claude') return 'claude_code';
+  if (item.harnessId === 'antigravity') return 'antigravity_cli';
+  if (item.harnessId && state.modelPresets[item.harnessId]) return item.harnessId;
   if (item.harness && state.modelPresets[item.harness]) return item.harness;
   if (item.command === 'claude') return 'claude_code';
   if (item.command === 'codex') return 'codex';
@@ -1204,7 +1196,8 @@ function renderHarnessConfigList() {
   state.clis.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'harness-row';
-    const isChecked = item.enabled !== false ? 'checked' : '';
+    const terminalOnly = item.capabilities?.dispatchable === false;
+    const isChecked = item.enabled !== false && !terminalOnly ? 'checked' : '';
     const harnessKey = getHarnessKey(item);
     const presets = state.modelPresets[harnessKey] || [
       { id: 'Standard', label: 'Standard' }
@@ -1223,18 +1216,18 @@ function renderHarnessConfigList() {
 
     row.innerHTML = `
       <div><span class="order-badge">${index + 1}</span></div>
-      <div><input type="checkbox" class="harness-active-chk" data-idx="${index}" ${isChecked} title="Aktivieren / Deaktivieren" /></div>
+      <div><input type="checkbox" class="harness-active-chk" data-idx="${index}" ${isChecked} ${terminalOnly ? 'disabled' : ''} title="${terminalOnly ? 'Nur im interaktiven Terminal' : 'Aktivieren / Deaktivieren'}" /></div>
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
-      <div><code>${escapeHtml(item.command || item.harness || 'cli')}</code></div>
+      <div title="${terminalOnly ? 'Nur im interaktiven Terminal' : ''}"><code>${escapeHtml(item.command || item.harness || 'cli')}</code></div>
       <div>
         <div class="model-select-wrapper">
           <select class="model-dropdown" data-idx="${index}">
             ${modelOptionsHtml}
           </select>
           <input type="text" class="model-custom-input ${!isPreset && currentModel !== 'Standard' ? '' : 'hidden'}" data-idx="${index}" value="${!isPreset ? escapeHtml(currentModel) : ''}" placeholder="Modell-ID" />
-          <button class="btn-model-test" data-idx="${index}" title="Testet, ob ${escapeHtml(item.model || 'Standard')} über ${escapeHtml(item.command || '')} antwortet">Test</button>
+          ${item.capabilities?.modelTest === false ? '' : `<button class="btn-model-test" data-idx="${index}" title="Testet, ob ${escapeHtml(item.model || 'Standard')} über ${escapeHtml(item.command || '')} antwortet">Test</button>`}
           <span class="model-test-result"></span>
         </div>
       </div>
@@ -1378,7 +1371,7 @@ async function runModelTest(btn) {
     const res = await fetch('/api/harness/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: route.command, harness: route.harness, model })
+      body: JSON.stringify({ harnessId: route.harnessId, model })
     });
     data = await res.json();
   } catch (err) {
@@ -1449,15 +1442,6 @@ function updateWorkspaceUI() {
 
   if (dom.rootAgentsText) {
     dom.rootAgentsText.textContent = `AGENTS.md aktiv`;
-  }
-
-  if (dom.agentsContextText) {
-    const hasProjAgents = current && current.hasAgentsMd;
-    if (hasProjAgents) {
-      dom.agentsContextText.textContent = `Global + ${current.name}/AGENTS.md`;
-    } else {
-      dom.agentsContextText.textContent = `Global aktiv`;
-    }
   }
 
   // Update Stats in Settings Dialog
@@ -1754,7 +1738,8 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // --- AGENTS.MD EDITOR ---
@@ -1813,7 +1798,7 @@ async function loadSkills(filterQuery = '') {
     dom.skillsGrid.innerHTML = '';
 
     if (dom.skillsStatusBadge) {
-      dom.skillsStatusBadge.textContent = `${data.totalSkills || (data.skills && data.skills.length) || 0} Skills aktiv auf allen 8 CLIs`;
+      dom.skillsStatusBadge.textContent = `${data.totalSkills || (data.skills && data.skills.length) || 0} Skills aktiv auf 8 CLI-Zielen`;
     }
 
     let skillsList = data.skills || [];
@@ -1847,7 +1832,7 @@ async function loadSkills(filterQuery = '') {
             ${escapeHtml(s.displayName || s.name)}
           </div>
           <span class="badge ${s.isFullySynced ? 'badge-success' : 'badge-accent'}" style="font-size:10px; padding:2px 6px; white-space:nowrap;">
-            ${s.isFullySynced ? '✓ Alle 8 CLIs' : `${(s.activeHarnesses || []).length}/8 CLIs`}
+            ${s.isFullySynced ? '✓ Hub + 8 CLI-Ziele' : `${(s.activeHarnesses || []).length}/9 Verzeichnisse`}
           </span>
         </div>
         <div class="skill-desc" style="font-size:12px; color:var(--text-muted); line-height:1.45; margin:6px 0 10px 0; min-height:34px;">
@@ -1887,7 +1872,7 @@ async function syncSkills() {
   } finally {
     if (dom.syncSkillsBtn) {
       dom.syncSkillsBtn.disabled = false;
-      dom.syncSkillsBtn.innerHTML = '<span data-icon="refresh"></span> Skills für alle 9 CLIs synchronisieren';
+      dom.syncSkillsBtn.innerHTML = '<span data-icon="refresh"></span> Skills für 8 CLI-Ziele synchronisieren';
       if (typeof refreshIcons === 'function') refreshIcons(dom.syncSkillsBtn);
     }
   }
@@ -2058,34 +2043,8 @@ function renderUsageUI() {
     }
   }
 
-  // 5. Route Usage Pill (Prompt area)
-  updateRouteUsagePill();
-
-  // 6. Settings Table
+  // 5. Settings Table
   renderUsageTable();
-}
-
-function updateRouteUsagePill() {
-  if (!dom.routeUsageText || !state.usageData) return;
-
-  // Routing ist pro Konsole; die geteilte Pill zeigt die Auto-Route, die als
-  // Standard (Priority-Chain-Spitze) gilt, solange eine Konsole nicht selbst
-  // auf ein konkretes Harness gestellt ist.
-  const firstActive = state.clis.find(c => c.enabled !== false);
-  let targetHarness = null;
-  if (firstActive) {
-    targetHarness = state.usageData[getHarnessKey(firstActive)];
-  }
-
-  if (targetHarness) {
-    const detail = String(targetHarness.remaining || targetHarness.badge || 'Aktiv').replace(/^Modell:\s*/i, '');
-    dom.routeUsageText.textContent = `${targetHarness.name}: ${detail}`;
-    if (dom.routeUsagePill) {
-      dom.routeUsagePill.title = `${targetHarness.name} · Kontextfenster: ${targetHarness.contextWindow} · Plan: ${targetHarness.plan} (Klicken für Details)`;
-    }
-  } else {
-    dom.routeUsageText.textContent = 'Auto (nach Prioritätskette)';
-  }
 }
 
 function renderUsageTable() {
@@ -2190,14 +2149,8 @@ function setupEventListeners() {
   if (dom.rootAgentsBadge) {
     dom.rootAgentsBadge.addEventListener('click', () => openSettingsModal('agents'));
   }
-  if (dom.agentsContextPill) {
-    dom.agentsContextPill.addEventListener('click', () => openSettingsModal('agents'));
-  }
   if (dom.harnessStatusPills) {
     dom.harnessStatusPills.addEventListener('click', () => openSettingsModal('diagnostics'));
-  }
-  if (dom.routeUsagePill) {
-    dom.routeUsagePill.addEventListener('click', () => openSettingsModal('usage'));
   }
   if (dom.refreshUsageBtn) {
     dom.refreshUsageBtn.addEventListener('click', () => loadUsage(true));
@@ -2393,14 +2346,13 @@ function setupEventListeners() {
       try {
         dom.agentsSaveFeedback.textContent = 'Speichere...';
         const target = state.activeAgentsTab;
-        const customPath = state.agentsData[target]?.path;
 
         const res = await fetch('/api/agents-md', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             target: target,
-            customPath: customPath,
+            projectPath: state.activeProject,
             content: dom.agentsMdEditor.value
           })
         });
@@ -2445,22 +2397,16 @@ function setupEventListeners() {
       name = `${harnessKey}_${modelSlug}`;
     }
 
-    const cmdMap = {
-      claude_code: 'claude',
-      codex: 'codex',
-      cline: 'cline',
-      opencode: 'opencode',
-      antigravity_cli: 'agy',
-      qoder: 'qodercli',
-      freebuff: 'freebuff',
-      codebuddy: 'codebuddy',
-      cursor: 'agent'
-    };
+    const harnessId = harnessKey === 'claude_code' ? 'claude'
+      : harnessKey === 'antigravity_cli' ? 'antigravity' : harnessKey;
+    const registryEntry = state.harnessRegistry[harnessId];
+    if (!registryEntry) throw new Error('Unbekanntes Harness');
 
     const newRoute = {
       name: name,
-      harness: harnessKey,
-      command: cmdMap[harnessKey] || 'claude',
+      harnessId,
+      command: registryEntry.commands[0],
+      capabilities: registryEntry,
       model: model,
       enabled: true
     };
@@ -2549,10 +2495,12 @@ function sendPrompt(slot = 0) {
   const payload = {
     type: 'dispatch',
     prompt,
+    requestId: window.crypto?.randomUUID?.(),
     harnessOverride: folge ? folge.harness : (pane.routing ? pane.routing.value : 'auto'),
     projectPath: pane.target.value || state.activeProject
   };
   if (folge?.model) payload.modelOverride = folge.model;
+  if (folge?.previousTaskId) payload.previousTaskId = folge.previousTaskId;
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));
@@ -2826,7 +2774,7 @@ function populateScheduleHarnessOptions() {
     <option value="consensus">Konsens-Modus (Dual-Agent)</option>
   `;
   state.clis.forEach(c => {
-    if (c.enabled !== false) {
+    if (c.enabled !== false && c.capabilities?.scheduler !== false) {
       const opt = document.createElement('option');
       opt.value = c.name;
       opt.textContent = `${c.name} (${c.command})`;
@@ -3041,7 +2989,7 @@ async function loadInstallerStatus(forceRefresh = false) {
     if (dom.installAllMissingBtn) {
       if (data.missing === 0) {
         dom.installAllMissingBtn.disabled = true;
-        dom.installAllMissingBtn.innerHTML = '<span>Alle 8 CLIs bereit</span>';
+        dom.installAllMissingBtn.innerHTML = '<span>Alle 9 CLIs bereit</span>';
       } else {
         dom.installAllMissingBtn.disabled = state.isInstallingAll;
         dom.installAllMissingBtn.innerHTML = `<span>Alle ${data.missing} fehlenden CLIs installieren</span>`;
@@ -3185,7 +3133,7 @@ async function installCli(toolId) {
 async function installAllMissing() {
   const missing = state.installerTools.filter(t => !t.available);
   if (missing.length === 0) {
-    alert('Alle 8 CLIs sind bereits installiert und einsatzbereit!');
+    alert('Alle 9 CLIs sind bereits installiert und einsatzbereit!');
     return;
   }
 

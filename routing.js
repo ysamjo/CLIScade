@@ -133,6 +133,21 @@ function gatewayEnvFromShell({ shellEnv = {}, currentEnv = {}, names = [] } = {}
   return picked;
 }
 
+function isJobDue(job, now) {
+  const last = new Date(job.lastRun || job.createdAt || now).getTime();
+  const diffMinutes = (now.getTime() - last) / 60000;
+  switch (job.interval) {
+    case 'every_15_mins': return diffMinutes >= 15;
+    case 'hourly': return diffMinutes >= 60;
+    case 'every_6_hours': return diffMinutes >= 360;
+    case 'daily_02_00': return now.getHours() === 2 && now.toDateString() !== new Date(last).toDateString();
+    case 'daily_08_00': return now.getHours() === 8 && now.toDateString() !== new Date(last).toDateString();
+    case 'weekly_monday': return now.getDay() === 1 && now.getHours() === 8 &&
+      now.toDateString() !== new Date(last).toDateString();
+    default: return diffMinutes >= 60;
+  }
+}
+
 module.exports = {
   RUN_IDLE_TIMEOUT_MS,
   RUN_IDLE_GRACE_MS,
@@ -143,5 +158,6 @@ module.exports = {
   dispatchSlotDecision,
   busyHarnessBlocker,
   gatewayEnvFromShell,
+  isJobDue,
   formatAge
 };

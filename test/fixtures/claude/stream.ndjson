@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"claude-session"}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Überlegen"},{"type":"tool_use","id":"tool-1","name":"Bash","input":{"command":"pwd"}},{"type":"text","text":"Antwort"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-1","content":"/tmp/projekt"}]}}
+{"type":"result","is_error":false,"result":"Antwort","session_id":"claude-session"}

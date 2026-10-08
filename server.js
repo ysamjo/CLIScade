@@ -9,13 +9,12 @@ const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
 const {
-  armIdleWatchdog,
   knownBrokenBlocker,
-  startupRefusal,
   ptyOwnershipBlocker,
   dispatchSlotDecision,
   busyHarnessBlocker,
   gatewayEnvFromShell,
+  isJobDue,
   RUN_IDLE_TIMEOUT_MS
 } = require('./routing');
 let pty = null;
@@ -371,6 +370,16 @@ function loadConfig() {
   try {
     const data = yaml.load(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
     if (!data.clis) data.clis = [];
+    const normalized = normalizeRoutes(data.clis, { strict: false });
+    if (JSON.stringify(data.clis) !== JSON.stringify(normalized)) {
+      const backup = `${CONFIG_FILE}.before-harness-migration`;
+      if (!fs.existsSync(backup)) fs.copyFileSync(CONFIG_FILE, backup);
+      const rejected = data.clis.length - normalized.length;
+      if (rejected) console.warn(`[Konfiguration] ${rejected} unbekannte Harness-Route(n) übersprungen; Original in ${backup}`);
+      data.clis = normalized;
+      fs.writeFileSync(CONFIG_FILE, yaml.dump(data, { lineWidth: -1 }), 'utf8');
+    }
+    data.clis = runtimeRoutes(normalized);
     if (!data.remote) data.remote = {};
     if (!data.dispatch) data.dispatch = { max_concurrent: DEFAULT_MAX_CONCURRENT };
     if (!data.remote.telegram) {
@@ -385,7 +394,7 @@ function loadConfig() {
 
 // Helper: save config.yaml
 function saveConfig(configData) {
-  const serialized = yaml.dump(configData, { lineWidth: -1 });
+  const serialized = yaml.dump({ ...configData, clis: normalizeRoutes(configData.clis || []) }, { lineWidth: -1 });
   fs.writeFileSync(CONFIG_FILE, serialized, 'utf8');
 }
 
@@ -451,119 +460,19 @@ function scanProjects(rootDir) {
 }
 
 // Comprehensive CLI Registry for 1-Click Installation & Health Check
-const CLI_INSTALL_REGISTRY = {
-  claude_code_cli: {
-    id: 'claude_code_cli',
-    name: 'Claude Code',
-    cmd: 'claude',
-    package: '@anthropic-ai/claude-code',
-    installCmd: 'npm install -g @anthropic-ai/claude-code',
-    description: 'Offizielle Agentic Terminal-CLI von Anthropic (Sonnet 3.7 & Opus 4.6)',
-    category: 'Frontier Agent',
-    iconKey: 'claude_code_cli',
-    docsUrl: 'https://docs.anthropic.com/claude/docs/claude-code'
-  },
-  codex_cli: {
-    id: 'codex_cli',
-    name: 'Codex CLI',
-    cmd: 'codex',
-    package: '@openai/codex',
-    installCmd: 'npm install -g @openai/codex',
-    description: 'Offizielle OpenAI Codex Coding-CLI für o3, o3-mini & GPT-4.5',
-    category: 'Frontier Agent',
-    iconKey: 'codex_cli',
-    docsUrl: 'https://openai.com'
-  },
-  cline_cli: {
-    id: 'cline_cli',
-    name: 'Cline CLI',
-    cmd: 'cline',
-    package: 'cline',
-    installCmd: 'npm install -g cline',
-    description: 'Autonome Open-Source Coding-CLI mit Diff-Editing & Tool-Unterstützung',
-    category: 'Autonomous Agent',
-    iconKey: 'cline_cli',
-    docsUrl: 'https://github.com/cline/cline'
-  },
-  opencode_cli: {
-    id: 'opencode_cli',
-    name: 'OpenCode',
-    cmd: 'opencode',
-    package: 'opencode-ai',
-    installCmd: 'npm install -g opencode-ai || (curl -fsSL https://opencode.ai/install.sh | bash)',
-    description: 'Open-Source KI-Coding Agent für Terminal und IDE-Workflows',
-    category: 'Open Source',
-    iconKey: 'opencode_cli',
-    docsUrl: 'https://opencode.ai'
-  },
-  antigravity_cli: {
-    id: 'antigravity_cli',
-    name: 'Antigravity (AGY)',
-    cmd: 'agy',
-    package: '@google/antigravity',
-    installCmd: 'npm install -g @google/antigravity || ln -sf ~/.gemini/antigravity/bin/agy ~/.local/bin/agy',
-    description: 'Google Antigravity autonomous agent framework & CLI',
-    category: 'DeepMind Agent',
-    iconKey: 'antigravity_cli',
-    docsUrl: 'https://gemini.google.com'
-  },
-  qoder_cli: {
-    id: 'qoder_cli',
-    name: 'Qoder CLI',
-    cmd: 'qodercli',
-    altCmd: 'qoder',
-    package: '@qoder/cli',
-    installCmd: 'npm install -g @qoder/cli',
-    description: 'Enterprise AI Agent CLI mit Qwen 3.8 Coding Modellen',
-    category: 'Enterprise Agent',
-    iconKey: 'qoder_cli',
-    docsUrl: 'https://qoder.ai'
-  },
-  freebuff_cli: {
-    id: 'freebuff_cli',
-    name: 'Freebuff',
-    cmd: 'freebuff',
-    package: 'freebuff',
-    installCmd: 'npm install -g freebuff',
-    description: 'Agentic Harness für Multi-Context Refactorings & Space-Bunny-Modelle',
-    category: 'Specialized',
-    iconKey: 'freebuff_cli',
-    docsUrl: 'https://github.com/freebuff/freebuff'
-  },
-  codebuddy_cli: {
-    id: 'codebuddy_cli',
-    name: 'CodeBuddy',
-    cmd: 'codebuddy',
-    package: 'codebuddy-cli',
-    installCmd: 'npm install -g codebuddy-cli',
-    description: 'CodeBuddy CLI für DeepSeek v3/v4 & Coding Assistants',
-    category: 'Specialized',
-    iconKey: 'codebuddy_cli',
-    docsUrl: 'https://codebuddy.ca'
-  },
-  cursor_cli: {
-    id: 'cursor_cli',
-    name: 'Cursor CLI',
-    cmd: 'agent',
-    altCmd: 'cursor-agent',
-    package: 'cursor-agent',
-    installCmd: 'curl https://cursor.com/install -fsS | bash',
-    description: 'Cursor Agent CLI für Terminal und GitHub Actions',
-    category: 'Frontier Agent',
-    iconKey: 'cursor_cli',
-    docsUrl: 'https://cursor.com/docs/cli/overview'
-  }
-};
+const { HARNESS_REGISTRY, CLI_INSTALL_REGISTRY, resolveHarness, normalizeRoutes, runtimeRoutes } = require('./runtime/registry');
+const { resolveWorkspaceDirectory, resolveAgentFile } = require('./runtime/workspace');
+const { runHarness } = require('./runtime/harness-runtime');
 
 // Harnesses whose CLI has no headless/print flag and only renders a full-screen TUI.
 // Without a real TTY they abort immediately ("Terminal protocol transition failed")
 // and leave their screen-redraw bytes in the output pipe, so they cannot be dispatched.
-const TUI_ONLY_COMMANDS = new Set(['freebuff']);
+const TUI_ONLY_COMMANDS = new Set(Object.values(HARNESS_REGISTRY).filter((entry) => entry.transport === 'pty').flatMap((entry) => entry.commands));
 
 // Harnesses, deren Anbieter dem Konto nur eine gleichzeitig aktive Session zugesteht.
 // Eine zweite Instanz verdrängt die erste (HTTP 409 session_superseded), und das ältere
 // Terminal zeigt einen Fehler, obwohl der Nutzer dort gar nichts getan hat.
-const SINGLE_SESSION_COMMANDS = new Set(['freebuff']);
+const SINGLE_SESSION_COMMANDS = new Set(Object.values(HARNESS_REGISTRY).filter((entry) => entry.singleSession).flatMap((entry) => entry.commands));
 
 // A TUI-only launcher has no --version shortcut: `freebuff --version` still starts the
 // full agent, which on startup migrates its token through the Keychain. That Keychain
@@ -594,8 +503,11 @@ function checkSingleCliHealth(meta) {
   let binaryPath = null;
   let version = null;
   try {
-    const altCmd = meta.altCmd || meta.cmd;
-    const p = execSync(`which ${meta.cmd} 2>/dev/null || which ${altCmd} 2>/dev/null`, { encoding: 'utf8' }).trim();
+    const commands = [meta.cmd, meta.altCmd].filter(Boolean);
+    const p = commands.map((command) => {
+      try { return execFileSync('which', [command], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+      catch { return ''; }
+    }).find(Boolean);
     if (p) {
       available = true;
       binaryPath = p;
@@ -603,7 +515,7 @@ function checkSingleCliHealth(meta) {
         version = readTuiVersion(meta.cmd);
       } else {
         try {
-          const vOut = execSync(`${meta.cmd} --version 2>/dev/null || ${altCmd} --version 2>/dev/null`, { encoding: 'utf8', timeout: 3000 }).trim();
+          const vOut = execFileSync(p, ['--version'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
           version = vOut.split('\n')[0].trim();
           if (version.length > 32) version = version.slice(0, 32);
         } catch {}
@@ -914,7 +826,7 @@ app.get('/api/status', (req, res) => {
   const health = getHarnessHealth();
   const config = loadConfig();
   // Die Kappe gehört mit zum Status, sonst zeigen die Einstellungen einen alten Wert.
-  res.json({ health, clis: config.clis || [], dispatch: config.dispatch || { max_concurrent: DEFAULT_MAX_CONCURRENT } });
+  res.json({ health, harnesses: Object.values(HARNESS_REGISTRY), clis: config.clis || [], dispatch: config.dispatch || { max_concurrent: DEFAULT_MAX_CONCURRENT } });
 });
 
 // 1-Click Installer Status API
@@ -991,7 +903,7 @@ app.post('/api/installer/install', (req, res) => {
     const current = getHarnessHealth(true);
     const missing = current.filter(t => !t.available);
     if (missing.length === 0) {
-      return res.json({ success: true, message: 'Alle 8 CLIs sind bereits vollständig installiert und einsatzbereit!' });
+      return res.json({ success: true, message: 'Alle 9 CLIs sind bereits vollständig installiert und einsatzbereit!' });
     }
 
     res.json({ success: true, message: `Installiere ${missing.length} fehlende CLIs im Hintergrund...` });
@@ -1063,9 +975,11 @@ app.get('/api/model-presets', async (req, res) => {
 
 app.get('/api/workspace', (req, res) => {
   const data = loadTasksData();
-  const rootDir = data.rootDirectory || DEFAULT_ROOT_DIR;
+  const rootDir = resolveWorkspaceDirectory(data.rootDirectory || DEFAULT_ROOT_DIR, data.rootDirectory || DEFAULT_ROOT_DIR);
   const projects = scanProjects(rootDir);
-  const active = data.activeProject || (projects[0] ? projects[0].path : rootDir);
+  let active;
+  try { active = resolveWorkspaceDirectory(data.activeProject, rootDir); }
+  catch { active = projects[0] ? projects[0].path : rootDir; }
   data.activeProject = active;
   data.rootDirectory = rootDir;
   saveTasksData(data);
@@ -1083,12 +997,9 @@ app.post('/api/workspace', (req, res) => {
     const { rootDirectory, activeProject } = req.body;
     const data = loadTasksData();
 
-    if (rootDirectory && fs.existsSync(rootDirectory)) {
-      data.rootDirectory = rootDirectory;
-    }
-    if (activeProject && fs.existsSync(activeProject)) {
-      data.activeProject = activeProject;
-    }
+    if (rootDirectory) data.rootDirectory = resolveWorkspaceDirectory(rootDirectory, rootDirectory);
+    if (activeProject) data.activeProject = resolveWorkspaceDirectory(activeProject, data.rootDirectory || DEFAULT_ROOT_DIR);
+    else if (rootDirectory) data.activeProject = data.rootDirectory;
 
     saveTasksData(data);
     const projects = scanProjects(data.rootDirectory);
@@ -1099,7 +1010,7 @@ app.post('/api/workspace', (req, res) => {
       tasks: data.tasks || []
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -1138,7 +1049,10 @@ app.post('/api/tasks/clear', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  res.json(loadConfig());
+  const config = loadConfig();
+  res.json({ clis: config.clis, dispatch: config.dispatch, remote: {
+    telegram: { enabled: Boolean(config.remote?.telegram?.enabled), hasToken: Boolean(config.remote?.telegram?.botToken) }
+  } });
 });
 
 // Der Pool-Zustand für die Oberfläche: ein Neuladen des Fensters darf die laufenden
@@ -1171,137 +1085,67 @@ app.post('/api/config', (req, res) => {
   try {
     const { clis, dispatch } = req.body;
     const config = loadConfig();
-    config.clis = clis;
+    config.clis = runtimeRoutes(normalizeRoutes(clis));
     // Die Kappe kommt aus der Oberfläche; alles unterhalb von 1 würde jeden Auftrag
     // in der Warteschlange festsetzen.
     if (dispatch && Number.isInteger(Number(dispatch.max_concurrent))) {
       config.dispatch = { max_concurrent: Math.min(8, Math.max(0, Number(dispatch.max_concurrent))) };
     }
     saveConfig(config);
-    res.json({ success: true, config });
+    res.json({ success: true, config: { clis: config.clis, dispatch: config.dispatch } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
-// Commands the model test may run. The GUI listens on all interfaces, so this
-// endpoint must never spawn a command name supplied by the browser.
-const TESTABLE_COMMANDS = new Set(
-  Object.values(CLI_INSTALL_REGISTRY).flatMap(m => [m.cmd, m.altCmd].filter(Boolean))
-);
-
+// Modelltests laufen in einem leeren Wegwerfprojekt über dieselbe Runtime.
 const MODEL_TEST_PROMPT = 'Antworte mit genau einem Wort: OK';
 const MODEL_TEST_TIMEOUT_MS = 90000;
 
-function classifyModelFailure(text) {
-  if (/model.{0,20}(not.{0,10}found|invalid|unknown|unavailable|unsupported|doesn't exist)/i.test(text) ||
-      /(invalid|unknown|unsupported|not supported).{0,20}model/i.test(text)) return 'unknown_model';
-  if (/unauthorized|invalid.{0,10}(api.?key|token)|no auth|please.{0,10}login|not authenticated/i.test(text)) return 'auth';
-  if (/429|rate\s*limit|quota|insufficient|credit|budget|overloaded/i.test(text)) return 'rate_limit';
-  if (/context.{0,20}(length|window|limit|exceeded|too long)/i.test(text)) return 'context_limit';
-  if (/\b5\d\d\b|service.{0,10}unavailable|bad gateway|fetch failed|ENOTFOUND|ECONNREFUSED/i.test(text)) return 'service';
-  return 'unknown';
-}
-
-app.post('/api/harness/test', (req, res) => {
-  const { command, harness, model } = req.body || {};
-
-  if (!TESTABLE_COMMANDS.has(command)) {
-    return res.status(400).json({ ok: false, error: `Unbekanntes Harness: ${command}` });
-  }
-  if (TUI_ONLY_COMMANDS.has(command)) {
-    return res.status(400).json({
-      ok: false,
-      errorKind: 'tui_only',
-      error: `${command} ist ein reines TUI-CLI ohne Headless-Modus und lässt sich nicht automatisch abfragen.`
-    });
-  }
-  try {
-    execSync(`which ${command}`, { stdio: 'ignore' });
-  } catch {
-    return res.json({ ok: false, errorKind: 'not_installed', error: `Befehl "${command}" nicht im PATH gefunden.` });
-  }
-
-  // A throwaway directory keeps an agent that auto-accepts edits away from real projects.
-  let workDir;
-  try {
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-modeltest-'));
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: `Kein Testverzeichnis möglich: ${err.message}` });
-  }
-
-  const { cmd, args } = buildCliCommand({ command, harness }, MODEL_TEST_PROMPT, model || 'Standard');
+app.post('/api/harness/test', async (req, res) => {
+  const entry = resolveHarness(req.body || {});
+  if (!entry) return res.status(400).json({ ok: false, error: 'Unbekanntes Harness' });
+  if (!entry.modelTest) return res.status(400).json({ ok: false, errorKind: 'tui_only', error: `${entry.name} ist nur interaktiv verfügbar.` });
   const startedAt = Date.now();
-  let raw = '';
-  let settled = false;
-
-  const finish = (payload) => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(timer);
-    fs.rmSync(workDir, { recursive: true, force: true });
-    if (payload.ok) {
-      clearHarnessHealthMark(command);
-    } else if (payload.errorKind === 'auth') {
-      markHarnessHealth(command, 'auth', payload.error || '');
-    }
-    res.json({
-      ...payload,
-      latencyMs: Date.now() - startedAt,
-      sample: raw.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, '').trim().slice(-600)
-    });
-  };
-
-  const timer = setTimeout(() => {
-    try { child.kill('SIGKILL'); } catch {}
-    finish({ ok: false, errorKind: 'timeout', error: `Keine Antwort innerhalb von ${MODEL_TEST_TIMEOUT_MS / 1000}s.` });
-  }, MODEL_TEST_TIMEOUT_MS);
-
-  let child;
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-modeltest-'));
   try {
-    child = spawn(cmd, args, {
-      cwd: workDir,
-      env: harnessEnv({ PWD: workDir })
+    const result = await runHarness({
+      harnessId: entry.id, model: req.body.model || 'Standard', prompt: MODEL_TEST_PROMPT,
+      cwd: workDir, env: harnessEnv({ PWD: workDir }), timeoutMs: MODEL_TEST_TIMEOUT_MS,
+      idleTimeoutMs: MODEL_TEST_TIMEOUT_MS
+    });
+    const ok = result.status === 'completed' && Boolean(result.finalText.trim());
+    if (ok) clearHarnessHealthMark(entry.commands[0]);
+    else if (result.error?.kind === 'auth') markHarnessHealth(entry.commands[0], 'auth', result.error.message);
+    res.json({
+      ok, exitCode: result.exitCode,
+      errorKind: ok ? undefined : result.error?.kind || 'unknown',
+      error: ok ? undefined : result.error?.message || 'Prozess endete ohne Antwort.',
+      latencyMs: Date.now() - startedAt,
+      sample: (result.finalText || result.rawTail || '').trim().slice(-600)
     });
   } catch (err) {
-    return finish({ ok: false, errorKind: 'unknown', error: err.message });
+    res.status(500).json({ ok: false, errorKind: 'unknown', error: err.message });
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
   }
-
-  if (child.stdin) child.stdin.end();
-  child.stdout.on('data', d => { raw += d.toString(); });
-  child.stderr.on('data', d => { raw += d.toString(); });
-
-  child.on('error', (err) => finish({ ok: false, errorKind: 'unknown', error: err.message }));
-  child.on('close', (code) => {
-    if (code === 0 && raw.trim()) {
-      finish({ ok: true, exitCode: code });
-    } else {
-      const errorKind = classifyModelFailure(raw);
-      finish({
-        ok: false,
-        exitCode: code,
-        errorKind,
-        error: raw.trim() ? '' : 'Prozess endete ohne Ausgabe.'
-      });
-    }
-  });
 });
 
 app.get('/api/agents-md', (req, res) => {
   try {
     const data = loadTasksData();
+    const rootDir = data.rootDirectory || DEFAULT_ROOT_DIR;
     const active = req.query.project || data.activeProject;
     const globalContent = fs.existsSync(AGENTS_MD_FILE) ? fs.readFileSync(AGENTS_MD_FILE, 'utf8') : '';
 
     let devRootContent = '';
-    const rootDir = data.rootDirectory || DEFAULT_ROOT_DIR;
-    const devAgentsFile = path.join(rootDir, 'AGENTS.md');
+    const devAgentsFile = resolveAgentFile('rootDev', null, rootDir);
     if (fs.existsSync(devAgentsFile)) {
       devRootContent = fs.readFileSync(devAgentsFile, 'utf8');
     }
 
     let projectContent = '';
-    const projAgentsFile = active ? path.join(active, 'AGENTS.md') : '';
+    const projAgentsFile = active ? resolveAgentFile('project', active, rootDir) : '';
     if (projAgentsFile && fs.existsSync(projAgentsFile)) {
       projectContent = fs.readFileSync(projAgentsFile, 'utf8');
     }
@@ -1312,28 +1156,25 @@ app.get('/api/agents-md', (req, res) => {
       project: { path: projAgentsFile, content: projectContent, exists: !!projectContent, size: projectContent.length }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
 app.post('/api/agents-md', (req, res) => {
   try {
-    const { content, target, customPath } = req.body;
-    let targetPath = AGENTS_MD_FILE;
-    if (target === 'rootDev') {
-      const data = loadTasksData();
-      targetPath = path.join(data.rootDirectory, 'AGENTS.md');
-    } else if (target === 'project' && customPath) {
-      targetPath = customPath;
-    }
-    fs.writeFileSync(targetPath, content || '', 'utf8');
+    const { content, target } = req.body;
+    if (!['global', 'rootDev', 'project'].includes(target)) throw new Error('Unbekanntes AGENTS-Ziel');
+    const data = loadTasksData();
+    const targetPath = target === 'global' ? AGENTS_MD_FILE
+      : resolveAgentFile(target, req.body.projectPath || data.activeProject, data.rootDirectory || DEFAULT_ROOT_DIR);
+    fs.writeFileSync(targetPath, typeof content === 'string' ? content : '', 'utf8');
     res.json({ success: true, path: targetPath });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
-// --- UNIVERSAL SKILLS HUB & SYNC (Open-Agent Standard for all 9 CLIs) ---
+// --- UNIVERSAL SKILLS HUB & SYNC (zentraler Hub und 8 unterstützte CLI-Ziele) ---
 const HARNESS_DIRS = [
   { id: 'agents', name: 'Open-Agent Standard Hub', path: path.join(os.homedir(), '.agents', 'skills') },
   { id: 'claude', name: 'Claude Code', path: path.join(os.homedir(), '.claude', 'skills') },
@@ -1518,11 +1359,11 @@ app.post('/api/skills/install', (req, res) => {
     if (!fs.existsSync(HUB_DIR)) fs.mkdirSync(HUB_DIR, { recursive: true });
 
     if (mode === 'git') {
-      if (!repoUrl) return res.status(400).json({ error: 'Git Repository URL erforderlich' });
+      if (typeof repoUrl !== 'string' || !repoUrl.trim()) return res.status(400).json({ error: 'Git Repository URL erforderlich' });
       const targetName = (name || path.basename(repoUrl, '.git')).trim().replace(/[^a-zA-Z0-9_-]/g, '-');
       const targetDir = path.join(HUB_DIR, targetName);
       if (fs.existsSync(targetDir)) return res.status(400).json({ error: `Skill "${targetName}" existiert bereits` });
-      execSync(`git clone --depth 1 "${repoUrl}" "${targetDir}"`, { timeout: 30000 });
+      execFileSync('git', ['clone', '--depth', '1', '--', repoUrl, targetDir], { timeout: 30000, stdio: 'pipe' });
     } else {
       // Create custom skill
       if (!name) return res.status(400).json({ error: 'Skill-Name ist erforderlich' });
@@ -1534,9 +1375,9 @@ app.post('/api/skills/install', (req, res) => {
       fs.writeFileSync(skillMd, mdContent, 'utf8');
     }
 
-    // Automatically sync across all 8 CLIs
+    // Skills mit dem Hub und acht CLI-Verzeichnissen synchronisieren.
     const syncResult = syncAllSkills();
-    res.json({ success: true, message: 'Skill erfolgreich für alle 9 CLIs installiert & synchronisiert!', sync: syncResult });
+    res.json({ success: true, message: 'Skill für 8 CLI-Ziele installiert und synchronisiert!', sync: syncResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1546,7 +1387,13 @@ app.post('/api/skills/install', (req, res) => {
 function loadSchedules() {
   if (!fs.existsSync(SCHEDULES_FILE)) return [];
   try {
-    return JSON.parse(fs.readFileSync(SCHEDULES_FILE, 'utf8'));
+    const schedules = JSON.parse(fs.readFileSync(SCHEDULES_FILE, 'utf8'));
+    let migrated = false;
+    for (const job of schedules) {
+      if (!job.createdAt) { job.createdAt = new Date().toISOString(); migrated = true; }
+    }
+    if (migrated) saveSchedules(schedules);
+    return schedules;
   } catch {
     return [];
   }
@@ -1568,6 +1415,12 @@ app.post('/api/schedules', (req, res) => {
   try {
     const { id, name, projectPath, interval, prompt, harness, enabled, notifyTelegram } = req.body;
     const schedules = loadSchedules();
+    const data = loadTasksData();
+    const resolvedProject = resolveWorkspaceDirectory(projectPath || (id ? schedules.find(s => s.id === id)?.projectPath : null), data.rootDirectory || DEFAULT_ROOT_DIR);
+    const configuredRoutes = (loadConfig().clis || []).filter((route) => route.enabled !== false && route.capabilities.scheduler);
+    if (harness && harness !== 'auto' && harness !== 'consensus' && !configuredRoutes.some((route) => route.name === harness)) {
+      throw new Error('Der gewählte Harness ist für Zeitpläne nicht verfügbar');
+    }
     const intervalLabels = {
       every_15_mins: 'Alle 15 Minuten',
       hourly: 'Stündlich',
@@ -1583,10 +1436,10 @@ app.post('/api/schedules', (req, res) => {
         schedules[idx] = {
           ...schedules[idx],
           name: name || schedules[idx].name,
-          projectPath: projectPath || schedules[idx].projectPath,
-          projectName: path.basename(projectPath || schedules[idx].projectPath),
+          projectPath: resolvedProject,
+          projectName: path.basename(resolvedProject),
           interval: interval || schedules[idx].interval,
-          intervalLabel: intervalLabels[interval] || interval,
+          intervalLabel: intervalLabels[interval || schedules[idx].interval] || interval || schedules[idx].interval,
           prompt: prompt || schedules[idx].prompt,
           harness: harness || schedules[idx].harness,
           enabled: enabled !== undefined ? Boolean(enabled) : schedules[idx].enabled,
@@ -1597,14 +1450,15 @@ app.post('/api/schedules', (req, res) => {
       const newJob = {
         id: 'sched_' + Date.now(),
         name: name || 'Geplanter Task',
-        projectPath: projectPath || DEFAULT_ROOT_DIR,
-        projectName: path.basename(projectPath || DEFAULT_ROOT_DIR),
+        projectPath: resolvedProject,
+        projectName: path.basename(resolvedProject),
         interval: interval || 'daily_02_00',
-        intervalLabel: intervalLabels[interval] || interval,
+        intervalLabel: intervalLabels[interval || 'daily_02_00'],
         prompt: prompt || 'Führe Routine-Checks und Optimierungen durch.',
         harness: harness || 'auto',
         enabled: enabled !== undefined ? Boolean(enabled) : true,
         notifyTelegram: notifyTelegram !== undefined ? Boolean(notifyTelegram) : true,
+        createdAt: new Date().toISOString(),
         lastRun: null,
         lastStatus: null
       };
@@ -1613,7 +1467,7 @@ app.post('/api/schedules', (req, res) => {
     saveSchedules(schedules);
     res.json({ success: true, schedules });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -1647,12 +1501,9 @@ app.post('/api/schedules/:id/run', (req, res) => {
 // Laufs tragen seine Task-ID, damit zwei gleichzeitige Konsolen trennbar bleiben.
 const liveRuns = new Map();
 const dispatchQueue = [];
+const requestEntries = new Map();
 let runIdSeq = 0;
 const DEFAULT_MAX_CONCURRENT = 0; // 0 = keine Kappe
-
-// A user cancel ends the whole chain, while a watchdog kill hands over to the next
-// harness. Both arrive as a non-zero exit, so the cancelled children are tracked.
-const userCancelledProcesses = new Set();
 
 function maxConcurrentRuns() {
   const dispatch = loadConfig().dispatch;
@@ -1675,9 +1526,11 @@ function runningForGate() {
 }
 
 function gateInputs(payload, clis) {
-  const enabled = clis.filter((c) => c.enabled !== false);
+  const enabled = clis.filter((c) => c.enabled !== false && c.capabilities.dispatchable);
   if (payload.harnessOverride === 'consensus') {
-    return { requires: enabled.slice(0, 2).map((c) => c.command), candidates: [] };
+    const first = enabled[0];
+    const second = enabled.find((route) => route.harnessId !== first?.harnessId);
+    return { requires: [first, second].filter(Boolean).map((route) => route.command), candidates: [] };
   }
   if (payload.harnessOverride && payload.harnessOverride !== 'auto') {
     const specific = enabled.find((c) => c.name === payload.harnessOverride);
@@ -1753,15 +1606,6 @@ function startRun(entry) {
   else runDispatch(entry);
 }
 
-function trackChild(taskId, child) {
-  const run = liveRuns.get(taskId);
-  if (!run) return;
-  run.children.add(child);
-  const forget = () => run.children.delete(child);
-  child.once('close', forget);
-  child.once('error', forget);
-}
-
 function sendRunMessage(ws, taskId, obj) {
   const msg = { ...obj, taskId: obj.taskId || taskId };
   const json = JSON.stringify(msg);
@@ -1786,16 +1630,26 @@ function writeTask(taskRecord) {
 }
 
 function submitDispatch(payload, ws, onComplete) {
+  const requestId = typeof payload.requestId === 'string' && /^[A-Za-z0-9-]{8,128}$/.test(payload.requestId)
+    ? payload.requestId : null;
+  if (requestId && requestEntries.has(requestId)) {
+    const existing = requestEntries.get(requestId);
+    sendRunMessage(ws, existing.taskId, { type: 'task_created', task: existing.record });
+    if (!['queued', 'running'].includes(existing.record.status)) {
+      sendRunMessage(ws, existing.taskId, { type: 'done', exitCode: existing.record.exitCode ?? 0, message: 'Auftrag bereits abgeschlossen' });
+    }
+    return existing;
+  }
   const clis = loadConfig().clis || [];
-  const workingDir = payload.projectPath && fs.existsSync(payload.projectPath)
-    ? payload.projectPath
-    : process.env.HOME;
+  const data = loadTasksData();
+  const workingDir = resolveWorkspaceDirectory(payload.projectPath, data.rootDirectory || DEFAULT_ROOT_DIR);
   const isConsensus = payload.harnessOverride === 'consensus';
   const gate = gateInputs(payload, clis);
-  const enabledRoutes = clis.filter((c) => c.enabled !== false);
+  const enabledRoutes = clis.filter((c) => c.enabled !== false && c.capabilities.dispatchable);
   const initialRoute = enabledRoutes[0] || { name: '—', command: '—', model: 'Standard' };
   const { agentsSources } = buildAgentsContext(workingDir);
-  const consensusPair = enabledRoutes.slice(0, 2).map((c) => c.name).join(' ↔ ');
+  const consensusRoutes = [enabledRoutes[0], enabledRoutes.find((route) => route.harnessId !== enabledRoutes[0]?.harnessId)].filter(Boolean);
+  const consensusPair = consensusRoutes.map((route) => route.name).join(' ↔ ');
 
   const entry = {
     taskId: nextTaskId(isConsensus ? 'consensus' : 'task'),
@@ -1806,7 +1660,7 @@ function submitDispatch(payload, ws, onComplete) {
     requires: gate.requires,
     candidates: gate.candidates,
     commands: gate.requires.slice(),
-    children: new Set(),
+    controllers: new Set(),
     queuedNotified: false,
     record: null
   };
@@ -1820,7 +1674,7 @@ function submitDispatch(payload, ws, onComplete) {
     harness: isConsensus ? `Konsens (${consensusPair})` : initialRoute.name,
     command: isConsensus ? 'consensus' : initialRoute.command,
     model: isConsensus
-      ? enabledRoutes.map((c) => c.model || 'Standard').join(' ↔ ')
+      ? consensusRoutes.map((route) => route.model || 'Standard').join(' ↔ ')
       : ((payload.modelOverride && payload.modelOverride !== 'Standard') ? payload.modelOverride : (initialRoute.model || 'Standard')),
     agentsInfo: agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine',
     timestamp: new Date().toISOString(),
@@ -1829,6 +1683,11 @@ function submitDispatch(payload, ws, onComplete) {
   };
 
   writeTask(entry.record);
+  if (requestId) {
+    requestEntries.set(requestId, entry);
+    const expiry = setTimeout(() => requestEntries.delete(requestId), 24 * 60 * 60 * 1000);
+    expiry.unref?.();
+  }
   dispatchQueue.push(entry);
   sendRunMessage(ws, entry.taskId, { type: 'task_created', task: entry.record });
   pumpRuns();
@@ -1842,22 +1701,22 @@ function cancelDispatch(taskId, ws) {
   if (queuedIdx !== -1) {
     const [entry] = dispatchQueue.splice(queuedIdx, 1);
     entry.record.status = 'cancelled';
+    entry.record.exitCode = 130;
     writeTask(entry.record);
     sendRunMessage(ws || entry.ws, taskId, {
       type: 'done',
       exitCode: 130,
       message: 'Auftrag aus der Warteschlange genommen'
     });
+    entry.onComplete?.(new Error('Auftrag aus der Warteschlange genommen'), entry.record);
+    pumpRuns();
     return;
   }
 
   const run = liveRuns.get(taskId);
   if (!run) return;
-  if (run.children.size === 0) return;
-  run.children.forEach((child) => {
-    userCancelledProcesses.add(child);
-    try { child.kill('SIGINT'); } catch {}
-  });
+  run.cancelled = true;
+  run.controllers.forEach((controller) => controller.abort());
   sendRunMessage(ws || run.ws, taskId, {
     type: 'output',
     html: '<span style="color:var(--danger)">\n[Abgebrochen durch Benutzer]</span>\n'
@@ -1917,16 +1776,13 @@ function ensurePtyHelperExecutable() {
 }
 ensurePtyHelperExecutable();
 
-const PTY_ALLOWED_COMMANDS = new Set(
-  Object.values(CLI_INSTALL_REGISTRY).flatMap(m => [m.cmd, m.altCmd].filter(Boolean))
-);
+const PTY_ALLOWED_COMMANDS = new Set(HARNESS_REGISTRY.freebuff.commands);
 
 function resolvePtyCommand(command) {
-  const meta = Object.values(CLI_INSTALL_REGISTRY).find(m => m.cmd === command || m.altCmd === command);
-  if (!meta) return null;
-  for (const candidate of [meta.cmd, meta.altCmd].filter(Boolean)) {
+  if (!PTY_ALLOWED_COMMANDS.has(command)) return null;
+  for (const candidate of HARNESS_REGISTRY.freebuff.commands) {
     try {
-      execSync(`which ${candidate}`, { stdio: 'ignore' });
+      execFileSync('which', [candidate], { stdio: 'ignore' });
       return candidate;
     } catch {}
   }
@@ -1967,7 +1823,13 @@ function startPtySession(ws, payload) {
     return writePty(ws, { type: 'pty_error', error: `Befehl "${command}" nicht im PATH gefunden.` });
   }
 
-  const workDir = (cwd && fs.existsSync(cwd)) ? cwd : (loadTasksData().rootDirectory || process.env.HOME);
+  let workDir;
+  try {
+    const data = loadTasksData();
+    workDir = resolveWorkspaceDirectory(cwd, data.rootDirectory || DEFAULT_ROOT_DIR);
+  } catch (err) {
+    return writePty(ws, { type: 'pty_error', error: err.message });
+  }
 
   const holder = ptyOwnershipBlocker({
     singleSessionCommands: SINGLE_SESSION_COMMANDS,
@@ -2085,7 +1947,7 @@ wss.on('connection', (ws) => {
         submitDispatch(data, ws);
       }
     } catch (err) {
-      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', error: err.message }));
+      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', error: err.message, message: err.message }));
     }
   });
 });
@@ -2152,71 +2014,6 @@ function harnessEnv(overrides = {}) {
   return env;
 }
 
-function buildCliCommand(selectedRoute, fullPrompt, effectiveModel) {
-  let cmd = selectedRoute.command;
-  let args = [];
-
-  if (selectedRoute.harness === 'claude_code' || selectedRoute.command === 'claude') {
-    args = ['-p', fullPrompt, '--permission-mode', 'acceptEdits'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-  } else if (selectedRoute.command === 'cline') {
-    args = ['--auto-approve', 'true'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-    args.push(fullPrompt);
-  } else if (selectedRoute.command === 'opencode') {
-    args = ['run', '--auto'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-    args.push(fullPrompt);
-  } else if (selectedRoute.command === 'codex' || selectedRoute.harness === 'codex') {
-    args = ['exec', '--dangerously-bypass-approvals-and-sandbox'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-    args.push(fullPrompt);
-  } else if (selectedRoute.command === 'agy' || selectedRoute.harness === 'antigravity_cli') {
-    args = ['--print', fullPrompt, '--dangerously-skip-permissions'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-  } else if (selectedRoute.command === 'qodercli' || selectedRoute.command === 'qoder' || selectedRoute.harness === 'qoder') {
-    try {
-      execSync('which qodercli', { stdio: 'ignore' });
-      cmd = 'qodercli';
-    } catch {
-      cmd = 'qoder';
-    }
-    args = ['-p', fullPrompt, '--dangerously-skip-permissions'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('-m', effectiveModel);
-    }
-  } else if (selectedRoute.command === 'codebuddy' || selectedRoute.command === 'cbc' || selectedRoute.harness === 'codebuddy') {
-    cmd = 'codebuddy';
-    args = ['-p', '-y'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-    args.push(fullPrompt);
-  } else if (selectedRoute.command === 'agent' || selectedRoute.command === 'cursor-agent' || selectedRoute.harness === 'cursor') {
-    // Ohne --trust will Cursor die Verzeichnis-Freigabe; --force vertritt die sonst
-    // nachfragenden Tool-Genehmigungen und hält den Lauf damit nicht an.
-    args = ['-p', '--force', '--trust'];
-    if (effectiveModel && effectiveModel !== 'Standard') {
-      args.push('--model', effectiveModel);
-    }
-    args.push(fullPrompt);
-  } else {
-    args = [fullPrompt];
-  }
-
-  return { cmd, args };
-}
-
 // Hierarchical AGENTS.md: developer root, then the project, global only as a fallback.
 function buildAgentsContext(workingDir) {
   let agentsContext = '';
@@ -2224,15 +2021,17 @@ function buildAgentsContext(workingDir) {
 
   const tasksData = loadTasksData();
   const rootDir = tasksData.rootDirectory || DEFAULT_ROOT_DIR;
-  const rootAgentsFile = path.join(rootDir, 'AGENTS.md');
-  if (fs.existsSync(rootAgentsFile)) {
+  let rootAgentsFile = null;
+  let projectAgentsFile = null;
+  try { rootAgentsFile = resolveAgentFile('rootDev', null, rootDir); } catch {}
+  try { projectAgentsFile = resolveAgentFile('project', workingDir, rootDir); } catch {}
+  if (rootAgentsFile && fs.existsSync(rootAgentsFile)) {
     const content = fs.readFileSync(rootAgentsFile, 'utf8').trim();
     agentsContext += `[Entwickler-Richtlinien aus ${rootAgentsFile}]\n` + content + '\n\n';
     agentsSources.push(`Developer/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
   }
 
-  const projectAgentsFile = path.join(workingDir, 'AGENTS.md');
-  if (fs.existsSync(projectAgentsFile) && projectAgentsFile !== rootAgentsFile) {
+  if (projectAgentsFile && fs.existsSync(projectAgentsFile) && projectAgentsFile !== rootAgentsFile) {
     const content = fs.readFileSync(projectAgentsFile, 'utf8').trim();
     agentsContext += `[Projekt-Richtlinien aus ${projectAgentsFile}]\n` + content + '\n\n';
     agentsSources.push(`${path.basename(workingDir)}/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
@@ -2256,19 +2055,18 @@ function runConsensusDispatch(entry) {
   const { prompt, imagePath } = entry.payload;
   const config = loadConfig();
   const clis = config.clis || [];
-  const enabledRoutes = clis.filter(c => c.enabled !== false);
+  const enabledRoutes = clis.filter(c => c.enabled !== false && c.capabilities.consensus);
 
-  if (enabledRoutes.length < 2) {
-    notify({
-      type: 'error',
-      message: 'Konsens-Modus benötigt mindestens 2 aktive Harnesses in den Einstellungen.'
-    });
+  const routeA = enabledRoutes[0];
+  const routeB = enabledRoutes.find((route) => route.harnessId !== routeA?.harnessId);
+  if (!routeB) {
+    entry.record.status = 'failed';
+    writeTask(entry.record);
+    notify({ type: 'done', exitCode: 1, message: 'Konsens benötigt mindestens zwei aktive Headless-Harnesses.' });
     onComplete(new Error('Zu wenige Harnesses für Konsens-Modus'), entry.record);
     return;
   }
 
-  const routeA = enabledRoutes[0];
-  const routeB = enabledRoutes[1];
   const workingDir = entry.workingDir;
 
   const { agentsContext } = buildAgentsContext(workingDir);
@@ -2306,9 +2104,11 @@ function runConsensusDispatch(entry) {
   let promptB = guidelinePrompt;
   if (imagePath && fs.existsSync(imagePath)) {
     try {
-      const ext = path.extname(imagePath) || '.png';
+      const actual = fs.realpathSync(imagePath);
+      if (!actual.startsWith(`${fs.realpathSync(UPLOADS_DIR)}${path.sep}`)) throw new Error('Bildpfad außerhalb der Uploads');
+      const ext = path.extname(actual) || '.png';
       const targetLocal = path.join(workingDir, `.harness-task-image${ext}`);
-      fs.copyFileSync(imagePath, targetLocal);
+      fs.copyFileSync(actual, targetLocal);
       const imgNotice = `\n[Beigefügtes Bild: ${path.basename(targetLocal)}]\nBitte analysiere dieses Bild und beachte es bei der Umsetzung.\n`;
       promptA += imgNotice;
       promptB += imgNotice;
@@ -2337,6 +2137,7 @@ function runConsensusDispatch(entry) {
   notify({ type: 'output', html: p1Header });
 
   executeSingleRun(routeA, `[Phase 1 Entwurf] ${promptA}`, workingDir, notify, taskRecord, (errA, outputA, codeA) => {
+    if (entry.cancelled) { taskRecord.status = 'cancelled'; writeTask(taskRecord); notify({ type: 'done', exitCode: 130, message: 'Abgebrochen durch Benutzer' }); onComplete(new Error('Abgebrochen'), taskRecord); return; }
     if (errA || codeA !== 0 || !(outputA || '').trim()) reportPhaseFailure(routeA, errA, codeA, outputA);
 
     // Phase 2: Route B
@@ -2345,6 +2146,7 @@ function runConsensusDispatch(entry) {
     notify({ type: 'output', html: p2Header });
 
     executeSingleRun(routeB, `[Phase 2 Alternativ-Entwurf] ${promptB}`, workingDir, notify, taskRecord, (errB, outputB, codeB) => {
+      if (entry.cancelled) { taskRecord.status = 'cancelled'; writeTask(taskRecord); notify({ type: 'done', exitCode: 130, message: 'Abgebrochen durch Benutzer' }); onComplete(new Error('Abgebrochen'), taskRecord); return; }
       if (errB || codeB !== 0 || !(outputB || '').trim()) reportPhaseFailure(routeB, errB, codeB, outputB);
 
       // Phase 3: Synthesis & Implementation
@@ -2372,10 +2174,11 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
 3. Fasse in 2-3 Sätzen zusammen, welche Vorteile der tatsächlich vorliegenden Ansätze eingeflossen sind. Fehlt ein Ansatz, sage das ausdrücklich.`;
 
       executeSingleRun(routeA, synthesisPrompt, workingDir, notify, taskRecord, (errFinal, outputFinal, codeFinal) => {
+        if (entry.cancelled) { taskRecord.status = 'cancelled'; writeTask(taskRecord); notify({ type: 'done', exitCode: 130, message: 'Abgebrochen durch Benutzer' }); onComplete(new Error('Abgebrochen'), taskRecord); return; }
         if (errFinal || codeFinal !== 0 || !(outputFinal || '').trim()) reportPhaseFailure(routeA, errFinal, codeFinal, outputFinal);
-        taskRecord.status = 'completed';
 
         const complete = phaseFailures.length === 0;
+        taskRecord.status = complete ? 'completed' : 'incomplete';
         const finishBanner = complete
           ? `\n<div class="consensus-phase phase-done"><strong>Konsens erfolgreich erzielt!</strong> Die gemeinsame Lösung wurde im Projekt angewendet.</div>\n`
           : `\n<div class="consensus-phase phase-fail"><strong>Konsens unvollständig (${phaseFailures.length} Ausfall/Ausfälle):</strong> ${escapeHtml(phaseFailures.join(' · '))}</div>\n`;
@@ -2390,500 +2193,217 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
           message: complete ? 'Konsens erfolgreich abgeschlossen' : `Konsens mit Ausfall abgeschlossen — ${phaseFailures.join(' · ')}`
         });
 
-        onComplete(null, taskRecord);
+        onComplete(complete ? null : new Error(phaseFailures.join(' · ')), taskRecord);
       });
     });
   });
 }
 
+function renderRuntimeEvent(event, renderChunk) {
+  let raw = '';
+  if (event.type === 'text') raw = event.text || '';
+  else if (event.type === 'thinking') raw = `[thinking] ${event.text || ''}\n`;
+  else if (event.type === 'warning') raw = event.text || '';
+  else if (event.type === 'tool_start') raw = `Werkzeug: ${event.name || 'unbekannt'}\n`;
+  else if (event.type === 'tool_result') raw = `⎿ ${event.text || ''}\n`;
+  else if (event.type === 'session_lost') raw = `${event.message}\n`;
+  else if (event.type === 'error') raw = `${event.message}\n`;
+  if (!raw) return null;
+  const html = event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
+    ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
+  return { raw, html };
+}
+
 function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRecord, callback) {
-  let isInstalled = false;
-  try {
-    execSync(`which ${selectedRoute.command}`, { stdio: 'ignore' });
-    isInstalled = true;
-  } catch {
-    isInstalled = false;
+  const controller = new AbortController();
+  const entry = liveRuns.get(taskRecord.id);
+  if (entry?.cancelled) controller.abort();
+  if (entry) {
+    if (!entry.controllers) entry.controllers = new Set();
+    entry.controllers.add(controller);
   }
-
-  if (!isInstalled) {
-    const errText = `Befehl "${selectedRoute.command}" nicht im PATH gefunden.`;
-    notify({ type: 'output', html: `<span style="color:var(--danger);">[Fehler: ${errText}]</span>\n` });
-    return callback(new Error(errText), '');
-  }
-
-  if (TUI_ONLY_COMMANDS.has(selectedRoute.command)) {
-    const errText = `"${selectedRoute.command}" ist ein reines TUI-CLI ohne Headless-Modus und kann nicht automatisiert ausgeführt werden.`;
-    notify({ type: 'output', html: `<span style="color:var(--danger);">[Fehler: ${errText}]</span>\n` });
-    return callback(new Error(errText), '');
-  }
-
-  const { cmd, args } = buildCliCommand(selectedRoute, fullPrompt, selectedRoute.model || 'Standard');
-  let collectedOutput = '';
   const renderChunk = makeChunkRenderer();
-
-  try {
-    const child = spawn(cmd, args, {
-      cwd: workingDir,
-      // CLIs like opencode derive their project directory from PWD, which would
-      // otherwise stay pointing at this server's own launch directory.
-      env: harnessEnv({ PWD: workingDir })
-    });
-    trackChild(taskRecord.id, child);
-
-    if (child.stdin) child.stdin.end();
-
-    // A consensus phase that never returns would leave the whole run on "Läuft…",
-    // so the silence guard covers this path too, not only the fallback chain.
-    const watchdog = armIdleWatchdog(child, {
-      idleMs: RUN_IDLE_TIMEOUT_MS,
-      onFire: ({ idleMs }) => {
-        const text = `\n<div class="route-fallback-banner">⏱ <strong>Keine Ausgabe seit ${Math.round(idleMs / 1000)} s</strong> — ${escapeHtml(selectedRoute.name)} gilt als festgefressen und wird abgebrochen.</div>\n`;
-        taskRecord.outputHtml += text;
-        notify({ type: 'output', raw: '', html: text });
-      }
-    });
-
-    child.stdout.on('data', (data) => {
-      const text = data.toString();
-      collectedOutput += text;
-      const html = renderChunk(text);
+  runHarness({
+    harnessId: selectedRoute.harnessId,
+    model: selectedRoute.model || 'Standard', prompt: fullPrompt, cwd: workingDir,
+    env: harnessEnv({ PWD: workingDir }), signal: controller.signal,
+    idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
+    onIdle: (idleMs) => {
+      const html = `\n<div class="route-fallback-banner">⏱ <strong>Keine Ausgabe seit ${Math.round(idleMs / 1000)} s</strong> — ${escapeHtml(selectedRoute.name)} wird abgebrochen.</div>\n`;
       taskRecord.outputHtml += html;
-      notify({ type: 'output', raw: text, html });
-    });
-
-    child.stderr.on('data', (data) => {
-      const text = data.toString();
-      collectedOutput += text;
-      const html = `<span style="color:var(--warning)">${renderChunk(text)}</span>`;
-      taskRecord.outputHtml += html;
-      notify({ type: 'output', raw: text, html });
-    });
-
-    child.on('close', (code) => {
-      if (userCancelledProcesses.delete(child)) {
-        return callback(new Error('Abgebrochen durch Benutzer'), collectedOutput, code);
-      }
-      callback(null, collectedOutput, code);
-    });
-
-    child.on('error', (err) => {
-      callback(err, collectedOutput);
-    });
-  } catch (err) {
-    callback(err, '');
-  }
+      notify({ type: 'output', html });
+    },
+    onEvent: (event) => {
+      const output = renderRuntimeEvent(event, renderChunk);
+      if (!output) return;
+      taskRecord.outputHtml += output.html;
+      notify({ type: 'output', ...output });
+    }
+  }).then((result) => {
+    if (result.sessionId) taskRecord.sessionId = result.sessionId;
+    callback(result.status === 'completed' ? null : new Error(result.error?.message || result.status), result.finalText, result.exitCode, result);
+  }).catch((err) => callback(err, '', null, { status: 'failed', error: { kind: 'harness_failure', message: err.message } }))
+    .finally(() => entry?.controllers?.delete(controller));
 }
 
 // Standard Dispatch with Automatic Forward-Routing (Priority Fallback Chain)
 // Die Kette läuft nur noch für einen Auftrag aus dem Pool: Task-ID, Ordner und
 // Meldungsweg kommen aus dem Eintrag, damit mehrere Ketten einander nicht überschreiben.
 function runDispatch(entry) {
-  const { taskId, ws } = entry;
-  const onComplete = entry.finish;
+  const { taskId, ws, workingDir } = entry;
   const notify = (obj) => sendRunMessage(ws, taskId, obj);
-
   const { prompt, harnessOverride, modelOverride, imagePath } = entry.payload;
-  const workingDir = entry.workingDir;
+  const configured = (loadConfig().clis || []).filter((route) => route.enabled !== false && route.capabilities.dispatchable);
+  const candidateRoutes = harnessOverride && harnessOverride !== 'auto'
+    ? configured.filter((route) => route.name === harnessOverride)
+    : configured;
+  const taskRecord = entry.record;
+  const { agentsContext } = buildAgentsContext(workingDir);
+  let fullPrompt = agentsContext.trim() ? `${agentsContext.trim()}\n\n[Aufgabe]\n${prompt}` : prompt;
 
-  const config = loadConfig();
-  const clis = config.clis || [];
-
-  // Determine candidate routes
-  let candidateRoutes = [];
-  if (harnessOverride && harnessOverride !== 'auto') {
-    const specific = clis.find(c => c.name === harnessOverride);
-    if (specific) candidateRoutes = [specific];
-  } else {
-    // Priority order: all enabled routes
-    candidateRoutes = clis.filter(c => c.enabled !== false);
+  if (imagePath && fs.existsSync(imagePath)) {
+    try {
+      const actual = fs.realpathSync(imagePath);
+      if (!actual.startsWith(`${fs.realpathSync(UPLOADS_DIR)}${path.sep}`)) throw new Error('Bildpfad liegt außerhalb des Upload-Verzeichnisses');
+      const target = path.join(workingDir, `.harness-task-image${path.extname(actual) || '.png'}`);
+      fs.copyFileSync(actual, target);
+      fullPrompt += `\n\n[Beigefügtes Bild / Screenshot: ${path.basename(target)}]\nBitte analysiere dieses Bild und beachte es bei der Umsetzung.`;
+    } catch (err) {
+      notify({ type: 'output', html: `<span style="color:var(--warning)">${escapeHtml(err.message)}</span>` });
+    }
   }
 
-  if (candidateRoutes.length === 0) {
-    notify({
-      type: 'error',
-      message: 'Kein aktives Harness gefunden. Bitte im Tab "Harness & Modelle" mindestens ein Harness aktivieren.'
-    });
-    onComplete(new Error('Kein aktives Harness gefunden'), entry.record);
+  const finish = (status, result, message) => {
+    taskRecord.status = status;
+    taskRecord.exitCode = result?.exitCode ?? (status === 'completed' ? 0 : 1);
+    if (result?.error) taskRecord.error = result.error;
+    if (result?.sessionId) taskRecord.sessionId = result.sessionId;
+    writeTask(taskRecord);
+    notify({ type: 'done', exitCode: taskRecord.exitCode, message });
+    entry.finish(status === 'completed' ? null : new Error(message), taskRecord);
+  };
+
+  if (!candidateRoutes.length) {
+    finish('failed', null, 'Kein aktives Headless-Harness gefunden. Bitte ein Harness in den Einstellungen aktivieren.');
     return;
   }
 
-  // Read once per dispatch so a chain of routes judges every harness against the
-  // same snapshot instead of mid-run changing its mind.
   const dispatchHealthMarks = loadHarnessHealthMarks();
+  const renderChunk = makeChunkRenderer();
+  const previousTask = entry.payload.previousTaskId
+    ? (loadTasksData().tasks || []).find((task) => task.id === entry.payload.previousTaskId)
+    : null;
 
-  // Read Hierarchical AGENTS.md
-  const { agentsContext } = buildAgentsContext(workingDir);
-  const agentsInfo = entry.record.agentsInfo;
-
-  let fullPrompt = prompt;
-  if (agentsContext.trim()) {
-    fullPrompt = `${agentsContext.trim()}\n\n[Aufgabe]\n${prompt}`;
-  }
-
-  // Handle multimodal image attachment
-  if (imagePath && fs.existsSync(imagePath)) {
-    try {
-      const ext = path.extname(imagePath) || '.png';
-      const targetLocal = path.join(workingDir, `.harness-task-image${ext}`);
-      fs.copyFileSync(imagePath, targetLocal);
-      fullPrompt += `\n\n[Beigefügtes Bild / Screenshot: ${path.basename(targetLocal)}]\nBitte analysiere dieses Bild und beachte es bei der Umsetzung.`;
-    } catch (e) {
-      console.warn("Fehler beim Kopieren des Bildes:", e);
-    }
-  }
-
-  const taskRecord = entry.record;
-
-  // Function to execute routes sequentially in priority chain with Smart Context Handoff (Relay)
-  function tryRoute(routeIndex, relayContext = null) {
-    if (routeIndex >= candidateRoutes.length) {
-      const errMsg = 'Alle verfügbaren Harnesses in der Prioritätskette sind fehlgeschlagen oder nicht installiert.';
-      const failBanner = `\n<div class="route-failed-banner" style="background:rgba(194,98,92,0.15); border:1px solid var(--danger); padding:10px 14px; border-radius:8px; margin-top:8px; color:var(--danger);">✕ <strong>Routing-Kette erschöpft:</strong> ${errMsg}</div>\n`;
-      taskRecord.outputHtml += failBanner;
-      notify({ type: 'output', raw: errMsg, html: failBanner });
-      taskRecord.status = 'failed';
-      writeTask(taskRecord);
-      notify({ type: 'done', taskId, exitCode: 1, message: errMsg });
-      onComplete(new Error(errMsg), taskRecord);
-      return;
-    }
-
-    const selectedRoute = candidateRoutes[routeIndex];
-    const effectiveModel = (modelOverride && modelOverride !== 'Standard')
-      ? modelOverride
-      : (selectedRoute.model || 'Standard');
-
-    // Check if CLI is installed in PATH
-    let isInstalled = false;
-    try {
-      execSync(`which ${selectedRoute.command}`, { stdio: 'ignore' });
-      isInstalled = true;
-    } catch {
-      isInstalled = false;
-    }
-
-    if (!isInstalled) {
-      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:var(--warning); font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) nicht im System-PATH gefunden.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
-      taskRecord.outputHtml += skipNotice;
-      notify({ type: 'output', raw: '', html: skipNotice });
-      return tryRoute(routeIndex + 1, relayContext);
-    }
-
-    if (TUI_ONLY_COMMANDS.has(selectedRoute.command)) {
-      const skipNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:8px 12px; border-radius:8px; margin:6px 0; color:var(--warning); font-size:12px;"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) ist ein reines TUI-CLI ohne Headless-Modus — ohne echtes Terminal (PTY) führt es keinen Auftrag aus.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
-      taskRecord.outputHtml += skipNotice;
-      notify({ type: 'output', raw: '', html: skipNotice });
-      return tryRoute(routeIndex + 1, relayContext);
-    }
-
-    // Skip a route that policy, a measured login failure or another running task
-    // rules out, before its minutes of silence cost the task anything.
-    const blockedBy = [
-      knownBrokenBlocker(selectedRoute, dispatchHealthMarks, {
-        explicitChoice: !!harnessOverride && harnessOverride !== 'auto'
-      }),
-      busyHarnessBlocker(selectedRoute, runningForGate().filter((r) => r.taskId !== taskId), SINGLE_SESSION_COMMANDS)
-    ].filter(Boolean);
-    if (blockedBy.length) {
-      const skipNotice = `\n<div class="route-fallback-banner"><strong>${escapeHtml(selectedRoute.name)}</strong> (<code>${escapeHtml(selectedRoute.command)}</code>) wird vorab übersprungen: ${escapeHtml(blockedBy.join('; '))}.<br/><em>Springe automatisch zum nächsten Harness in der Prioritätskette...</em></div>\n`;
-      taskRecord.outputHtml += skipNotice;
-      notify({ type: 'output', raw: '', html: skipNotice });
-      return tryRoute(routeIndex + 1, relayContext);
-    }
-
-    // Update taskRecord details
-    taskRecord.harness = selectedRoute.name;
-    taskRecord.command = selectedRoute.command;
-    taskRecord.model = effectiveModel;
-    // Ab jetzt hält dieser Lauf den Harness — auch für die Warteschlange.
-    entry.commands = [selectedRoute.command];
-
-    notify({
-      type: 'route_selected',
-      taskId: taskId,
-      harness: selectedRoute.name,
-      harnessType: selectedRoute.harness || 'generic',
-      command: selectedRoute.command,
-      model: effectiveModel,
-      workingDir: workingDir,
-      agentsInfo: agentsInfo,
-      projectPath: workingDir
-    });
-
-    const isRelay = Boolean(relayContext);
-    const headerMsg = `<div class="route-banner" style="${isRelay ? 'border-left: 3px solid var(--warning);' : ''}">
-      <span class="badge ${isRelay ? 'badge-warning' : 'badge-accent'}">${isRelay ? '🔄 Kontext-Relay #' + (routeIndex + 1) : 'Priorität #' + (routeIndex + 1)}</span>
-      <span><strong>Harness:</strong> ${selectedRoute.name} (${selectedRoute.command})</span>
-      <span><strong>Modell:</strong> ${effectiveModel}</span>
-      <span><strong>Projekt:</strong> ${path.basename(workingDir)}</span>
-      <span><strong>Kontext:</strong> 📜 ${agentsInfo}</span>
-    </div>\n\n`;
-
-    taskRecord.outputHtml += headerMsg;
-    notify({ type: 'output', html: headerMsg });
-
-    // Build prompt: If relayContext is provided, wrap in structured handoff format
-    let effectivePrompt = fullPrompt;
-    if (relayContext) {
-      effectivePrompt = `[AUTOMATISCHE KONTEXT-ÜBERGABE & NAHTLOSE FORTSETZUNG]\n` +
-        `Das vorherige Harness "${relayContext.prevHarness}" (${relayContext.prevCommand}) wurde vorzeitig abgebrochen (${relayContext.reason}).\n\n` +
-        `URSPRÜNGLICHER BENUTZER-AUFTRAG:\n${prompt}\n\n` +
-        `STAND DER DATEIEN IM PROJEKTVERZEICHNIS:\n${relayContext.workspaceDiff}\n\n` +
-        `LETZTER ZWISCHENSTAND / AUSGABE DES VORHERIGEN HARNESS:\n"""\n${relayContext.lastOutput}\n"""\n\n` +
-        `DEIN AUFTRAG:\n` +
-        `1. Analysiere den bisher erarbeiteten Code und die Dateien im Projekt.\n` +
-        `2. Knüpfe nahtlos an den bestehenden Zwischenstand an, ohne von vorn zu beginnen.\n` +
-        `3. Schließe die Aufgabe vollständig und funktionstüchtig ab.`;
-
-      if (imagePath && fs.existsSync(imagePath)) {
-        const ext = path.extname(imagePath) || '.png';
-        const targetLocal = path.join(workingDir, `.harness-task-image${ext}`);
-        effectivePrompt += `\n\n[Beigefügtes Bild / Screenshot: ${path.basename(targetLocal)}]\nBitte beachte auch das beigefügte Bild.`;
-      }
-    }
-
-    const { cmd, args } = buildCliCommand(selectedRoute, effectivePrompt, effectiveModel);
-    let currentRunRawOutput = '';
-    let watchdogIdleMs = null;
-    const renderChunk = makeChunkRenderer();
-
-    try {
-      const child = spawn(cmd, args, {
-        cwd: workingDir,
-        env: harnessEnv({ PWD: workingDir })
-      });
-      trackChild(taskId, child);
-
-      if (child.stdin) child.stdin.end();
-
-      const watchdog = armIdleWatchdog(child, {
-        idleMs: RUN_IDLE_TIMEOUT_MS,
-        onFire: ({ idleMs }) => {
-          watchdogIdleMs = idleMs;
-          const text = `\n<div class="route-fallback-banner">⏱ <strong>${escapeHtml(selectedRoute.name)}</strong> schreibt seit ${Math.round(idleMs / 1000)} s nichts mehr (hängt meist an eine Freigabe) — Abbruch und Übergabe.</div>\n`;
-          taskRecord.outputHtml += text;
-          notify({ type: 'output', raw: '', html: text });
-        }
-      });
-
-      child.stdout.on('data', (data) => {
-        const text = data.toString();
-        currentRunRawOutput += text;
-        const html = renderChunk(text);
+  (async () => {
+    let relayContext = null;
+    for (let index = 0; index < candidateRoutes.length; index += 1) {
+      if (entry.cancelled) { finish('cancelled', null, 'Abgebrochen durch Benutzer'); return; }
+      const route = candidateRoutes[index];
+      const blocked = [
+        knownBrokenBlocker(route, dispatchHealthMarks, { explicitChoice: Boolean(harnessOverride && harnessOverride !== 'auto') }),
+        busyHarnessBlocker(route, runningForGate().filter((run) => run.taskId !== taskId), SINGLE_SESSION_COMMANDS)
+      ].filter(Boolean);
+      if (blocked.length) {
+        const html = `<div class="route-fallback-banner"><strong>${escapeHtml(route.name)}</strong> wird übersprungen: ${escapeHtml(blocked.join('; '))}.</div>\n`;
         taskRecord.outputHtml += html;
-        notify({ type: 'output', raw: text, html });
-      });
-
-      child.stderr.on('data', (data) => {
-        const text = data.toString();
-        currentRunRawOutput += text;
-        const html = `<span style="color:var(--warning)">${renderChunk(text)}</span>`;
-        taskRecord.outputHtml += html;
-        notify({ type: 'output', raw: text, html });
-      });
-
-      child.on('close', (code) => {
-        if (userCancelledProcesses.delete(child)) {
-          taskRecord.status = 'cancelled';
-          writeTask(taskRecord);
-          notify({ type: 'done', taskId, exitCode: code, message: 'Abgebrochen durch Benutzer' });
-          onComplete(new Error('Abgebrochen'), taskRecord);
-          return;
-        }
-
-        // A harness that refuses its own config or flags can still exit with 0, so
-        // its output decides alongside the code.
-        const refusal = code === 0 ? startupRefusal(currentRunRawOutput) : null;
-
-        // If failed and more routes exist, auto-fallback with SMART CONTEXT HANDOFF!
-        if ((code !== 0 || refusal) && routeIndex + 1 < candidateRoutes.length) {
-          let reason = `Fehlercode ${code}`;
-          if (refusal) {
-            reason = `Start verweigert: ${refusal}`;
-          } else if (watchdogIdleMs) {
-            reason = `Keine Ausgabe seit ${Math.round(watchdogIdleMs / 1000)} s`;
-          } else if (currentRunRawOutput.match(/429|rate\s*limit|quota|credit|insufficient|budget|overloaded/i)) {
-            reason = 'Quota / Rate-Limit erreicht (429 / Guthaben erschöpft)';
-          } else if (currentRunRawOutput.match(/context.*(length|window|limit|exceeded|too long)/i)) {
-            reason = 'Kontextfenster-Limit überschritten';
-          } else if (code === 137 || code === 143) {
-            reason = 'Prozess beendet (OOM / Timeout)';
-          }
-
-          const cleanOutput = currentRunRawOutput
-            .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
-            .trim();
-          const lastOutputSnippet = cleanOutput.length > 2500 ? '...' + cleanOutput.slice(-2500) : (cleanOutput || 'Keine Konsolenausgabe vorhanden');
-          const wsDiff = getWorkspaceChanges(workingDir);
-
-          const nextRelayContext = {
-            prevHarness: selectedRoute.name,
-            prevCommand: selectedRoute.command,
-            exitCode: code,
-            reason: reason,
-            lastOutput: lastOutputSnippet,
-            workspaceDiff: wsDiff
-          };
-
-          taskRecord.relayHandoffs = taskRecord.relayHandoffs || [];
-          taskRecord.relayHandoffs.push({
-            from: selectedRoute.name,
-            to: candidateRoutes[routeIndex + 1].name,
-            reason: reason,
-            timestamp: new Date().toISOString()
-          });
-
-          const nextName = candidateRoutes[routeIndex + 1].name;
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:10px 14px; border-radius:8px; margin:8px 0; color:var(--warning); font-size:12px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-              <span class="badge" style="background:var(--warning); color:#0b0c10; font-weight:700;">🔄 Smart Context Relay</span>
-              <strong>${escapeHtml(selectedRoute.name)} abgebrochen (${escapeHtml(reason)})</strong>
-            </div>
-            <div>Zwischenstand (${lastOutputSnippet.length} Zeichen) und Workspace-Status werden nahtlos an Priorität #${routeIndex + 2} (<strong>${escapeHtml(nextName)}</strong>) übergeben...</div>
-          </div>\n`;
-
-          taskRecord.outputHtml += fallbackNotice;
-          notify({ type: 'output', raw: '', html: fallbackNotice });
-          return tryRoute(routeIndex + 1, nextRelayContext);
-        }
-
-        taskRecord.status = code === 0 && !refusal ? 'completed' : 'failed';
-        taskRecord.exitCode = code;
-
-        // Token Usage Calculation
-        const promptChars = fullPrompt ? fullPrompt.length : 0;
-        const outputChars = taskRecord.outputHtml ? taskRecord.outputHtml.length : 0;
-        let promptTokens = Math.round(promptChars / 4);
-        let outputTokens = Math.round(outputChars / 4);
-        let totalTokens = promptTokens + outputTokens;
-        let costStr = '$0.00';
-
-        let contextMax = 200000;
-        if (selectedRoute.command === 'claude' || selectedRoute.command === 'agy') {
-          contextMax = 1000000;
-        }
-
-        try {
-          const rawOutput = taskRecord.outputHtml || '';
-          const costMatch = rawOutput.match(/total_cost_usd["']?:\s*([\d\.]+)/);
-          if (costMatch) costStr = `$${parseFloat(costMatch[1]).toFixed(4)}`;
-          const tokensMatch = rawOutput.match(/input_tokens["']?:\s*(\d+).*?output_tokens["']?:\s*(\d+)/s);
-          if (tokensMatch) {
-            promptTokens = parseInt(tokensMatch[1], 10);
-            outputTokens = parseInt(tokensMatch[2], 10);
-            totalTokens = promptTokens + outputTokens;
-          }
-        } catch {}
-
-        const remainingTokens = Math.max(0, contextMax - totalTokens);
-        const remainingPercent = Math.max(0, Math.round((remainingTokens / contextMax) * 1000) / 10);
-
-        taskRecord.usage = {
-          promptTokens,
-          outputTokens,
-          totalTokens,
-          contextMax,
-          remainingTokens,
-          remainingPercent,
-          cost: costStr
-        };
-
-        if (code === 0 && !refusal) {
-          const usageBanner = `\n<div class="usage-summary-banner">
-            <span class="badge badge-accent">📊 Usage</span>
-            <span><strong>Tokens:</strong> ${totalTokens.toLocaleString()} (${promptTokens.toLocaleString()} Prompt / ${outputTokens.toLocaleString()} Antwort)</span>
-            <span><strong>Verbleibend:</strong> ${remainingPercent}% (${Math.round(remainingTokens / 1000).toLocaleString()}k frei)</span>
-            <span><strong>Kosten:</strong> ${costStr}</span>
-          </div>\n`;
-          taskRecord.outputHtml += usageBanner;
-          notify({ type: 'output', raw: '', html: usageBanner });
-        }
-
-        // Save
-        writeTask(taskRecord);
-
-        notify({
-          type: 'done',
-          taskId: taskId,
-          exitCode: code,
-          usage: taskRecord.usage,
-          message: refusal ? `Start verweigert: ${refusal}` : (code === 0 ? 'Erfolgreich abgeschlossen' : `Beendet mit Code ${code}`)
-        });
-
-        onComplete(null, taskRecord);
-      });
-
-      child.on('error', (err) => {
-        if (routeIndex + 1 < candidateRoutes.length) {
-          const nextRelayContext = {
-            prevHarness: selectedRoute.name,
-            prevCommand: selectedRoute.command,
-            exitCode: -1,
-            reason: `Startfehler: ${err.message}`,
-            lastOutput: `Konnte ${selectedRoute.command} nicht starten: ${err.message}`,
-            workspaceDiff: getWorkspaceChanges(workingDir)
-          };
-          const nextName = candidateRoutes[routeIndex + 1].name;
-          const fallbackNotice = `\n<div class="route-fallback-banner" style="background:rgba(185,138,69,0.12); border:1px solid rgba(185,138,69,0.3); padding:10px 14px; border-radius:8px; margin:6px 0; color:var(--warning); font-size:12px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-              <span class="badge" style="background:var(--warning); color:#0b0c10; font-weight:700;">🔄 Smart Relay</span>
-              <strong>Fehler beim Starten von ${escapeHtml(selectedRoute.name)}: ${escapeHtml(err.message)}</strong>
-            </div>
-            <div>Übergebe an <strong>${escapeHtml(nextName)}</strong>...</div>
-          </div>\n`;
-          taskRecord.outputHtml += fallbackNotice;
-          notify({ type: 'output', raw: '', html: fallbackNotice });
-          return tryRoute(routeIndex + 1, nextRelayContext);
-        }
-
-        taskRecord.status = 'error';
-        taskRecord.errorMessage = err.message;
-        notify({
-          type: 'error',
-          taskId: taskId,
-          message: `Fehler beim Ausführen von ${cmd}: ${err.message}`
-        });
-        onComplete(err, taskRecord);
-      });
-    } catch (err) {
-      if (routeIndex + 1 < candidateRoutes.length) {
-        return tryRoute(routeIndex + 1, relayContext);
+        notify({ type: 'output', html });
+        continue;
       }
-      notify({ type: 'error', message: err.message });
-      onComplete(err, taskRecord);
-    }
-  }
 
-  // Start with first route in priority order
-  tryRoute(0);
+      const model = modelOverride && modelOverride !== 'Standard' ? modelOverride : (route.model || 'Standard');
+      taskRecord.harness = route.name;
+      taskRecord.harnessId = route.harnessId;
+      taskRecord.command = route.command;
+      taskRecord.model = model;
+      entry.commands = [route.command];
+      notify({ type: 'route_selected', harness: route.name, harnessType: route.harnessId,
+        command: route.command, model, workingDir, agentsInfo: taskRecord.agentsInfo, projectPath: workingDir });
+      const header = `<div class="route-banner"><span class="badge badge-accent">Priorität #${index + 1}</span>` +
+        `<span><strong>Harness:</strong> ${escapeHtml(route.name)} (${escapeHtml(route.command)})</span>` +
+        `<span><strong>Modell:</strong> ${escapeHtml(model)}</span>` +
+        `<span><strong>Projekt:</strong> ${escapeHtml(path.basename(workingDir))}</span>` +
+        `<span><strong>Kontext:</strong> ${escapeHtml(taskRecord.agentsInfo)}</span></div>\n\n`;
+      taskRecord.outputHtml += header;
+      notify({ type: 'output', html: header });
+
+      const effectivePrompt = relayContext
+        ? `[AUTOMATISCHE KONTEXT-ÜBERGABE]\nUrsprünglicher Auftrag:\n${prompt}\n\n` +
+          `Vorheriges Harness: ${relayContext.prevHarness}; Grund: ${relayContext.reason}\n\n` +
+          `Projektänderungen:\n${relayContext.workspaceDiff}\n\n` +
+          `Letzter Zwischenstand:\n${relayContext.lastOutput}\n\n` +
+          `Analysiere den Projektstand und schließe die Aufgabe vollständig ab.`
+        : fullPrompt;
+      const previousSessionId = !relayContext && previousTask?.projectPath === workingDir &&
+        previousTask?.harnessId === route.harnessId ? previousTask.sessionId : null;
+      const controller = new AbortController();
+      if (!entry.controllers) entry.controllers = new Set();
+      entry.controllers.add(controller);
+      let result;
+      try {
+        result = await runHarness({ harnessId: route.harnessId, model, prompt: effectivePrompt,
+          cwd: workingDir, previousSessionId, signal: controller.signal,
+          env: harnessEnv({ PWD: workingDir }), idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
+          onIdle: (idleMs) => {
+            const html = `<div class="route-fallback-banner">⏱ <strong>${escapeHtml(route.name)}</strong> schreibt seit ${Math.round(idleMs / 1000)} s nichts mehr — Abbruch und Übergabe.</div>\n`;
+            taskRecord.outputHtml += html;
+            notify({ type: 'output', html });
+          },
+          onEvent: (event) => {
+            const output = renderRuntimeEvent(event, renderChunk);
+            if (!output) return;
+            taskRecord.outputHtml += output.html;
+            notify({ type: 'output', ...output });
+          }
+        });
+      } finally {
+        entry.controllers.delete(controller);
+      }
+      if (result.status === 'cancelled') {
+        finish('cancelled', result, 'Abgebrochen durch Benutzer');
+        return;
+      }
+      if (result.status === 'completed') {
+        const promptTokens = Math.round(fullPrompt.length / 4);
+        const outputTokens = Math.round(result.finalText.length / 4);
+        const totalTokens = promptTokens + outputTokens;
+        const contextMax = ['claude', 'antigravity'].includes(route.harnessId) ? 1000000 : 200000;
+        taskRecord.usage = { promptTokens, outputTokens, totalTokens, contextMax,
+          remainingTokens: Math.max(0, contextMax - totalTokens),
+          remainingPercent: Math.max(0, Math.round((1 - totalTokens / contextMax) * 1000) / 10), cost: '–' };
+        const usageBanner = `\n<div class="usage-summary-banner">` +
+          `<span class="badge badge-accent">📊 Nutzung</span>` +
+          `<span><strong>Tokens (geschätzt):</strong> ${totalTokens.toLocaleString('de-DE')} (${promptTokens.toLocaleString('de-DE')} Prompt / ${outputTokens.toLocaleString('de-DE')} Antwort)</span>` +
+          `<span><strong>Verbleibend (geschätzt):</strong> ${taskRecord.usage.remainingPercent}%</span>` +
+          `</div>\n`;
+        taskRecord.outputHtml += usageBanner;
+        notify({ type: 'output', html: usageBanner });
+        finish('completed', result, 'Erfolgreich abgeschlossen');
+        return;
+      }
+
+      const reason = result.error?.message || `Fehlercode ${result.exitCode}`;
+      if (index + 1 >= candidateRoutes.length || result.error?.retryability !== 'next_harness') {
+        finish('failed', result, reason);
+        return;
+      }
+      const lastOutput = (result.finalText || result.rawTail || '').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').trim().slice(-2500);
+      relayContext = { prevHarness: route.name, reason, lastOutput: lastOutput || 'Keine Konsolenausgabe vorhanden',
+        workspaceDiff: getWorkspaceChanges(workingDir) };
+      taskRecord.relayHandoffs = taskRecord.relayHandoffs || [];
+      taskRecord.relayHandoffs.push({ from: route.name, to: candidateRoutes[index + 1].name, reason, timestamp: new Date().toISOString() });
+      const html = `<div class="route-fallback-banner"><strong>${escapeHtml(route.name)}</strong> abgebrochen (${escapeHtml(reason)}). ` +
+        `Kontext-Relay an <strong>${escapeHtml(candidateRoutes[index + 1].name)}</strong>…</div>\n`;
+      taskRecord.outputHtml += html;
+      notify({ type: 'output', html });
+    }
+    finish('failed', null, 'Alle verfügbaren Harnesses in der Prioritätskette sind fehlgeschlagen.');
+  })().catch((err) => finish('failed', { error: { kind: 'harness_failure', message: err.message } }, err.message));
 }
 
 // Background Scheduler Execution Engine
-function isJobDue(job, now) {
-  if (!job.lastRun) return true;
-  const last = new Date(job.lastRun).getTime();
-  const current = now.getTime();
-  const diffMinutes = (current - last) / (1000 * 60);
-
-  switch (job.interval) {
-    case 'every_15_mins':
-      return diffMinutes >= 15;
-    case 'hourly':
-      return diffMinutes >= 60;
-    case 'every_6_hours':
-      return diffMinutes >= 360;
-    case 'daily_02_00':
-      return now.getHours() === 2 && (now.toDateString() !== new Date(last).toDateString());
-    case 'daily_08_00':
-      return now.getHours() === 8 && (now.toDateString() !== new Date(last).toDateString());
-    case 'weekly_monday':
-      return now.getDay() === 1 && now.getHours() === 8 && (now.toDateString() !== new Date(last).toDateString());
-    default:
-      return diffMinutes >= 60;
-  }
-}
-
 function runScheduledJob(job) {
+  const data = loadTasksData();
+  resolveWorkspaceDirectory(job.projectPath, data.rootDirectory || DEFAULT_ROOT_DIR);
   console.log(`[Scheduler] Führe geplanten Job aus: "${job.name}" im Projekt "${job.projectPath}"`);
   job.lastRun = new Date().toISOString();
   job.lastStatus = 'running';
@@ -2902,7 +2422,7 @@ function runScheduledJob(job) {
         if (s.id === job.id) {
           return {
             ...s,
-            lastStatus: err ? 'failed' : 'completed',
+            lastStatus: taskRecord?.status || (err ? 'failed' : 'completed'),
             lastRun: new Date().toISOString()
           };
         }
@@ -2934,7 +2454,13 @@ function checkAndRunSchedules() {
   const now = new Date();
   schedules.forEach(job => {
     if (job.enabled && isJobDue(job, now)) {
-      runScheduledJob(job);
+      try { runScheduledJob(job); }
+      catch (err) {
+        job.lastRun = now.toISOString();
+        job.lastStatus = 'failed';
+        saveSchedules(schedules);
+        console.error(`[Scheduler] ${job.name}: ${err.message}`);
+      }
     }
   });
 }
@@ -2999,7 +2525,8 @@ const telegramBotState = {
   lastPollError: null
 };
 
-let telegramPollingActive = false;
+let telegramPollController = null;
+let telegramPollGeneration = 0;
 
 async function checkTelegramBotToken(token) {
   if (!token) return { ok: false, error: 'Kein Token angegeben' };
@@ -3057,7 +2584,7 @@ async function handleTelegramUpdate(update, token) {
       const userId = String(cb.from.id);
       const data = cb.data || '';
 
-      if (allowed.length > 0 && !allowed.includes(userId)) {
+      if (!allowed.includes(userId)) {
         await sendTelegramAnswerCallback(token, cb.id, "Nicht autorisiert!");
         return;
       }
@@ -3066,8 +2593,9 @@ async function handleTelegramUpdate(update, token) {
         const targetProj = data.slice(5);
         const td = loadTasksData();
         const rootDir = td.rootDirectory || DEFAULT_ROOT_DIR;
-        const targetPath = path.join(rootDir, targetProj);
-        if (fs.existsSync(targetPath)) {
+        const selected = scanProjects(rootDir).find((project) => project.name === targetProj);
+        if (selected) {
+          const targetPath = resolveWorkspaceDirectory(selected.path, rootDir);
           td.activeProject = targetPath;
           saveTasksData(td);
           await sendTelegramAnswerCallback(token, cb.id, `Projekt: ${targetProj}`);
@@ -3089,18 +2617,7 @@ async function handleTelegramUpdate(update, token) {
     const username = msg.from.username || msg.from.first_name || 'User';
     const text = (msg.text || '').trim();
 
-    // Auto-pair on first interaction if no allowed users set
-    if (allowed.length === 0) {
-      if (!config.remote) config.remote = {};
-      if (!config.remote.telegram) config.remote.telegram = {};
-      config.remote.telegram.allowedUsers = [userId];
-      saveConfig(config);
-      await sendTelegramMessage(
-        token,
-        chatId,
-        `🎉 *Erfolgreich gekoppelt!*\nDein Telegram-Account (@${username}, ID \`${userId}\`) wurde als autorisierter Admin registriert. Alle Befehle werden nun ausgeführt.`
-      );
-    } else if (!allowed.includes(userId)) {
+    if (!allowed.includes(userId)) {
       await sendTelegramMessage(
         token,
         chatId,
@@ -3175,7 +2692,7 @@ async function handleTelegramUpdate(update, token) {
       const td = loadTasksData();
       const currentProj = td.activeProject ? path.basename(td.activeProject) : 'Standard';
       const rootDir = td.rootDirectory || DEFAULT_ROOT_DIR;
-      const clis = (loadConfig().clis || []).filter(c => c.enabled !== false);
+      const clis = (loadConfig().clis || []).filter(c => c.enabled !== false && c.capabilities.telegramDispatch);
       const readyClis = clis.map(c => `• ${c.name} (\`${c.command}\`)`).join('\n') || 'Keine CLIs aktiv';
 
       await sendTelegramMessage(
@@ -3226,7 +2743,7 @@ async function handleTelegramUpdate(update, token) {
         [{ text: '🤝 Konsens-Modus (Dual-Agent)', callback_data: 'harn:consensus' }]
       ];
       clis.forEach(c => {
-        if (c.enabled !== false) {
+        if (c.enabled !== false && c.capabilities.telegramDispatch) {
           buttons.push([{ text: `🔹 ${c.name} (${c.command})`, callback_data: `harn:${c.name}` }]);
         }
       });
@@ -3274,7 +2791,7 @@ async function handleTelegramUpdate(update, token) {
     }
 
     const td = loadTasksData();
-    const projectPath = td.activeProject || td.rootDirectory || DEFAULT_ROOT_DIR;
+    const projectPath = resolveWorkspaceDirectory(td.activeProject || td.rootDirectory, td.rootDirectory || DEFAULT_ROOT_DIR);
     const projectName = path.basename(projectPath);
 
     let startText = `⏳ *Task gestartet!*\n📁 *Projekt:* \`${projectName}\``;
@@ -3332,6 +2849,10 @@ async function handleTelegramUpdate(update, token) {
 }
 
 async function startTelegramBot() {
+  const generation = ++telegramPollGeneration;
+  telegramPollController?.abort();
+  telegramPollController = null;
+  telegramBotState.isRunning = false;
   const config = loadConfig();
   const tele = config.remote?.telegram;
   if (!tele || !tele.enabled || !tele.botToken) {
@@ -3340,6 +2861,7 @@ async function startTelegramBot() {
   }
 
   const check = await checkTelegramBotToken(tele.botToken);
+  if (generation !== telegramPollGeneration) return;
   if (!check.ok) {
     telegramBotState.isRunning = false;
     telegramBotState.lastPollError = check.error;
@@ -3353,26 +2875,31 @@ async function startTelegramBot() {
   telegramBotState.lastPollError = null;
   console.log(`Telegram Bot aktiv: @${check.user.username} (${check.user.first_name})`);
 
-  if (telegramPollingActive) return;
-  telegramPollingActive = true;
-
-  let offset = 0;
-  while (telegramBotState.isRunning) {
-    try {
-      const res = await fetch(`https://api.telegram.org/bot${tele.botToken}/getUpdates?offset=${offset}&timeout=25`);
-      const data = await res.json();
-      if (data.ok && Array.isArray(data.result)) {
-        for (const update of data.result) {
-          offset = update.update_id + 1;
-          await handleTelegramUpdate(update, tele.botToken);
+  const controller = new AbortController();
+  telegramPollController = controller;
+  (async () => {
+    let offset = 0;
+    while (generation === telegramPollGeneration && !controller.signal.aborted) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${tele.botToken}/getUpdates?offset=${offset}&timeout=25`, { signal: controller.signal });
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.result)) {
+          for (const update of data.result) {
+            if (generation !== telegramPollGeneration) break;
+            offset = update.update_id + 1;
+            await handleTelegramUpdate(update, tele.botToken);
+          }
         }
+      } catch (err) {
+        if (controller.signal.aborted) break;
+        telegramBotState.lastPollError = err.message;
+        await new Promise(r => setTimeout(r, 4000));
       }
-    } catch (err) {
-      if (!telegramBotState.isRunning) break;
-      await new Promise(r => setTimeout(r, 4000));
     }
-  }
-  telegramPollingActive = false;
+    if (generation === telegramPollGeneration) telegramBotState.isRunning = false;
+  })().catch((err) => {
+    if (generation === telegramPollGeneration) telegramBotState.lastPollError = err.message;
+  });
 }
 
 // Remote & Telegram API Endpoints
@@ -3513,7 +3040,7 @@ function reconcileOrphanedTasks() {
     const orphans = (data.tasks || []).filter(t => t.status === 'running' || t.status === 'queued');
     if (orphans.length === 0) return;
     orphans.forEach(t => {
-      t.status = 'error';
+      t.status = 'incomplete';
       t.outputHtml += `\n<span style="color:var(--danger);">[Unterbrochen: Der Server wurde neu gestartet, bevor dieser Task endete.]</span>\n`;
     });
     saveTasksData(data);

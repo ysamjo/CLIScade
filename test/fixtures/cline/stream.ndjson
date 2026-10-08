@@ -1,0 +1,6 @@
+{"type":"hook_event","hookEventName":"agent_start","taskId":"cline-task"}
+{"type":"agent_event","event":{"type":"content_start","contentType":"tool","toolName":"shell","toolCallId":"tool-1","input":{"command":"pwd"}}}
+{"type":"agent_event","event":{"type":"content_end","contentType":"tool","toolCallId":"tool-1","output":"/tmp/projekt"}}
+{"type":"agent_event","event":{"type":"content_end","contentType":"reasoning","text":"Überlegen"}}
+{"type":"agent_event","event":{"type":"content_end","contentType":"text","text":"Antwort"}}
+{"type":"run_result","finishReason":"completed","text":"Antwort"}
