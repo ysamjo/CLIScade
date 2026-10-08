@@ -36,6 +36,7 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 
 ```bash
 npm start                        # Server auf http://localhost:3000
+HOST=127.0.0.1 npm start         # nur lokal erreichbar, nicht im LAN
 node test/ui-smoke.mjs           # Oberfläche im jsdom (Struktur + Verhalten)
 node test/konsole_schichten.test.js
                                  # 34 Behauptungen: Schichten aus echten Protokollen

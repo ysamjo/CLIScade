@@ -18,7 +18,7 @@ npm install
 npm start
 ```
 
-Der Server lauscht standardmäßig auf `0.0.0.0:3000`; `PORT` überschreibt den Port. Die Oberfläche liegt unter `http://localhost:3000`. Sie ist im LAN erreichbar, daher sind nur die fest registrierten Programme startbar. Dispatch und PTY verwenden den gewählten Ordner innerhalb des konfigurierten Workspace-Roots. Ungültige oder über Symlinks ausbrechende Pfade werden abgelehnt.
+Der Server lauscht standardmäßig auf `0.0.0.0:3000`; `PORT` überschreibt den Port. Für lokalen Zugriff ohne LAN-Freigabe kann `HOST=127.0.0.1` gesetzt werden. Die Oberfläche liegt unter `http://localhost:3000`. Bei LAN-Zugriff sind nur die fest registrierten Programme startbar. Dispatch und PTY verwenden den gewählten Ordner innerhalb des konfigurierten Workspace-Roots. Ungültige oder über Symlinks ausbrechende Pfade werden abgelehnt.
 
 Laufzeitdaten liegen außerhalb des Repos in `~/.harness-dispatch/`: `config.yaml`, `studio-tasks.json`, `schedules.json`, `AGENTS.md`, `studio.log` und Uploads. Das Bot-Token bleibt dort; `GET /api/config` liefert es nicht zurück. Telegram-Zugriff erfordert explizit eingetragene Nutzer-IDs.
 

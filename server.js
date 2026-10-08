@@ -49,6 +49,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const STATE_DIR = path.join(process.env.HOME, '.harness-dispatch');
 const CONFIG_FILE = path.join(STATE_DIR, 'config.yaml');
 const AGENTS_MD_FILE = path.join(STATE_DIR, 'AGENTS.md');
@@ -3050,9 +3051,9 @@ function reconcileOrphanedTasks() {
   }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  const lanIp = getLanIp();
-  console.log(`Harness Studio running on http://0.0.0.0:${PORT} (LAN: http://${lanIp}:${PORT})`);
+server.listen(PORT, HOST, () => {
+  const lanHint = HOST === '0.0.0.0' ? ` (LAN: http://${getLanIp()}:${PORT})` : '';
+  console.log(`Harness Studio running on http://${HOST}:${PORT}${lanHint}`);
   reconcileOrphanedTasks();
   gatewayEnv();
   startTelegramBot().catch(err => console.error("Telegram Bot Start:", err));
