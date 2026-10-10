@@ -10,7 +10,7 @@ Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, c
 | **Entscheidung** | `routing.js` | Reine Logik ohne IO: `dispatchSlotDecision`, `knownBrokenBlocker`, `armIdleWatchdog`, `startupRefusal`, `gatewayEnvFromShell` |
 | **Runtime** | `runtime/` | Feste Harness-Registry, gemeinsamer Process Runner, `runHarness()`, Ereignisse, Fehlerklassen, Sessions und CLI-Adapter |
 | **Oberfläche** | `public/` | Vanilla JS ohne Bundler: `app.js` (Zustand + Rendering), `konsole-schichten.js` (Leseschichten der Konsole, reiner Text ohne DOM), `index.html`, `style.css`, `icons.js`, `sw.js` |
-| **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `runtime/*.test.js` (Adapter, Runner, Sessions, Sicherheit), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js`, `konsole_queue.test.js`, `konsole_schichten.test.js` |
+| **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `runtime/*.test.js` (Adapter, Runner, Sessions, Kind-Umgebung, Sicherheit), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js`, `konsole_queue.test.js`, `konsole_schichten.test.js` |
 
 **Laufzeitumgebung**: Node-Prozess auf Port `3000`, bindet `0.0.0.0` (im LAN sichtbar).
 Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.yaml`
@@ -59,8 +59,13 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
   unbehandelte Ausnahme — der Server stirbt mitten im Betrieb, auch beim Ausliefern einer
   statischen Datei. Im Log sieht das aus wie `ENOSPC: no space left on device` oder
   `Brokered file token refused`. Ebenso zu entfernen: `BASH_ENV`, `PYTHONPATH`, `CODEBUDDY_*`,
-  `WORKBUDDY_*`, `SANDBOX_CENTER_*` und die Shim-Einträge in `PATH` (`cli/vendor/shim`).
-  Der Launcher filtert das und warnt, wenn noch etwas durchkommt.
+  `WORKBUDDY_*`, `SANDBOX_CENTER_*`, `SERVER__PORT`/`SERVER__HOST` und die Shim-Einträge in
+  `PATH` (`cli/vendor/shim`). Der Launcher filtert das und warnt, wenn noch etwas durchkommt.
+- **Zwei Ebenen gegen App-Gerüst in der Umgebung.** `SERVER__PORT` benennt den Web-UI-Server der
+  aufrufenden WorkBuddy-App. Erbt ihn ein Lauf, bindet der Harness denselben Port und stirbt vor
+  dem ersten Token mit `listen EADDRINUSE: address already in use 127.0.0.1:54968`. Deshalb filtert
+  der Launcher den Start des Servers **und** `runtime/harness-runtime.js` jeden Spawn
+  (`childEnv()`), damit auch ein von Hand gestarteter Server sauber dispatcht.
 - **Neustart nur ohne `QODER_*`-Umgebung.** Der Launcher erledigt das per Präfix; von Hand
   scrubben als Array (`env "${scrub[@]}" node server.js`) — eine per `$(...)` gebaute
   Zeichenkette zerlegt zsh **nicht**, der Server läuft dann trotzdem und vergiftet jedes

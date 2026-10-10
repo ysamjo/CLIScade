@@ -22,6 +22,11 @@ WorkBuddy-App gestartet, erbt er deren Geruest, und das bringt ihn um:
   BASH_ENV, PYTHONPATH, CODEBUDDY_*, WORKBUDDY_*
       dasselbe Geruest in anderen Sprachen.
 
+  SERVER__PORT, SERVER__HOST
+      der Web-UI-Port der App. Bleibt er in der Umgebung, bindet jeder dispatchte
+      Harness denselben Port — codebuddy bricht dann sofort ab mit
+      "listen EADDRINUSE: address already in use 127.0.0.1:54968".
+
 Deshalb: Denylist fuer die bekannten Marker, Praefixe fuer die Namen, die je
 App-Version wechseln, und der PATH wird von Shim-Eintraegen befreit.
 ANTHROPIC_*/CLAUDE_*/QODER_* fliegen ebenfalls raus — die Gateway-Umbiegung
@@ -42,6 +47,10 @@ ZU_ENTFERNEN = (
     "NODE_OPTIONS",      # --require node-language-shim.cjs
     "BASH_ENV",
     "PYTHONPATH",
+    # Web-UI-Port der App. Erbt ihn ein dispatchter Harness, bindet er denselben
+    # Port und stirbt mit "EADDRINUSE 127.0.0.1:54968" (gemessen 2026-10-10).
+    "SERVER__PORT",
+    "SERVER__HOST",
     "__CFBundleIdentifier",
     "ACC_PRODUCT_CONFIG_PATH",
     "PENDING_TELEMETRY_DIR",

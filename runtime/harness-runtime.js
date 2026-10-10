@@ -12,6 +12,18 @@ const ADAPTERS = Object.freeze({
   codebuddy: require('./adapters/codebuddy'), cursor: require('./adapters/cursor')
 });
 
+// Gerüst der aufrufenden App, das in keinen Lauf gehört: SERVER__PORT/SERVER__HOST
+// benennen den Web-UI-Server der WorkBuddy-App. Erbt sie ein Harness, bindet er
+// denselben Port und stirbt vor dem ersten Token mit
+// "listen EADDRINUSE: address already in use 127.0.0.1:54968".
+const APP_FRAMEWORK_ENV = Object.freeze(['SERVER__PORT', 'SERVER__HOST']);
+
+function childEnv(env = {}) {
+  const clean = { ...env };
+  for (const name of APP_FRAMEWORK_ENV) delete clean[name];
+  return clean;
+}
+
 function availableCommand(entry, env) {
   for (const command of entry.commands) {
     try { return execFileSync('which', [command], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || command; }
@@ -28,6 +40,7 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
     error: { kind: 'harness_failure', retryability: 'never', message: 'Harness ist nicht für Headless-Läufe freigegeben' }, events: [], exitCode: null
   };
   const adapter = ADAPTERS[harnessId];
+  const runEnv = childEnv(env);
   const events = [];
   let sessionId = null;
   let finalText = '';
@@ -44,7 +57,7 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
     try { onEvent?.(event); } catch {}
   };
 
-  const resume = entry.resumable && previousSessionId && hasSession(harnessId, previousSessionId, env);
+  const resume = entry.resumable && previousSessionId && hasSession(harnessId, previousSessionId, runEnv);
   if (previousSessionId && !resume) emit({ type: 'session_lost', message: 'Gespeicherte Session fehlt; neuer CLI-Thread im selben Projekt' });
   const release = acquireSession(harnessId, resume ? previousSessionId : null);
   if (!release) return {
@@ -52,12 +65,12 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
     error: { kind: 'session_busy', retryability: 'never', message: 'Diese Session arbeitet bereits' }, events, exitCode: null
   };
   try {
-    const command = availableCommand(entry, env);
+    const command = availableCommand(entry, runEnv);
     if (!command) return {
       status: 'failed', finalText, sessionId, model,
       error: { kind: 'not_installed', retryability: 'next_harness', message: `${entry.name} ist nicht installiert` }, events, exitCode: null
     };
-    const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env });
+    const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env: runEnv });
     const structured = entry.structuredOutput;
     const consume = (line) => {
       if (!line) return;
@@ -69,7 +82,7 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
       for (const event of adapter.normalize(parsed)) emit(event);
     };
     const processResult = await runProcess({
-      command, args, cwd, env: { ...env, PWD: cwd }, signal, idleTimeoutMs, timeoutMs, onIdle, onSpawn,
+      command, args, cwd, env: { ...runEnv, PWD: cwd }, signal, idleTimeoutMs, timeoutMs, onIdle, onSpawn,
       onChunk: ({ stream, text }) => {
         if (stream === 'stderr') { emit({ type: 'warning', text }); return; }
         if (!structured) { emit({ type: 'text', text }); return; }
@@ -102,4 +115,4 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
   }
 }
 
-module.exports = { runHarness };
+module.exports = { runHarness, childEnv };
