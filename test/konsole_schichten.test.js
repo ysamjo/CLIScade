@@ -2,7 +2,7 @@
 //
 // Die Formen sind den echten Protokollen nachgebaut (~/.harness-dispatch/studio-tasks.json):
 // Claude schreibt eine &lt;think&gt;-Region, die erst nach zwei freien Zeilen endet;
-// cline und freebuff schreiben [thinking], [read_files], ⎿-Folgezeilen, [status] und
+// cline und andere schreiben [thinking], [read_files], ⎿-Folgezeilen, [status] und
 // Tokens-Zeilen. Vorher lag das ungeordnet in einer Textwüste.
 //
 // Aufruf:  node test/konsole_schichten.test.js
@@ -68,7 +68,7 @@ pruefe("das Routing-Banner bleibt ein ganzes Element",
   /antigravity-remote-android/.test(bannerBlock.text),
   JSON.stringify(bannerBlock));
 
-// --- 2. cline und freebuff: Werkzeug, Gedanke, Notiz ---------------------
+// --- 2. cline: Werkzeug, Gedanke, Notiz ---------------------------------
 
 f = new KonsoleFormatierer().mal({ html: CLINE, lebt: false });
 const schichten = f.bloecke.map((b) => b.schicht);

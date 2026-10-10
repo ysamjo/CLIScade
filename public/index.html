@@ -11,7 +11,6 @@
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="apple-touch-icon" href="/icon.svg">
   <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,44 +70,13 @@
 
     <!-- MAIN STUDIO WORKSPACE -->
     <main class="main-content">
-      <!-- STUDIO (INTERAKTIVES TERMINAL, ROUTING & LIVE OUTPUT) -->
       <section id="tab-studio" class="tab-pane active">
-        <div class="studio-mode-switch">
+        <!-- Nur mobil: die Seitenleiste ist hier off-canvas, also braucht sie einen Griff. -->
+        <div class="studio-bar">
           <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
-          <button id="mode-interactive-btn" class="mode-btn" data-mode="interactive">
-            <span data-icon="terminal"></span> Interaktives Terminal
-          </button>
-          <button id="mode-dispatch-btn" class="mode-btn active" data-mode="dispatch">
-            <span data-icon="send"></span> Auto-Route (KI-Dispatch)
-          </button>
         </div>
 
-        <!-- INTERAKTIVES PTY-TERMINAL (nur freebuff) -->
-        <div id="interactive-panel" class="studio-container interactive-container hidden">
-          <div class="interactive-toolbar">
-            <div class="select-group">
-              <label for="interactive-cli-select">CLI:</label>
-              <select id="interactive-cli-select" class="custom-select"></select>
-            </div>
-            <div class="interactive-target">
-              <span data-icon="folder"></span>
-              <span>Zielordner: <strong id="interactive-target-folder">-</strong></span>
-            </div>
-          </div>
-          <div class="terminal-wrapper interactive-terminal-wrapper">
-            <div class="terminal-header">
-              <span id="interactive-terminal-title" class="terminal-title">Kein Prozess gestartet</span>
-              <div class="terminal-actions">
-                <button id="interactive-takeover-btn" class="btn-text" hidden title="Session von einem anderen Fenster holen">Übernehmen</button>
-                <button id="interactive-stop-btn" class="btn-text btn-text-danger" disabled title="Laufenden Prozess beenden">Beenden</button>
-                <button id="interactive-clear-btn" class="btn-text">Leeren</button>
-              </div>
-            </div>
-            <div id="xterm-container" class="xterm-container"></div>
-          </div>
-        </div>
-
-        <!-- AUTO-ROUTE (BESTEHENDER KI-DISPATCH) -->
+        <!-- AUTO-ROUTE (KI-DISPATCH) -->
         <div id="dispatch-panel" class="studio-container">
           <!-- KONSOLEN: zwei Aufträge nebeneinander, je einer pro Feld -->
           <div id="run-split" class="run-split">
@@ -147,7 +115,7 @@
                 </span>
               </div>
               <div class="run-pane-body terminal-body">
-                <div class="terminal-placeholder">Zweiter Auftrag daneben.</div>
+                <div class="terminal-placeholder">Kein Auftrag — hier eine Aufgabe eingeben.</div>
               </div>
               <div class="run-pane-composer">
                 <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
@@ -324,7 +292,7 @@
             <div class="settings-inline-row">
               <label for="max-concurrent-input">Gleichzeitig</label>
               <input type="number" id="max-concurrent-input" class="number-input-sm" min="0" max="8" step="1" value="" placeholder="keine Kappe">
-              <span class="inline-hint">Aufträge nebeneinander — pro Ordner nur einer, freebuff nur einmal.</span>
+              <span class="inline-hint">Aufträge nebeneinander — pro Ordner nur einer.</span>
             </div>
 
             <div class="settings-card-footer">
@@ -494,7 +462,7 @@
                 • <strong>Claude Code</strong>: Routet über OmniRoute als Proxy mit API-Key (Pay-per-Token). Es gibt <strong>kein monatliches Abo-Budgetlimit</strong>; alle Tokens und USD-Kosten werden live über <code>omniroute cost</code> synchronisiert.<br/>
                 • <strong>Antigravity (AGY)</strong>: Bietet bis zu 1.000.000 Tokens Kontextfenster im Developer Quota (Google AI Studio, 15 RPM).<br/>
                 • <strong>OpenCode</strong>: Live erfasste Statistiken via <code>opencode stats --cost</code> mit transparentem Token- und Session-Verlauf.<br/>
-                • <strong>Freebuff / CodeBuddy</strong>: Nutzen standardmäßig unmetered / kostenfreie Community-Modelle ohne Abrechnungslimit.<br/>
+                • <strong>CodeBuddy</strong>: Nutzt standardmäßig kostenfreie Community-Modelle ohne Abrechnungslimit.<br/>
                 • <strong>Codex</strong>: Nutzt Ihre ChatGPT Plus/Pro Web-Session (im OpenAI-Abonnement enthalten).<br/>
                 • <strong>Qoder / Cline</strong>: Verwenden Account-Credits bzw. konfigurierte Bring-Your-Own-Key / lokale Modelle.<br/>
                 • <strong>Cursor</strong>: Läuft über Ihr Cursor-Konto (Abo-Kontingent). <code>auto</code> ist die aktuelle Voreinstellung und wählt das Modell pro Aufgabe.
@@ -836,8 +804,6 @@
     </div>
   </div>
 
-  <script src="/vendor/xterm/lib/xterm.js"></script>
-  <script src="/vendor/xterm-addon-fit/lib/addon-fit.js"></script>
   <script src="/konsole-schichten.js"></script>
   <script src="app.js"></script>
 </body>

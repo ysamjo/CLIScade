@@ -7,9 +7,7 @@ const {
   armIdleWatchdog,
   knownBrokenBlocker,
   startupRefusal,
-  ptyOwnershipBlocker,
   dispatchSlotDecision,
-  busyHarnessBlocker,
   gatewayEnvFromShell,
   isJobDue
 } = require('../routing');
@@ -96,16 +94,16 @@ test('Frist liesst HARNESS_IDLE_TIMEOUT_MS, damit ein End-to-End-Test nicht drei
 });
 
 test('ueberspringt eine Route mit frischem Login-Fehler', () => {
-  const broken = { freebuff: { errorKind: 'auth', at: Date.now() - 3 * 60 * 60 * 1000 } };
-  const blocker = knownBrokenBlocker({ command: 'freebuff', name: 'Freebuff' }, broken, {});
+  const broken = { opencode: { errorKind: 'auth', at: Date.now() - 3 * 60 * 60 * 1000 } };
+  const blocker = knownBrokenBlocker({ command: 'opencode', name: 'OpenCode' }, broken, {});
   assert.ok(blocker, 'ein bekannter Login-Fehler muss die Route vorab bremsen');
   assert.match(blocker, /Login/);
   assert.match(blocker, /vor 3 h/);
 });
 
 test('bremst nicht, wenn der Nutzer die Route selbst gewaehlt hat', () => {
-  const broken = { freebuff: { errorKind: 'auth', at: Date.now() - 60 * 1000 } };
-  const blocker = knownBrokenBlocker({ command: 'freebuff', name: 'Freebuff' }, broken, { explicitChoice: true });
+  const broken = { opencode: { errorKind: 'auth', at: Date.now() - 60 * 1000 } };
+  const blocker = knownBrokenBlocker({ command: 'opencode', name: 'OpenCode' }, broken, { explicitChoice: true });
   assert.strictEqual(blocker, null, 'eine explizite Wahl darf nie still uebersprungen werden');
 });
 
@@ -131,40 +129,6 @@ test('laesst eine Route durch, die wirklich gearbeitet hat', () => {
   assert.strictEqual(startupRefusal(''), null);
 });
 
-test('laesst keine zweite freebuff-Instanz aus einem anderen Fenster starten', () => {
-  const sessions = [{ id: 'pty_1', command: 'freebuff', clientId: 'A', cwd: '/proj' }];
-  const holder = ptyOwnershipBlocker({
-    singleSessionCommands: new Set(['freebuff']),
-    sessions,
-    command: 'freebuff',
-    clientId: 'B'
-  });
-  assert.ok(holder, 'freebuff nimmt dem Konto nur eine Session ab; die zweite verdraengt die erste');
-  assert.strictEqual(holder.id, 'pty_1');
-});
-
-test('laesst dasselbe Fenster neu starten', () => {
-  const sessions = [{ id: 'pty_1', command: 'freebuff', clientId: 'A', cwd: '/proj' }];
-  const holder = ptyOwnershipBlocker({
-    singleSessionCommands: new Set(['freebuff']),
-    sessions,
-    command: 'freebuff',
-    clientId: 'A'
-  });
-  assert.strictEqual(holder, null, 'der eigene Prozess wird vom Server vorher gefegt');
-});
-
-test('gilt nur fuer Einkonto-Befehle', () => {
-  const sessions = [{ id: 'pty_1', command: 'freebuff', clientId: 'A', cwd: '/proj' }];
-  const holder = ptyOwnershipBlocker({
-    singleSessionCommands: new Set(['freebuff']),
-    sessions,
-    command: 'claude',
-    clientId: 'B'
-  });
-  assert.strictEqual(holder, null);
-});
-
 // runningForGate() liefert pro Lauf eine Kommandoliste: ein Konsens laeuft mit zwei
 // Engines, ein Auto-Lauf mit der einen, die die Kette gerade gewaehlt hat.
 test('laesst einen Task warten, wenn die Kappe voll ist', () => {
@@ -180,12 +144,9 @@ test('laesst einen Task warten, wenn die Kappe voll ist', () => {
   assert.strictEqual(block.reason, 'capacity');
 });
 
-const ALLEIN = new Set(['freebuff']);
-
 test('laesst denselben Harness in einem anderen Ordner arbeiten', () => {
   const running = [{ taskId: 't1', projectPath: '/a', commands: ['cline'] }];
   const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
     running,
     incoming: { projectPath: '/b', requires: ['cline'] }
   });
@@ -195,22 +156,10 @@ test('laesst denselben Harness in einem anderen Ordner arbeiten', () => {
 test('startet ohne Kappe beliebig viele Aufträge', () => {
   const running = ['t1', 't2', 't3', 't4', 't5'].map((taskId, i) => ({ taskId, projectPath: `/o${i}`, commands: [`c${i}`] }));
   const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
     running,
     incoming: { projectPath: '/z', candidates: ['claude'] }
   });
   assert.strictEqual(block, null, 'maxConcurrent 0 oder fehlend heisst: keine Kappe');
-});
-
-test('haelt freebuff als einzige Session dicht', () => {
-  const running = [{ taskId: 't1', projectPath: '/a', commands: ['freebuff'] }];
-  const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
-    running,
-    incoming: { projectPath: '/b', requires: ['freebuff'] }
-  });
-  assert.strictEqual(block.reason, 'harness', 'das Konto nimmt nur eine aktive Session — 409 session_superseded');
-  assert.strictEqual(block.blocker.taskId, 't1');
 });
 
 test('laesst zwei Tasks im selben Ordner nicht gleichzeitig arbeiten', () => {
@@ -240,7 +189,6 @@ test('startet auto auch dann, wenn die ganze Kette belegt ist', () => {
     { taskId: 't2', projectPath: '/b', commands: ['claude'] }
   ];
   const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
     running,
     incoming: { projectPath: '/c', candidates: ['cline', 'claude'] }
   });
@@ -249,7 +197,6 @@ test('startet auto auch dann, wenn die ganze Kette belegt ist', () => {
 
 test('laesst nichts starten, wenn ueberhaupt nichts laeuft', () => {
   const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
     running: [],
     incoming: { projectPath: '/c', candidates: ['cline', 'claude'] }
   });
@@ -259,42 +206,19 @@ test('laesst nichts starten, wenn ueberhaupt nichts laeuft', () => {
 test('laesst Konsens starten, wenn nur ein gewoehnlicher Harness belegt ist', () => {
   const running = [{ taskId: 't1', projectPath: '/a', commands: ['claude'] }];
   const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
     running,
     incoming: { projectPath: '/b', requires: ['cline', 'claude'] }
   });
   assert.strictEqual(block, null, 'beide Engines teilen zu koennen ist kein Grund zu warten');
 });
 
-test('wartet mit Konsens, wenn eine Einkonto-Engine belegt ist', () => {
-  const running = [{ taskId: 't1', projectPath: '/a', commands: ['freebuff'] }];
-  const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
-    running,
-    incoming: { projectPath: '/b', requires: ['cline', 'freebuff'] }
-  });
-  assert.strictEqual(block.reason, 'harness');
-  assert.strictEqual(block.blocker.taskId, 't1');
-});
-
 test('startet Konsens, wenn beide Engines frei sind', () => {
   const running = [{ taskId: 't1', projectPath: '/a', commands: ['opencode'] }];
   const block = dispatchSlotDecision({
-    singleSessionCommands: ALLEIN,
     running,
     incoming: { projectPath: '/b', requires: ['cline', 'claude'] }
   });
   assert.strictEqual(block, null);
-});
-
-test('rueckt in der Kette nur ueber Einkonto-Befehle weiter', () => {
-  const running = [
-    { taskId: 't1', projectPath: '/a', commands: ['cline'] },
-    { taskId: 't2', projectPath: '/b', commands: ['freebuff'] }
-  ];
-  assert.strictEqual(busyHarnessBlocker({ command: 'cline', name: 'Cline' }, running, ALLEIN), null,
-    'Cline darf noch einmal laufen — ein zweites Fenster ist kein Konflikt');
-  assert.match(busyHarnessBlocker({ command: 'freebuff', name: 'Freebuff' }, running, ALLEIN), /Freebuff/);
 });
 
 // --- Was das Terminal auf den eigenen Gateway biegt -----------------------

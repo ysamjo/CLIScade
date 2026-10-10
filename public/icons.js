@@ -40,8 +40,6 @@ const HARNESS_META = {
   agy: { letter: 'A' },
   qoder_cli: { letter: 'Q' },
   qodercli: { letter: 'Q' },
-  freebuff_cli: { letter: 'F' },
-  freebuff: { letter: 'F' },
   codebuddy_cli: { letter: 'B' },
   codebuddy: { letter: 'B' },
   cursor_cli: { letter: 'Cu' },

@@ -58,7 +58,7 @@ barrierStub('stub-bar-b', 'stub-bar-a');
 // Server-Prozess sieht sie nie — er soll sie sich aber bei der Shell holen koennen.
 makeStub('stub-shell', 'echo "ANTHROPIC_BASE_URL=http://gateway.stub/v1"; echo "TERM_PROGRAM=iTerm.app"');
 makeStub('claude', 'echo "BASE=[${ANTHROPIC_BASE_URL:-keiner}]"');
-makeStub('freebuff', 'echo DARF_NICHT_LAUFEN');
+makeStub('stub-fremd', 'echo DARF_NICHT_LAUFEN');
 
 // Die Konfiguration darf nur feste Harness-IDs enthalten. Jeder Test tauscht
 // deshalb die Implementierung bekannter Executables im Wegwerf-PATH aus.
@@ -69,7 +69,7 @@ const stubHarnesses = {
   'stub-login': ['qoder', 'qodercli'], 'stub-configfehler': ['qoder', 'qodercli'],
   'stub-env': ['qoder', 'qodercli'], claude: ['claude', 'claude'], agent: ['cursor', 'agent'],
   'stub-codex-auth': ['codex', 'codex'], 'stub-codex-rate': ['codex', 'codex'],
-  freebuff: ['freebuff', 'freebuff']
+  'stub-fremd': ['stub-fremd', 'stub-fremd']
 };
 
 function knownRoutes(routes, targetBin) {
@@ -764,9 +764,9 @@ test('Wiederholte Request-ID startet nur einen Auftrag', async () => {
   assert.equal(messages.filter((message) => message.type === 'route_selected').length, 1);
 });
 
-test('Freebuff bleibt außerhalb von Auto-Route und Konsens', async () => {
+test('Ein Befehl ausserhalb der Registry bleibt aus Auto-Route und Konsens heraus', async () => {
   parConfig([
-    { name: 'Freebuff', command: 'freebuff', enabled: true },
+    { name: 'Fremd', command: 'stub-fremd', enabled: true },
     { name: 'Gesund', command: 'stub-run', enabled: true }
   ]);
   const automatic = await runMany([{ prompt: 'Aufgabe', projectPath: parProjectA }]);

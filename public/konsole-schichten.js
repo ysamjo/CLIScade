@@ -3,7 +3,7 @@
 // selbst schreiben. Formen aus den echten Protokollen in ~/.harness-dispatch:
 //   Claude   - &lt;think&gt; öffnet eine Region, die erst nach zwei freien Zeilen endet
 //   cline    - [thinking], [read_files], [run_commands], Folgezeilen mit ⎿, (+1 more)
-//   freebuff - [status] provider error — retrying, Tokens: 4,090 (...)
+//   weitere  - [status] provider error — retrying, Tokens: 4,090 (...)
 //
 // Kein DOM, kein Server: der Formatierer kennt nur Text, damit die Oberfläche beim
 // Malen dumm bleibt und sich die Schichten ohne Browser prüfen lassen.

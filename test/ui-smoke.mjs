@@ -9,8 +9,8 @@
 //
 // Aufruf:  node test/ui-smoke.mjs
 //
-// Kein Browser nötig: xterm und WebSocket werden gestubbt, fetch wird über eine
-// Routentabelle bedient.
+// Kein Browser nötig: WebSocket und fetch werden gestubbt, fetch über eine
+// Routentabelle.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -42,11 +42,9 @@ const ruhen = async (n = 10) => {
 
 // --- Stubs ---------------------------------------------------------------
 
-// Ein Harness, den das Terminal auswählen kann. Nur freebuff ist tuiOnly —
-// das interaktive Terminal zeigt ausschließlich die TUI-only-CLIs, der Rest
-// (Claude, Qoder, …) gehört in den Auto-Route-Dispatch.
+// Die Harnesses, die der Server im Status meldet. Alle sind headless: das
+// interaktive Terminal gibt es nicht mehr, jeder Harness läuft über den Dispatch.
 const HEALTH = [
-  { name: "Freebuff", cmd: "freebuff", available: true, version: "1.0", tuiOnly: true },
   { name: "Claude Code", cmd: "claude", available: true, version: "2.0" },
   { name: "Qoder", cmd: "qoder", available: false }
 ];
@@ -129,29 +127,13 @@ class WebSocketStub {
   close() { this.readyState = 3; }
 }
 
-class TerminalStub {
-  constructor() {
-    this.cols = 100;
-    this.rows = 30;
-    this.ausgabe = [];
-  }
-  open() {}
-  loadAddon() {}
-  onData() {}
-  write(text) { this.ausgabe.push(text); }
-  reset() { this.ausgabe = []; }
-  clear() {}
-  focus() {}
-  dispose() {}
-}
-
 // --- Seite bauen ---------------------------------------------------------
 
 const dom = new JSDOM(readFileSync(join(PUBLIC, "index.html"), "utf8"), {
   url: "http://localhost:3000/",
   runScripts: "outside-only",
-  // jsdom liefert requestAnimationFrame nur mit dieser Option; setStudioMode
-  // misst das Terminal darin neu.
+  // jsdom liefert requestAnimationFrame nur mit dieser Option; die Oberfläche
+  // hängt daran beim Aufbau der Konsolenfelder.
   pretendToBeVisual: true
 });
 const { window } = dom;
@@ -164,8 +146,6 @@ window.alert = () => {};
 window.confirm = () => true;
 window.open = () => null;
 window.WebSocket = WebSocketStub;
-window.Terminal = TerminalStub;
-window.FitAddon = { FitAddon: class { fit() {} } };
 
 window.fetch = async (pfad, optionen = {}) => {
   const schluessel = `${optionen.method || "GET"} ${pfad}`;
@@ -219,36 +199,39 @@ pruefe("Archiv-Schalter ist ein Icon",
   document.querySelector("#archive-filter-btn [data-icon='archive']") !== null);
 
 const drawer = document.querySelector("#mobile-sidebar-toggle");
-pruefe("#mobile-sidebar-toggle sitzt in der Modus-Leiste",
-  drawer?.parentElement?.classList.contains("studio-mode-switch") === true);
+pruefe("#mobile-sidebar-toggle sitzt in der Studio-Leiste",
+  drawer?.parentElement?.classList.contains("studio-bar") === true);
 
-// --- 3. Start/Beenden: nur noch Beenden, im Terminal-Header -------------
+// --- 3. Das interaktive Terminal ist raus --------------------------------
+// Kein Umschalter, kein xterm, kein PTY: die Oberfläche dispatcht nur noch.
 
-pruefe("kein Start-Knopf mehr", document.querySelector("#interactive-start-btn") === null);
-pruefe("keine .interactive-actions mehr", document.querySelector(".interactive-actions") === null);
-
-const stopp = document.querySelector("#interactive-stop-btn");
-pruefe("#interactive-stop-btn existiert", stopp !== null);
-pruefe("Beenden sitzt im Terminal-Header",
-  stopp?.parentElement?.classList.contains("terminal-actions") === true);
-pruefe("Beenden ist im Ruhezustand deaktiviert", stopp?.disabled === true);
-
-const takeover = document.querySelector("#interactive-takeover-btn");
-pruefe("#interactive-takeover-btn existiert", takeover !== null);
-pruefe("Übernehmen ist im Ruhezustand versteckt", takeover?.hidden === true);
+pruefe("kein Modus-Umschalter mehr",
+  document.querySelector("#mode-interactive-btn") === null
+  && document.querySelector("#mode-dispatch-btn") === null);
+pruefe("kein interaktives Panel mehr",
+  document.querySelector("#interactive-panel") === null
+  && document.querySelector("#xterm-container") === null);
+pruefe("keine Terminal-Knöpfe mehr",
+  document.querySelector("#interactive-stop-btn") === null
+  && document.querySelector("#interactive-takeover-btn") === null
+  && document.querySelector("#interactive-clear-btn") === null);
+pruefe("kein Terminal-Gerüst mehr",
+  document.querySelector(".terminal-header") === null
+  && document.querySelector(".terminal-actions") === null);
+pruefe("kein Terminal-Skript mehr im DOM",
+  [...document.querySelectorAll("script[src]")].every((s) => !/xterm/.test(s.src)));
 
 // --- 4. Das Skript ist ohne Fehler durchgelaufen -------------------------
 
 pruefe("keine JS-Fehler beim Bootstrap", fehler.length === 0, fehler.join(" | "));
 pruefe("OpenCode-Modellliste erscheint auch bei verspätetem Preset-Laden",
   [...document.querySelectorAll(".model-dropdown option")].some((option) => option.value === "opencode/fledge-alpha-free"));
-// Das interaktive Terminal listet nur noch die TUI-only-CLI (hier freebuff);
-// die Headless-CLIs (claude, qoder) gehören in den Auto-Route-Dispatch.
-pruefe("CLI-Auswahl zeigt nur die TUI-CLI (freebuff)",
-  document.querySelectorAll("#interactive-cli-select option").length === 1
-  && document.querySelector("#interactive-cli-select option")?.value === "freebuff");
-pruefe("Freebuff lässt sich nicht als Headless-Route hinzufügen",
-  document.querySelector('#new-route-harness option[value="freebuff"]') === null);
+pruefe("keine CLI-Auswahl des Terminals mehr",
+  document.querySelector("#interactive-cli-select") === null);
+pruefe("die Routen-Auswahl kennt genau die acht Registry-Harnesses",
+  [...document.querySelectorAll("#new-route-harness option")].map((o) => o.value).join(",")
+    === "claude_code,codex,cline,opencode,antigravity_cli,qoder,codebuddy,cursor",
+  [...document.querySelectorAll("#new-route-harness option")].map((o) => o.value).join(","));
 pruefe("Dispatch-Konsolen haben je ein Routing-Feld",
   document.querySelectorAll("#run-split .run-pane-routing").length === 2);
 pruefe("Das globale Routing-Feld ist raus",
@@ -257,7 +240,9 @@ pruefe("die gemeinsame Statuszeile unter den Konsolen ist entfernt",
   document.querySelector(".prompt-box") === null
   && document.querySelector("#agents-context-pill, #route-usage-pill, #run-capacity-pill") === null);
 
-// --- 5. Default ist Auto-Route: kein Terminal-Autostart beim Laden -------
+// --- 5. Kein PTY mehr: die Oberfläche spricht nur noch Dispatch ----------
+// Der interaktive Modus ist raus. Auf keinem Pfad — Laden, Verbinden,
+// Neuverbinden — darf ein pty_*-Frame entstehen.
 
 const ws = WebSocketStub.last;
 pruefe("WebSocket wurde geöffnet", ws != null);
@@ -265,56 +250,15 @@ ws.readyState = WebSocketStub.OPEN;
 ws.onopen();
 await ruhen(4);
 
-pruefe("im Default-Modus kein pty_start (Auto-Route liegt vorn)",
-  !frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
+pruefe("kein pty-Frame beim Laden",
+  !frames.some((f) => String(f.type).startsWith("pty_")), JSON.stringify(frames));
+pruefe("der Run-Pool wird beim Verbinden gelesen",
+  fetches.some((f) => f.schluessel === "GET /api/runs"),
+  JSON.stringify(fetches.map((f) => f.schluessel)));
 
-// --- 6. Terminal-Modus: Betreten startet, Beenden gibt frei -------------
+// --- 6. Server-Neustart: die Oberfläche verbindet sich neu ----------------
 
-frames.length = 0;
-document.querySelector("#mode-interactive-btn").click();
-// setStudioMode startet erst im nächsten Animationsframe — der kommt nicht in
-// setTimeout(0)-Schritten, also kurz echt warten.
-await new Promise((r) => setTimeout(r, 80));
-await ruhen(6);
-pruefe("Betreten des Modus startet die CLI",
-  frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
-
-frames.length = 0;
-ws.onmessage({ data: JSON.stringify({ type: "pty_started", sessionId: "s1", command: "freebuff", cwd: "/tmp/harness-router-gui" }) });
-await ruhen(2);
-pruefe("Beenden wird aktiv, sobald der Prozess läuft", stopp?.disabled === false);
-
-frames.length = 0;
-stopp.click();
-await ruhen(2);
-pruefe("Klick auf Beenden schickt pty_kill", frames.some((f) => f.type === "pty_kill"));
-
-frames.length = 0;
-ws.onmessage({ data: JSON.stringify({ type: "pty_exit", exitCode: 0, killed: true }) });
-await ruhen(6);
-pruefe("nach dem Beenden kein automatischer Neustart", frames.length === 0, JSON.stringify(frames));
-pruefe("Beenden ist danach wieder deaktiviert", stopp?.disabled === true);
-
-// --- 7. Erneutes Betreten des Modus startet wieder -----------------------
-
-frames.length = 0;
-// Zuerst in den Dispatch-Modus (entwaffnet), dann zurück — nur so stellt die
-// App den Auto-Start scharf und startet die CLI neu.
-document.querySelector("#mode-dispatch-btn").click();
-await new Promise((r) => setTimeout(r, 80));
-document.querySelector("#mode-interactive-btn").click();
-await new Promise((r) => setTimeout(r, 80));
-await ruhen(6);
-pruefe("Klick auf den Modus-Knopf startet die CLI neu",
-  frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
-
-// --- 8. Server-Neustart: das Terminal friert nicht ein -------------------
-// Faellt die Verbindung weg, ist der PTY-Prozess auf dem Server laengst fort.
-// Hielte die App ihn fuer lebendig, koennte der Nutzer nichts mehr starten.
-
-frames.length = 0;
-ws.onmessage({ data: JSON.stringify({ type: "pty_started", sessionId: "s9", command: "freebuff", cwd: "/tmp/harness-router-gui" }) });
-await ruhen(2);
+fetches.length = 0;
 ws.onclose();
 await ruhen(2100); // die App verbindet sich nach zwei Sekunden neu
 
@@ -323,10 +267,13 @@ pruefe("Neuverbindung opened", ws2 != null && ws2 !== ws);
 ws2.readyState = WebSocketStub.OPEN;
 ws2.onopen();
 await ruhen(8);
-pruefe("Terminal startet nach der Neuverbindung neu",
-  frames.some((f) => f.type === "pty_start"), JSON.stringify(frames));
+pruefe("nach der Neuverbindung wird der Run-Pool neu gelesen",
+  fetches.some((f) => f.schluessel === "GET /api/runs"),
+  JSON.stringify(fetches.map((f) => f.schluessel)));
+pruefe("auch nach der Neuverbindung kein pty-Frame",
+  !frames.some((f) => String(f.type).startsWith("pty_")), JSON.stringify(frames));
 
-// --- 9. Split-View: zwei Aufträge nebeneinander -------------------------
+// --- 7. Split-View: zwei Aufträge nebeneinander -------------------------
 // Der Composer sperrt nicht mehr: Aufträge werden schnell nacheinander geschickt und
 // laufen nebeneinander. Meldungen sind über die Task-ID zugeordnet und rendereren
 // ausschließlich ihr eigenes Feld.
@@ -334,7 +281,7 @@ pruefe("Terminal startet nach der Neuverbindung neu",
 const konsole = (i) => document.querySelector(`#run-split .run-pane:nth-child(${i + 1})`);
 const auftrag = (id, ordner, name) => ({
   id, prompt: name, projectPath: `/tmp/${ordner}`, projectName: ordner,
-  harness: "Freebuff", model: "plan-free", status: "queued", outputHtml: ""
+  harness: "Cline", model: "plan-free", status: "queued", outputHtml: ""
 });
 const A = auftrag("task_a", "proj-a", "Erster Auftrag");
 const B = auftrag("task_b", "proj-b", "Zweiter Auftrag");
@@ -352,7 +299,7 @@ pruefe("das globale Routing-Banner ist raus", document.querySelector("#active-ro
 
 frames.length = 0;
 sag({ type: "task_created", taskId: A.id, task: A });
-sag({ type: "route_selected", taskId: A.id, harness: "Freebuff", command: "freebuff", model: "plan-free", agentsInfo: "AGENTS.md aktiv" });
+sag({ type: "route_selected", taskId: A.id, harness: "Cline", command: "cline", model: "plan-free", agentsInfo: "AGENTS.md aktiv" });
 sag({ type: "output", taskId: A.id, html: "AUSGABE-A" });
 await ruhen(4);
 
@@ -370,7 +317,7 @@ pruefe("Auftrag B bekommt das zweite Feld", (konsole(1)?.textContent || "").incl
 pruefe("B schreibt nicht in A's Feld", !(konsole(0)?.textContent || "").includes("AUSGABE-B"));
 pruefe("A's Ausgabe bleibt stehen", (konsole(0)?.textContent || "").includes("AUSGABE-A"));
 pruefe("jedes Feld nennt seinen Harness",
-  /Freebuff/.test(konsole(0)?.textContent || "") && /Qoder/.test(konsole(1)?.textContent || ""));
+  /Cline/.test(konsole(0)?.textContent || "") && /Qoder/.test(konsole(1)?.textContent || ""));
 // Die Seitenleiste weiß es vorher (erste Route der Kette) — route_selected bessert nach.
 pruefe("die Seitenleiste zeigt den gewählten Harness",
   /Qoder/.test(document.querySelector('.task-item[data-task-id="task_b"]')?.textContent || ""),
@@ -404,7 +351,7 @@ await ruhen(2);
 pruefe("Klick auf Abbrechen meldet genau diese Task-ID",
   frames.some((f) => f.type === "cancel" && f.taskId === A.id), JSON.stringify(frames));
 
-// --- 10. Die Kappe ist ein Schalter in den Einstellungen ------------------
+// --- 8. Die Kappe ist ein Schalter in den Einstellungen ------------------
 
 const kappe = document.querySelector("#max-concurrent-input");
 pruefe("Feld für gleichzeitige Aufträge", kappe !== null);
@@ -419,7 +366,7 @@ const gesendet = gespeichert ? JSON.parse(gespeichert.body) : {};
 pruefe("Speichern schickt die Kappe mit", gesendet.dispatch?.max_concurrent === 5, gespeichert?.body);
 pruefe("und behält die Harness-Routen dabei", (gesendet.clis || []).length === 3);
 
-// --- 11. Zwei Eingabefelder: jede Konsole hat ihren eigenen Composer -----
+// --- 9. Zwei Eingabefelder: jede Konsole hat ihren eigenen Composer -----
 // Ein Feld pro Konsole, weil der Nutzer sehen will, wohin der nächste Auftrag schaut:
 // Text und Zielordner gehören zum Feld, nicht zur Oberfläche.
 
@@ -475,7 +422,7 @@ pruefe("Senden leert nur das eigene Feld",
 pruefe("und schickt nicht den Text des anderen Feldes",
   !sendungen().some((f) => f.prompt === "Nur Text, kein Senden"), JSON.stringify(sendungen()));
 
-// --- 12. Die Bezahlnutzung ist aus den Einstellungen raus ----------------
+// --- 10. Die Bezahlnutzung ist aus den Einstellungen raus ----------------
 
 pruefe("keine Bezahl-Spalte in der Kopfzeile", document.querySelector(".col-paid") === null);
 pruefe("keine Bezahl-Kästchen in den Routen",
@@ -485,7 +432,7 @@ pruefe("pro Route bleibt nur das Aktiv-Kästchen",
     .every((row) => row.querySelectorAll('input[type="checkbox"]').length === 1),
   document.querySelector("#harness-config-list .harness-row")?.innerHTML);
 
-// --- 13. Tasks lassen sich archivieren -----------------------------------
+// --- 11. Tasks lassen sich archivieren -----------------------------------
 
 pruefe("Archiv-Schalter in der Seitenleiste", document.querySelector("#archive-filter-btn") !== null);
 pruefe("archivierte Aufträge sind standardmäßig raus",
@@ -526,17 +473,10 @@ pruefe("zurückgekehrt steht der Auftrag wieder in der Liste",
 pruefe("ein laufender Auftrag hat keinen Archiv-Knopf",
   document.querySelector('.task-item[data-task-id="task_a"] .task-archive-btn') === null);
 
-// --- 14. Alter Auftrag anklicken: die Konsole übernimmt sein Ziel ----------
-// Das Studio hat zwei Achsen: den Tab und den Modus. Der Klick entschied bisher nur
-// den Tab, also blieb das Protokoll hinter dem Terminal versteckt. Fortsetzen heißt
-// außerdem: Das Feld_ordner, Harness und Modell des alten Laufs — der neue Auftrag
-// startet dort, wo der alte endete, und das alte Protokoll bleibt darüber stehen.
-
-document.querySelector("#mode-interactive-btn").click();
-await new Promise((r) => setTimeout(r, 80));
-await ruhen(4);
-pruefe("vor dem Klick ist das Terminal offen",
-  document.querySelector("#dispatch-panel")?.classList.contains("hidden") === true);
+// --- 12. Alter Auftrag anklicken: die Konsole übernimmt sein Ziel ----------
+// Fortsetzen heißt: Das Feld erbt Ordner, Harness und Modell des alten Laufs — der
+// neue Auftrag startet dort, wo der alte endete, und das alte Protokoll bleibt
+// darüber stehen.
 
 const altZeile = document.querySelector('.task-item[data-task-id="alt_lauf"]');
 pruefe("der alte Auftrag steht in der Seitenleiste", altZeile !== null);
@@ -545,8 +485,6 @@ altZeile?.click();
 await ruhen(6);
 pruefe("Klick auf den Auftrag zeigt die Konsolen",
   document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
-pruefe("Klick klappt das Terminal zu",
-  document.querySelector("#interactive-panel")?.classList.contains("hidden") === true);
 
 const folgeSlot = [0, 1].find((i) => (konsole(i)?.textContent || "").includes("ALTE AUSGABE"));
 pruefe("das alte Protokoll ist in einer Konsole sichtbar", folgeSlot !== undefined);
@@ -652,8 +590,6 @@ await ruhen(3);
 sag({ type: "task_created", taskId: "task_h", task: auftrag("task_h", "proj-a", "Lauf im anderen Feld") });
 sag({ type: "route_selected", taskId: "task_h", harness: "Qoder", command: "qoder", model: "auto" });
 await ruhen(4);
-document.querySelector("#mode-interactive-btn").click();
-await new Promise((r) => setTimeout(r, 80));
 frames.length = 0;
 document.querySelector('.project-node[data-path="/tmp/proj-c"] .add-task-btn')?.click();
 await ruhen(3);
@@ -669,14 +605,11 @@ await ruhen(4);
 pruefe("＋ im selben Ordner ist ein Anfang statt einer Fortsetzung",
   sendungen()[0]?.harnessOverride === "auto", JSON.stringify(sendungen()[0]));
 
-// --- 15. Die Konsole schichtet: Gedanke, Werkzeug, Antwort ---------------
+// --- 13. Die Konsole schichtet: Gedanke, Werkzeug, Antwort ---------------
 // Die Formen kommen aus den echten Protokollen in studio-tasks.json: Claude schreibt
-// eine &lt;think&gt;-Region, die erst nach zwei freien Zeilen endet; cline und freebuff
-// schreiben [thinking], [run_commands], ⎿-Folgezeilen und Tokens-Zeilen. Alles vorher
+// eine &lt;think&gt;-Region, die erst nach zwei freien Zeilen endet; cline schreibt
+// [thinking], [run_commands], ⎿-Folgezeilen und Tokens-Zeilen. Alles vorher
 // ungeordnet in einer Textwüste.
-
-document.querySelector("#mode-dispatch-btn")?.click();
-await ruhen(3);
 
 const CLAUDE_CHUNK =
   '<div class="route-banner" style=""><span class="badge badge-accent">Priorität #1</span>' +
@@ -771,7 +704,7 @@ pruefe("nach dem Lauf ist kein Ordner mehr lebendig",
 pruefe("nach dem Lauf bleiben die Ordner zugeklappt, die der Nutzer nicht öffnete",
   [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).length <= 1);
 
-// --- 16. Ein Klick auf einen Auftrag zeigt sein Feld ---------------------
+// --- 14. Ein Klick auf einen Auftrag zeigt sein Feld ---------------------
 // Zwei Konsolen desselben Harness waren nicht zu unterscheiden: der Titel trug nur
 // "harness · modell". Jetzt trägt das Feld den Auftrag, die Art steht als Marke
 // daneben, und die Seitenleiste sagt, in welchem Feld der Lauf liegt.
@@ -788,8 +721,6 @@ pruefe("die Seitenleiste nennt das Feld des Laufs",
   seitenItem()?.querySelector(".task-konsole")?.textContent === `Konsole ${layerSlot + 1}`,
   seitenItem()?.querySelector(".task-konsole")?.textContent);
 
-document.querySelector("#mode-interactive-btn")?.click();
-await ruhen(2);
 seitenItem()?.click();
 await ruhen(4);
 const markiert = [0, 1].filter((i) => konsole(i)?.classList.contains("ist-fokus"));

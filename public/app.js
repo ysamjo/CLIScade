@@ -7,6 +7,9 @@ let state = {
   // Zwei Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
   streams: new Map(),
   panes: [null, null],
+  // Das Feld, in dem der Nutzer zuletzt Maus oder Tastatur benutzt hat. Dorthin zieht
+  // der nächste Auftrag — nicht in das, in dem er gerade liest.
+  letztesFeld: null,
   // Jeder Composer gehört zu einem Feld: Zielordner und das zuletzt angefasste Feld.
   paneTarget: [null, null],
   paneRouting: ['auto', 'auto'],
@@ -33,17 +36,7 @@ let state = {
   schedules: [],
   installerTools: [],
   installingTools: new Set(),
-  isInstallingAll: false,
-  // Interaktives PTY-Terminal (xterm.js)
-  // Default: Auto-Route / KI-Dispatch. Das interaktive Terminal (nur freebuff)
-  // ist bewusst der andere Modus, kein Ausgangspunkt.
-  studioMode: 'dispatch',
-  terminal: null,
-  fitAddon: null,
-  interactiveRunning: false,
-  interactiveSessionId: null,
-  interactiveAutoStartArmed: true,
-  xtermResizeObserver: null
+  isInstallingAll: false
 };
 
 // DOM Elements
@@ -207,20 +200,9 @@ const dom = {
   hideInstallerConsoleBtn: document.getElementById('hide-installer-console-btn'),
   installerCardsGrid: document.getElementById('installer-cards-grid'),
 
-  // Interactive PTY Terminal
+  // Sidebar-Footer & Seitenleiste
   sidebarSettingsBtn: document.getElementById('sidebar-settings-btn'),
-  settingsOpenInstallerBtn: document.getElementById('settings-open-installer-btn'),
-  interactivePanel: document.getElementById('interactive-panel'),
-  dispatchPanel: document.getElementById('dispatch-panel'),
-  modeInteractiveBtn: document.getElementById('mode-interactive-btn'),
-  modeDispatchBtn: document.getElementById('mode-dispatch-btn'),
-  interactiveCliSelect: document.getElementById('interactive-cli-select'),
-  interactiveTargetFolder: document.getElementById('interactive-target-folder'),
-  interactiveStopBtn: document.getElementById('interactive-stop-btn'),
-  interactiveTakeoverBtn: document.getElementById('interactive-takeover-btn'),
-  interactiveTerminalTitle: document.getElementById('interactive-terminal-title'),
-  interactiveClearBtn: document.getElementById('interactive-clear-btn'),
-  xtermContainer: document.getElementById('xterm-container')
+  settingsOpenInstallerBtn: document.getElementById('settings-open-installer-btn')
 };
 
 // --- INITIALIZATION ---
@@ -239,7 +221,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   iconObserver.observe(document.body, { childList: true, subtree: true });
   setupWebSocket();
   setupEventListeners();
-  setupInteractiveTerminal();
 
   // Load workspace immediately so projects appear in < 30ms!
   loadWorkspace().then(refreshRunPool);
@@ -348,16 +329,6 @@ function setupWebSocket() {
   state.ws = new WebSocket(wsUrl);
 
   state.ws.onopen = () => {
-    // Neue Verbindung, alter Prozess: der PTY ist auf dem Server langst weg,
-    // wurde er doch nur iiber den ehemaligen Socket bekannt. Wurde er weiter als
-    // laufend gefuehrt, friert das Terminal ein und der Nutzer kann nichts mehr starten.
-    if (state.interactiveRunning || state.interactiveSessionId) {
-      state.interactiveRunning = false;
-      state.interactiveSessionId = null;
-      if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
-      armInteractiveAutoStart();
-    }
-    maybeAutoStartInteractive();
     refreshRunPool();
   };
 
@@ -367,8 +338,6 @@ function setupWebSocket() {
 
   state.ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-
-    if (handlePtyMessage(data)) return;
 
     if (data.type === 'task_created') {
       // Prepend task to task list if not exists
@@ -550,11 +519,20 @@ function isBeendet(taskId) {
   return !stream || stream.status === 'done' || stream.status === 'error';
 }
 
-// Das Feld für einen neuen Auftrag: erst leer, dann beendet, sonst das ältere —
-// bei mehr Läufen als Feldern gewinnt der neueste, weil der alte schon durch ist.
+// Das Feld für einen neuen Auftrag. Die Reihenfolge ist Absicht:
+//   1. Ein leeres Feld — dort geht nichts verloren.
+//   2. Das Feld, in dem der Nutzer zuletzt Maus oder Tastatur benutzt hat. Damit zeigt
+//      er, wohin der nächste Auftrag soll — auch wenn dort noch ein Lauf steht.
+//   3. Ohne diese Wahl: ein beendeter Lauf weicht, sonst der ältere.
 function freeSlot() {
   const leer = state.panes.findIndex((id) => id === null);
   if (leer !== -1) return leer;
+
+  // Streng auf 0/1 prüfen: `null >= 0` ist in JS wahr, ein ungesetztes Feld würde
+  // sonst als gültige Wahl durchgehen.
+  const gewaehlt = state.letztesFeld;
+  if (gewaehlt === 0 || gewaehlt === 1) return gewaehlt;
+
   const beendet = state.panes.findIndex((id) => isBeendet(id));
   if (beendet !== -1) return beendet;
   const links = state.streams.get(state.panes[0]);
@@ -662,6 +640,14 @@ function setupRunPanes() {
       const b = pane.body;
       runPaneFollow[slot] = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
     });
+
+    // Welches Feld der Nutzer zuletzt angefasst hat, ist sein Feld: dorthin zieht der
+    // nächste Auftrag. Nur echte Maus- und Tastaturereignisse zählen — ein Klick im
+    // Baum tut das nicht, sonst landete der zweite Auftrag im selben Feld wie der erste.
+    const merken = () => { state.letztesFeld = slot; };
+    pane.root.addEventListener('mousedown', merken);
+    pane.root.addEventListener('focusin', merken);
+    pane.root.addEventListener('wheel', merken, { passive: true });
 
     // Was der Nutzer selbst aufklappt, überlebt den nächsten Chunk: toggle bubblt
     // nicht, also im Erfassen zuhören. Ein Ordner, der beim Neusetzen aus dem Feld
@@ -784,241 +770,6 @@ async function refreshRunPool() {
   }
 }
 
-// --- INTERACTIVE PTY TERMINAL (xterm.js) ---
-// The main window runs the real CLIs in a pseudo-terminal, so TUI-only harnesses
-// such as freebuff behave exactly like in a local shell and always answer.
-function setupInteractiveTerminal() {
-  if (!dom.xtermContainer) return;
-  if (typeof Terminal === 'undefined') {
-    console.warn('xterm.js nicht geladen — interaktives Terminal deaktiviert.');
-    dom.xtermContainer.innerHTML = '<div class="terminal-placeholder">xterm.js konnte nicht geladen werden.</div>';
-    return;
-  }
-
-  const term = new Terminal({
-    convertEol: false,
-    cursorBlink: true,
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-    fontSize: 12.5,
-    scrollback: 5000,
-    theme: {
-      background: '#0b0c10',
-      foreground: '#d9dce3',
-      cursor: '#7d8ba5',
-      selectionBackground: 'rgba(125, 139, 165, 0.28)'
-    }
-  });
-
-  const fitAddon = (typeof FitAddon !== 'undefined') ? new FitAddon.FitAddon() : null;
-  if (fitAddon) term.loadAddon(fitAddon);
-
-  term.open(dom.xtermContainer);
-  state.terminal = term;
-  state.fitAddon = fitAddon;
-
-  term.onData((data) => {
-    if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(JSON.stringify({ type: 'pty_input', data }));
-    }
-  });
-
-  term.write('\x1b[38;5;244mTerminal startet gleich automatisch mit der gewählten CLI.\x1b[0m\r\n');
-
-  fitInteractiveTerminal();
-
-  if (window.ResizeObserver) {
-    state.xtermResizeObserver = new ResizeObserver(() => fitInteractiveTerminal());
-    state.xtermResizeObserver.observe(dom.xtermContainer);
-  }
-  window.addEventListener('resize', fitInteractiveTerminal);
-
-  maybeAutoStartInteractive();
-}
-
-function fitInteractiveTerminal() {
-  if (!state.terminal) return;
-  if (dom.interactivePanel && dom.interactivePanel.classList.contains('hidden')) return;
-  if (!dom.xtermContainer || dom.xtermContainer.clientWidth < 40 || dom.xtermContainer.clientHeight < 20) return;
-
-  if (state.fitAddon) {
-    try { state.fitAddon.fit(); } catch (e) { /* Container noch nicht messbar */ }
-  }
-  if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: 'pty_resize', cols: state.terminal.cols, rows: state.terminal.rows }));
-  }
-}
-
-function handlePtyMessage(data) {
-  if (data.type === 'pty_started') {
-    state.interactiveRunning = true;
-    state.interactiveSessionId = data.sessionId;
-    if (dom.interactiveTakeoverBtn) dom.interactiveTakeoverBtn.hidden = true;
-    if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = false;
-    if (dom.interactiveTerminalTitle) {
-      const folder = (data.cwd || '').split('/').filter(Boolean).pop() || '';
-      dom.interactiveTerminalTitle.textContent = `${data.command} · ${folder}`;
-    }
-    if (state.terminal) state.terminal.focus();
-    return true;
-  }
-  if (data.type === 'pty_data') {
-    if (state.terminal) state.terminal.write(data.data);
-    return true;
-  }
-  if (data.type === 'pty_exit') {
-    state.interactiveRunning = false;
-    state.interactiveSessionId = null;
-    if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
-    if (dom.interactiveTerminalTitle) {
-      dom.interactiveTerminalTitle.textContent = data.notice
-        ? 'Anderes Fenster übernommen'
-        : (data.killed ? 'Beendet' : `Prozess beendet (Exit ${data.exitCode})`);
-    }
-    if (state.terminal) {
-      if (data.notice) {
-        state.terminal.write(`\r\n\x1b[38;5;244m[${data.notice}]\x1b[0m\r\n`);
-      } else {
-        const tail = data.exitCode != null ? ` — Exit-Code ${data.exitCode}` : '';
-        state.terminal.write(`\r\n\x1b[38;5;244m[Prozess beendet${tail}] „Interaktives Terminal" erneut anklicken startet neu.\x1b[0m\r\n`);
-      }
-    }
-    return true;
-  }
-  if (data.type === 'pty_error') {
-    state.interactiveRunning = false;
-    state.interactiveSessionId = null;
-    if (dom.interactiveStopBtn) dom.interactiveStopBtn.disabled = true;
-    const inUse = data.code === 'pty_in_use';
-    if (dom.interactiveTakeoverBtn) dom.interactiveTakeoverBtn.hidden = !inUse;
-    if (dom.interactiveTerminalTitle && inUse) dom.interactiveTerminalTitle.textContent = 'Session läuft anderweitig';
-    if (state.terminal) {
-      state.terminal.write(`\r\n\x1b[31m[Fehler] ${data.error}\x1b[0m\r\n`);
-      if (inUse) {
-        state.terminal.write('\x1b[38;5;244m„Übernehmen" oben rechts holt die Session in dieses Fenster.\x1b[0m\r\n');
-      }
-    }
-    return true;
-  }
-  return false;
-}
-
-function renderInteractiveCliSelect() {
-  const select = dom.interactiveCliSelect;
-  if (!select) return;
-
-  const previous = select.value;
-  const tools = state.health || [];
-  // Das interaktive Terminal ist den TUI-only-Harnesses vorbehalten (hier:
-  // freebuff). Headless-CLIs gehören in den Auto-Route-Dispatch, nicht in ein
-  // echtes PTY — daher keine Auswahl anderer CLIs, die Liste ist frei.
-  const tui = tools.filter(h => h.tuiOnly);
-  const list = tui;
-  select.innerHTML = '';
-
-  if (list.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'Lade Harnesses...';
-    select.appendChild(opt);
-    return;
-  }
-
-  list.forEach(h => {
-    const opt = document.createElement('option');
-    opt.value = h.cmd;
-    const ver = h.version ? ` · ${h.version}` : '';
-    opt.textContent = h.available
-      ? `${h.name} (${h.cmd})${ver}`
-      : `${h.name} (${h.cmd}) — nicht installiert`;
-    opt.disabled = !h.available;
-    select.appendChild(opt);
-  });
-
-  const available = list.filter(h => h.available);
-  if (available.length > 0) {
-    const preferred = available.find(h => h.cmd === 'freebuff');
-    const keepPrevious = previous && available.some(h => h.cmd === previous);
-    select.value = keepPrevious ? previous : (preferred ? preferred.cmd : available[0].cmd);
-  }
-
-  // Die Liste füllt sich asynchron: sobald die erste CLI gewählt ist, darf
-  // das Terminal von selbst anlaufen.
-  maybeAutoStartInteractive();
-}
-
-// Es gibt keinen Start-Button mehr: das Terminal startet, sobald der Modus
-// „Interaktives Terminal" aktiv ist und eine CLI gewählt wurde. Damit ein
-// späterer Re-Render (Health-Refresh) keinen gerade beendeten Prozess wieder
-// hochzieht, wird der Auto-Start nach dem ersten Versuch entwaffnet und nur
-// beim erneuten Betreten des Modus wieder scharf gestellt.
-function armInteractiveAutoStart() {
-  state.interactiveAutoStartArmed = true;
-}
-
-function maybeAutoStartInteractive() {
-  if (!state.interactiveAutoStartArmed) return;
-  if (state.studioMode !== 'interactive') return;
-  if (state.interactiveRunning || state.interactiveSessionId) return;
-  if (!state.terminal || !dom.interactiveCliSelect || !dom.interactiveCliSelect.value) return;
-  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-
-  state.interactiveAutoStartArmed = false;
-  startInteractiveCli({ silent: true });
-}
-
-function startInteractiveCli(opts) {
-  const silent = !!(opts && opts.silent);
-  const takeover = !!(opts && opts.takeover);
-  const command = dom.interactiveCliSelect ? dom.interactiveCliSelect.value : '';
-  if (!command || !state.terminal || state.interactiveRunning) return;
-  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
-    if (!silent) alert('Verbindung zum Server unterbrochen.');
-    return;
-  }
-
-  fitInteractiveTerminal();
-  state.terminal.reset();
-  const folder = (state.activeProject || '').split('/').filter(Boolean).pop() || '';
-  state.terminal.write(`\x1b[38;5;244mStarte ${command} in ${folder}...\x1b[0m\r\n\r\n`);
-  state.ws.send(JSON.stringify({
-    type: 'pty_start',
-    command,
-    takeover,
-    cwd: state.activeProject,
-    cols: state.terminal.cols || 80,
-    rows: state.terminal.rows || 24
-  }));
-}
-
-function stopInteractiveCli() {
-  // Manuell beendet heißt: nicht sofort wieder starten. Erst ein erneuter
-  // Wechsel in den Modus startet die CLI wieder.
-  state.interactiveAutoStartArmed = false;
-  if (state.interactiveRunning && state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: 'pty_kill' }));
-  }
-}
-
-function setStudioMode(mode) {
-  state.studioMode = mode === 'dispatch' ? 'dispatch' : 'interactive';
-  const isInteractive = state.studioMode === 'interactive';
-
-  if (dom.interactivePanel) dom.interactivePanel.classList.toggle('hidden', !isInteractive);
-  if (dom.dispatchPanel) dom.dispatchPanel.classList.toggle('hidden', isInteractive);
-  if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.classList.toggle('active', isInteractive);
-  if (dom.modeDispatchBtn) dom.modeDispatchBtn.classList.toggle('active', !isInteractive);
-
-  if (isInteractive) {
-    armInteractiveAutoStart();
-    // While hidden the container has no dimensions, so fit on the next frame.
-    requestAnimationFrame(() => {
-      fitInteractiveTerminal();
-      if (state.terminal) state.terminal.focus();
-      maybeAutoStartInteractive();
-    });
-  }
-}
-
 // --- SVG ICON HYDRATION ---
 function hydrateIcons(root) {
   const scope = root || document;
@@ -1133,7 +884,6 @@ async function loadStatus() {
     }
 
     renderHarnessStatusPills();
-    renderInteractiveCliSelect();
     renderHarnessOverrideSelect();
     renderHarnessConfigList();
   } catch (err) {
@@ -1189,7 +939,6 @@ function getHarnessKey(item) {
   if (item.command === 'opencode') return 'opencode';
   if (item.command === 'agy') return 'antigravity_cli';
   if (item.command === 'qodercli' || item.command === 'qoder') return 'qoder';
-  if (item.command === 'freebuff') return 'freebuff';
   if (item.command === 'codebuddy' || item.command === 'cbc') return 'codebuddy';
   if (item.command === 'agent' || item.command === 'cursor-agent') return 'cursor';
   return 'claude_code';
@@ -1201,8 +950,7 @@ function renderHarnessConfigList() {
   state.clis.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'harness-row';
-    const terminalOnly = item.capabilities?.dispatchable === false;
-    const isChecked = item.enabled !== false && !terminalOnly ? 'checked' : '';
+    const isChecked = item.enabled !== false ? 'checked' : '';
     const harnessKey = getHarnessKey(item);
     const presets = state.modelPresets[harnessKey] || [
       { id: 'Standard', label: 'Standard' }
@@ -1221,11 +969,11 @@ function renderHarnessConfigList() {
 
     row.innerHTML = `
       <div><span class="order-badge">${index + 1}</span></div>
-      <div><input type="checkbox" class="harness-active-chk" data-idx="${index}" ${isChecked} ${terminalOnly ? 'disabled' : ''} title="${terminalOnly ? 'Nur im interaktiven Terminal' : 'Aktivieren / Deaktivieren'}" /></div>
+      <div><input type="checkbox" class="harness-active-chk" data-idx="${index}" ${isChecked} title="Aktivieren / Deaktivieren" /></div>
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
-      <div title="${terminalOnly ? 'Nur im interaktiven Terminal' : ''}"><code>${escapeHtml(item.command || item.harness || 'cli')}</code></div>
+      <div><code>${escapeHtml(item.command || item.harness || 'cli')}</code></div>
       <div>
         <div class="model-select-wrapper">
           <select class="model-dropdown" data-idx="${index}">
@@ -1443,7 +1191,6 @@ function updateWorkspaceUI() {
   };
 
   syncPaneTargets();
-  if (dom.interactiveTargetFolder) dom.interactiveTargetFolder.textContent = current.name;
 
   if (dom.rootAgentsText) {
     dom.rootAgentsText.textContent = `AGENTS.md aktiv`;
@@ -1699,9 +1446,6 @@ function selectTask(task) {
   showTaskInPane(task);
   renderProjectTree();
   switchTab('studio');
-  // Der Modus ist eine eigene Achse zum Tab: ohne ihn liegt die Konsole hinter dem
-  // Terminal, und das gerade geladene Protokoll wäre unsichtbar.
-  setStudioMode('dispatch');
   // Klick auf einen Auftrag heißt: diese Konsole zeigen. Liegt sie schon in einem
   // Feld, wird sie markiert und hergerollt — sonst fehlt das Gefühl, anzukommen.
   zeigeKonsole(state.panes.indexOf(task.id));
@@ -1712,7 +1456,6 @@ function selectTask(task) {
 // sein Zielordner sind der angeklickte Ordner.
 function startNewTaskInProject(projectPath) {
   switchTab('studio');
-  setStudioMode('dispatch');
   const slot = freeSlot();
   const pane = dom.runPanes[slot];
   if (!pane) return;
@@ -2061,7 +1804,6 @@ function renderUsageTable() {
     'codex',
     'opencode',
     'qoder',
-    'freebuff',
     'codebuddy',
     'antigravity_cli',
     'cline',
@@ -2130,17 +1872,6 @@ function setupEventListeners() {
     });
   }
 
-  // Interaktives Terminal: Modus, Beenden, Leeren
-  if (dom.modeInteractiveBtn) dom.modeInteractiveBtn.addEventListener('click', () => setStudioMode('interactive'));
-  if (dom.modeDispatchBtn) dom.modeDispatchBtn.addEventListener('click', () => setStudioMode('dispatch'));
-  if (dom.interactiveStopBtn) dom.interactiveStopBtn.addEventListener('click', stopInteractiveCli);
-  if (dom.interactiveTakeoverBtn) dom.interactiveTakeoverBtn.addEventListener('click', () => {
-    dom.interactiveTakeoverBtn.hidden = true;
-    startInteractiveCli({ takeover: true, silent: true });
-  });
-  if (dom.interactiveClearBtn) dom.interactiveClearBtn.addEventListener('click', () => {
-    if (state.terminal) state.terminal.clear();
-  });
   if (dom.sidebarSettingsBtn) dom.sidebarSettingsBtn.addEventListener('click', () => openSettingsModal('workspace'));
   if (dom.settingsOpenInstallerBtn) dom.settingsOpenInstallerBtn.addEventListener('click', () => openInstallerModal());
 
@@ -2936,8 +2667,6 @@ const CLI_ICON_KEYS = {
   agy: 'antigravity_cli',
   qoder_cli: 'qoder_cli',
   qodercli: 'qoder_cli',
-  freebuff_cli: 'freebuff_cli',
-  freebuff: 'freebuff_cli',
   codebuddy_cli: 'codebuddy_cli',
   codebuddy: 'codebuddy_cli',
   cursor_cli: 'cursor_cli',

@@ -21,6 +21,8 @@
   --danger: #c2625c;
   --danger-hover: #d98a85;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Die Antwort in der Konsole: Fließtext, den man längere Zeit liest. */
+  --font-text: 'Helvetica Neue', Helvetica, Arial, var(--font-sans);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --radius-sm: 5px;
   --radius-md: 7px;
@@ -725,37 +727,6 @@ body {
   border: 1px solid var(--border-color);
 }
 
-.terminal-wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.terminal-header {
-  height: 28px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.terminal-title {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.terminal-actions {
-  display: flex;
-  gap: 10px;
-}
-
 .btn-text {
   background: transparent;
   border: none;
@@ -768,11 +739,11 @@ body {
   color: var(--text-main);
 }
 
+/* Der Rahmen der Konsole. Die Schrift setzen die Leseschichten selbst: Denken in
+   Monospace, die Antwort in der Sans-Serie. */
 .terminal-body {
   flex: 1;
-  padding: 10px 12px;
-  font-family: var(--font-mono);
-  font-size: 12.5px;
+  padding: 12px 14px;
   color: var(--text-main);
   overflow-y: auto;
   overflow-anchor: none;
@@ -2621,10 +2592,10 @@ kbd {
   }
 
   /* STUDIO CONTAINER */
-  .studio-mode-switch {
-    padding: 8px 10px 0;
-    flex-wrap: wrap;
+  .studio-bar {
+    display: flex;
     align-items: center;
+    padding: 8px 10px 0;
   }
 
   .studio-container {
@@ -2862,16 +2833,24 @@ kbd {
 /* ========================================== */
 /* KONSOLE: DREI LESESCHICHTEN                */
 /* ========================================== */
-/* Die Antwort ist der Grundtext: hell und in voller Größe. Was ein Harness über sich
-   selbst schreibt — Gedankengang, Werkzeug, Randnotiz — liegt darunter in einem
-   Ordner, damit der Strom keine Textwüste wird. Nur die Marken der Oberfläche. */
+/* Zwei Schriften mit zwei Rollen. Was der Agent als Antwort schreibt, ist Fließtext
+   in der Sans-Serie — das liest man längere Zeit und will dabei nicht Zeichen für
+   Zeichen springen. Was er über sich selbst schreibt (Gedankengang, Werkzeugaufruf,
+   Randnotiz) ist Protokoll: Monospace, kleiner, gedämpft und in einem Ordner, damit
+   der Strom keine Textwüste wird. */
 .ko-antwort {
+  font-family: var(--font-text);
+  font-size: 13.5px;
+  line-height: 1.68;
+  letter-spacing: 0.1px;
   color: var(--text-main);
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Zwei Antwortstücke sind zwei Gedanken: der Abstand sagt das, nicht eine Leerzeile. */
+.ko-antwort + .ko-antwort {
+  margin-top: 10px;
 }
 
 .ko-block {
@@ -2879,7 +2858,7 @@ kbd {
   border: 1px solid var(--border-soft);
   border-left: 2px solid var(--border-color);
   border-radius: var(--radius-md);
-  margin: 4px 0 8px;
+  margin: 10px 0;
   overflow: hidden;
 }
 
@@ -2891,8 +2870,8 @@ kbd {
   list-style: none;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 3px 9px;
+  gap: 8px;
+  padding: 5px 10px;
   background: var(--bg-card);
   cursor: pointer;
   user-select: none;
@@ -2902,14 +2881,28 @@ kbd {
   display: none;
 }
 
+/* Der Ordner sagt selbst, ob er offen ist — ohne Dreieck wäre die Kopfzeile nur Text. */
+.ko-kopf::before {
+  content: '▸';
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+
+.ko-block[open] > .ko-kopf::before {
+  transform: rotate(90deg);
+}
+
 .ko-kopf:hover {
   background: var(--bg-card-hover);
 }
 
 .ko-art {
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-muted);
   flex: 0 0 auto;
@@ -2938,20 +2931,36 @@ kbd {
 }
 
 .ko-inhalt {
-  padding: 6px 9px;
+  padding: 8px 10px 9px;
   border-top: 1px solid var(--border-soft);
   background: var(--bg-primary);
   max-height: 260px;
   overflow-y: auto;
 }
 
+/* Protokollschrift: eine Zeile ist ein Schritt, nicht ein Satz. */
 .ko-zeile {
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.58;
   color: var(--text-muted);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Die Antwort ist Fließtext — auch ihre einzelnen Zeilen. Ohne diese Regel erbte
+   jede Zeile die Monospace-Schrift des Protokolls, und der echte Output sähe
+   wieder wie ein Terminal aus. */
+.ko-antwort .ko-zeile {
+  font-family: var(--font-text);
+  font-size: 13.5px;
+  line-height: 1.68;
+  letter-spacing: 0.1px;
+  color: var(--text-main);
+}
+
+.ko-zeile + .ko-zeile {
+  margin-top: 2px;
 }
 
 /* Wachsender Gedankengang im laufenden Lauf: er atmet, damit sichtbar bleibt, dass
@@ -3024,105 +3033,16 @@ kbd {
   border-color: var(--border-focus);
 }
 
-.studio-mode-switch {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 6px 14px 0;
-  flex-shrink: 0;
-}
-
-.mode-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  padding: 3px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.mode-btn:hover {
-  color: var(--text-main);
-  border-color: var(--border-focus);
-}
-
-.mode-btn.active {
-  background: var(--bg-card);
-  border-color: var(--border-focus);
-  color: var(--text-main);
-}
-
-.interactive-container {
-  padding-top: 8px;
-}
-
-.interactive-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 5px 10px;
-  flex-shrink: 0;
-}
-
-.interactive-toolbar .select-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.interactive-toolbar .select-group label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.interactive-target {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-left: auto;
-}
-
-/* „Beenden" sitzt im Terminal-Header, nicht mehr in der Toolbar */
-.btn-text:disabled {
-  opacity: 0.35;
-  cursor: default;
+/* Nur mobil sichtbar: der Griff zur Seitenleiste, die dort off-canvas liegt.
+   Auf dem Desktop ist die Leiste leer und wird nicht gerendert. */
+.studio-bar {
+  display: none;
 }
 
 .btn-text-danger {
   color: var(--danger);
 }
 
-.btn-text-danger:hover:not(:disabled) {
+.btn-text-danger:hover {
   color: var(--danger-hover);
-}
-
-.xterm-container {
-  flex: 1;
-  min-height: 0;
-  padding: 6px 8px;
-  background: var(--bg-primary);
-  overflow: hidden;
-}
-
-.xterm-container .xterm {
-  height: 100%;
-}
-
-.xterm-container .xterm-viewport {
-  background-color: var(--bg-primary) !important;
 }

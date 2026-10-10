@@ -484,7 +484,6 @@ class ProviderDiscovery {
 
 ## Technical Debt & Future Cleanup
 
-- [ ] Migrate from node-pty to pty.js (better Windows support)
 - [ ] Add comprehensive error handling & recovery
 - [ ] Implement proper logging/tracing
 - [ ] Add TypeScript strict mode

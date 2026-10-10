@@ -1,13 +1,13 @@
 # Harness Router GUI
 
-Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, codex, opencode, cline, codebuddy, qodercli, antigravity, freebuff, cursor) parallel über die Projektordner eines Workspace dispatcht — inklusive interaktivem PTY-Terminal und Telegram-Relay.
+Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, codex, opencode, cline, codebuddy, qodercli, antigravity, cursor) parallel über die Projektordner eines Workspace dispatcht — inklusive Telegram-Relay.
 
 ## Projekt-Kontext
 
 | Modul | Pfad | Beschreibung |
 | :--- | :--- | :--- |
-| **Server** | `server.js` | Express 5 + `ws`: `/api/*`, Run-Pool, Dispatch-Queue, Freebuff-PTY, Scheduler, Telegram, Einstellungen, Task-Historie |
-| **Entscheidung** | `routing.js` | Reine Logik ohne IO: `dispatchSlotDecision`, `busyHarnessBlocker`, `knownBrokenBlocker`, `armIdleWatchdog`, `ptyOwnershipBlocker`, `startupRefusal`, `gatewayEnvFromShell` |
+| **Server** | `server.js` | Express 5 + `ws`: `/api/*`, Run-Pool, Dispatch-Queue, Scheduler, Telegram, Einstellungen, Task-Historie |
+| **Entscheidung** | `routing.js` | Reine Logik ohne IO: `dispatchSlotDecision`, `knownBrokenBlocker`, `armIdleWatchdog`, `startupRefusal`, `gatewayEnvFromShell` |
 | **Runtime** | `runtime/` | Feste Harness-Registry, gemeinsamer Process Runner, `runHarness()`, Ereignisse, Fehlerklassen, Sessions und CLI-Adapter |
 | **Oberfläche** | `public/` | Vanilla JS ohne Bundler: `app.js` (Zustand + Rendering), `konsole-schichten.js` (Leseschichten der Konsole, reiner Text ohne DOM), `index.html`, `style.css`, `icons.js`, `sw.js` |
 | **Tests** | `test/` | `ui-smoke.mjs` (jsdom), `runtime/*.test.js` (Adapter, Runner, Sessions, Sicherheit), `routing.test.js` (Entscheidungen), `dispatch_chain.test.js` (echte Kind-Prozesse gegen Stub-CLIs), `sw.test.js`, `konsole_queue.test.js`, `konsole_schichten.test.js` |
@@ -21,8 +21,8 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 - **Entscheidungen gehören nach `routing.js`**, `server.js` verdrahtet nur. Ein Gate, das sich nicht
   ohne Kind-Prozess testen lässt, ist an der falschen Stelle.
 - **CLI-Wissen gehört nach `runtime/`**. `server.js` darf keine harness-spezifischen Argumentlisten,
-  Ausgabeparser oder Resume-Regeln enthalten. Normale Läufe gehen ausschließlich über `runHarness()`;
-  `node-pty` bleibt allein für Freebuff. Konfiguration speichert `harnessId`, nie ein frei gewähltes Executable.
+  Ausgabeparser oder Resume-Regeln enthalten. Jeder Lauf geht ausschließlich über `runHarness()`.
+  Konfiguration speichert `harnessId`, nie ein frei gewähltes Executable.
 - **Test zuerst schreiben und scheitern lassen.** `ui-smoke.mjs` zählt `pruefe()`-Behauptungen und am
   Ende aus; die Ketten-Tests fahren einen echten Server in eigenem `HOME` mit Stub-CLIs.
 - `public/` wirkt nach einem Browser-Reload, `server.js` und `routing.js` erst nach einem
@@ -35,8 +35,9 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 ## Commands
 
 ```bash
-npm start                        # Server auf http://localhost:3000
+npm start                        # Server auf http://localhost:3000, hängt an dieser Shell
 HOST=127.0.0.1 npm start         # nur lokal erreichbar, nicht im LAN
+python3 tools/start-detached.py  # Dauerbetrieb: setsid + gesäuberte Umgebung
 node test/ui-smoke.mjs           # Oberfläche im jsdom (Struktur + Verhalten)
 node test/konsole_schichten.test.js
                                  # 34 Behauptungen: Schichten aus echten Protokollen
@@ -49,20 +50,32 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 ```
 
 ## Grenzen & Sicherheitsregeln
-- **Port 3000 gehört dem Nutzer.** Dort läuft sein interaktives Terminal. Vor jedem Neustart zählen:
-  `pgrep -P $(lsof -nP -iTCP:3000 -sTCP:LISTEN -t)` — ein laufender Agent-Task wird sonst mitgetötet,
-  und bei freebuff kostet das die einzige aktive Session des Kontos (HTTP 409 `session_superseded`).
-- **Neustart nur ohne `QODER_*`-Umgebung.** Scrubben als Array (`env "${scrub[@]}" node server.js`);
-  eine per `$(...)` gebaute Zeichenkette zerlegt zsh **nicht**, der Server läuft dann trotzdem und
-  vergiftet jedes `qodercli` mit `sdk_invalid_args`. Nachprüfen:
-  `ps eww -p <PID> | tr ' ' '\n' | grep -cE '^QODER'` muss `0` sein.
+- **Port 3000 gehört dem Nutzer.** Dort läuft sein Server. Vor jedem Neustart zählen:
+  `pgrep -P $(lsof -nP -iTCP:3000 -sTCP:LISTEN -t)` — ein laufender Agent-Task wird sonst mitgetötet.
+- **Dauerbetrieb nur über `tools/start-detached.py`, nie aus der Agent-Shell.** Aus einer
+  WorkBuddy-Session geerbt kommt `NODE_OPTIONS=--require=…/node-language-shim.cjs` mit, das
+  `node-brokered-fs-shim.cjs` lädt und **jeden** `fs`-Aufruf über den Sandbox-Broker der App
+  schickt. Endet der Agenten-Zug, wirft der nächste Dateizugriff `Connection refused` als
+  unbehandelte Ausnahme — der Server stirbt mitten im Betrieb, auch beim Ausliefern einer
+  statischen Datei. Im Log sieht das aus wie `ENOSPC: no space left on device` oder
+  `Brokered file token refused`. Ebenso zu entfernen: `BASH_ENV`, `PYTHONPATH`, `CODEBUDDY_*`,
+  `WORKBUDDY_*`, `SANDBOX_CENTER_*` und die Shim-Einträge in `PATH` (`cli/vendor/shim`).
+  Der Launcher filtert das und warnt, wenn noch etwas durchkommt.
+- **Neustart nur ohne `QODER_*`-Umgebung.** Der Launcher erledigt das per Präfix; von Hand
+  scrubben als Array (`env "${scrub[@]}" node server.js`) — eine per `$(...)` gebaute
+  Zeichenkette zerlegt zsh **nicht**, der Server läuft dann trotzdem und vergiftet jedes
+  `qodercli` mit `sdk_invalid_args`. Nachprüfen:
+  `ps eww -p <PID> | tr ' ' '\n' | grep -cE '^(QODER|CODEBUDDY|WORKBUDDY|NODE_OPTIONS)'` muss `0` sein.
+- **Service Worker:** `public/sw.js` arbeitet network-first und hält `harness-studio-v<N>` als
+  Rückfall. Ändern sich `index.html`, `app.js` oder `style.css`, die Nummer hochziehen — sonst
+  kann bei totem Server die alte Fassung erscheinen, und die Seite sieht heil aus, obwohl sie
+  mit einem toten Backend spricht.
 - **LAN-offen**: jeder Spawn-Pfad bleibt über die feste `HARNESS_REGISTRY` beziehungsweise deren
-  `PTY_ALLOWED_COMMANDS` / `TESTABLE_COMMANDS` auf eingetragene CLIs beschränkt.
+  `TESTABLE_COMMANDS` auf eingetragene CLIs beschränkt.
   **Modell-Tests** laufen in einem Wegwerfverzeichnis (`harness-modeltest-…` unter `/tmp`),
-  **Dispatches und PTY arbeiten direkt im gewählten Projektordner** — dort gibt es keine
+  **Dispatches arbeiten direkt im gewählten Projektordner** — dort gibt es keine
   Isolation, der Auftrag schreibt im Original.
-- **Secrets nie ausgeben oder übertragen**: `~/.config/manicode/credentials.json`,
-  `~/.config/manicode/device-key.json`, der `ANTHROPIC_API_KEY`-Wert in `~/.zshrc`. Von der
+- **Secrets nie ausgeben oder übertragen**: der `ANTHROPIC_API_KEY`-Wert in `~/.zshrc`. Von der
   Gateway-Umbiegung dürfen nur Variablen**namen** geloggt werden.
 - `.workbuddy-ai/` ist das Gedächtnis eines anderen Agenten — untracked lassen, nie committen.
 - `origin` ist das **private** GitHub-Repo (`github.com/ysamjo/harness-router-gui`). Vor einem Push

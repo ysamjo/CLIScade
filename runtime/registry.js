@@ -67,17 +67,6 @@ const CLI_INSTALL_REGISTRY = {
     iconKey: 'qoder_cli',
     docsUrl: 'https://qoder.ai'
   },
-  freebuff_cli: {
-    id: 'freebuff_cli',
-    name: 'Freebuff',
-    cmd: 'freebuff',
-    package: 'freebuff',
-    installCmd: 'npm install -g freebuff',
-    description: 'Agentic Harness für Multi-Context Refactorings & Space-Bunny-Modelle',
-    category: 'Specialized',
-    iconKey: 'freebuff_cli',
-    docsUrl: 'https://github.com/freebuff/freebuff'
-  },
   codebuddy_cli: {
     id: 'codebuddy_cli',
     name: 'CodeBuddy',
@@ -110,7 +99,6 @@ const HARNESS_DEFINITIONS = {
   opencode: { installId: 'opencode_cli', aliases: [], transport: 'headless', resumable: true, structuredOutput: true },
   antigravity: { installId: 'antigravity_cli', aliases: ['antigravity_cli'], transport: 'headless', resumable: false, structuredOutput: false },
   qoder: { installId: 'qoder_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
-  freebuff: { installId: 'freebuff_cli', aliases: [], transport: 'pty', resumable: false, structuredOutput: false, singleSession: true },
   codebuddy: { installId: 'codebuddy_cli', aliases: ['cbc'], transport: 'headless', resumable: false, structuredOutput: false },
   cursor: { installId: 'cursor_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false }
 };
@@ -124,8 +112,7 @@ const HARNESS_REGISTRY = Object.freeze(Object.fromEntries(
       installId: definition.installId, aliases: definition.aliases,
       transport: definition.transport, dispatchable: headless, consensus: headless,
       scheduler: headless, telegramDispatch: headless, modelTest: headless,
-      resumable: definition.resumable, structuredOutput: definition.structuredOutput,
-      singleSession: Boolean(definition.singleSession)
+      resumable: definition.resumable, structuredOutput: definition.structuredOutput
     })];
   })
 ));

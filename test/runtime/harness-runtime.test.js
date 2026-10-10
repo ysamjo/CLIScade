@@ -20,8 +20,8 @@ test('Codex-Ausgabe wird als Text und Session normalisiert', async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('Freebuff erreicht den Headless-Runner nicht', async () => {
-  const result = await runHarness({ harnessId: 'freebuff', prompt: 'Aufgabe', cwd: os.tmpdir() });
+test('Ein Harness ausserhalb der Registry erreicht den Runner nicht', async () => {
+  const result = await runHarness({ harnessId: 'gibtsnicht', prompt: 'Aufgabe', cwd: os.tmpdir() });
   assert.equal(result.status, 'failed');
   assert.equal(result.error.kind, 'harness_failure');
 });

@@ -1,5 +1,7 @@
 // Ein Ordner gehört zu einer Konsole: Der zweite Auftrag darin wartet unter dem
 // laufenden — er zieht nicht in das andere Feld und verdrängt dort nichts.
+// Beide Felder belegt: Ein neuer Auftrag nimmt das Feld, in dem der Nutzer zuletzt
+// Maus oder Tastatur benutzt hat.
 //
 // Warum das hier steht: die Aufteilung der zwei Felder ist der einzige Beweis, den der
 // Nutzer im Browser sieht. Der Test fährt dazu die echte Oberfläche in jsdom.
@@ -45,18 +47,6 @@ const ANTWORTEN = {
   'GET /api/runs': { running: [], queued: [], maxConcurrent: 0 }
 };
 
-class TerminalStub {
-  constructor() { this.cols = 100; this.rows = 30; }
-  open() {}
-  loadAddon() {}
-  onData() {}
-  write() {}
-  reset() {}
-  clear() {}
-  focus() {}
-  dispose() {}
-}
-
 // Die echte Seite mit dem echten Skript; der WebSocket zeichnet nur auf.
 async function oberflaeche() {
   let socket = null;
@@ -75,8 +65,8 @@ async function oberflaeche() {
   const dom = new JSDOM(fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8'), {
     url: 'http://localhost:3000/',
     runScripts: 'outside-only',
-    // setStudioMode misst das Terminal in requestAnimationFrame — ohne diese Option
-    // liefert jsdom sie nicht und der Bootstrap bricht ab.
+    // jsdom liefert requestAnimationFrame nur mit dieser Option; die Oberfläche
+    // hängt daran beim Aufbau der Konsolenfelder.
     pretendToBeVisual: true
   });
   const { window } = dom;
@@ -87,8 +77,6 @@ async function oberflaeche() {
   window.confirm = () => true;
   window.open = () => null;
   window.WebSocket = WebSocketStub;
-  window.Terminal = TerminalStub;
-  window.FitAddon = { FitAddon: class { fit() {} } };
   window.fetch = async (pfad, optionen = {}) => ({
     ok: true,
     status: 200,
@@ -111,8 +99,12 @@ async function oberflaeche() {
   const titel = (i) => (konsole(i)?.querySelector('.run-pane-title')?.textContent || '').trim();
   // Welches Feld einen Lauf zeigt, verrät nur seine Ausgabe.
   const feldMit = (suchtext) => [0, 1].find((i) => text(i).includes(suchtext));
+  // Der Nutzer zeigt auf ein Feld: Maus ins Feld oder Tastatur in sein Eingabefeld.
+  const mitMaus = (i) => konsole(i).dispatchEvent(new window.Event('mousedown', { bubbles: true }));
+  const mitTastatur = (i) => konsole(i).querySelector('.run-pane-input')
+    .dispatchEvent(new window.Event('focusin', { bubbles: true }));
 
-  return { sag, text, titel, feldMit };
+  return { sag, text, titel, feldMit, mitMaus, mitTastatur };
 }
 
 const auftrag = (id, ordner, titelText) => ({
@@ -187,4 +179,90 @@ test('bekommt ein Auftrag in einem anderen Ordner weiter das freie Feld', async 
 
   assert.strictEqual(q.feldMit('R1-AUSGABE'), 1 - feld, 'ein anderer Ordner ist ein zweites Feld wert');
   assert.doesNotMatch(q.text(1 - feld), /⏳/);
+});
+
+// --- Beide Felder belegt: das zuletzt benutzte Feld gewinnt ----------------
+// Der Nutzer zeigt mit der Maus oder der Tastatur auf ein Feld. Der nächste Auftrag
+// gehört dorthin — auch wenn dort noch ein Lauf steht.
+
+// Zwei laufende Aufträge in zwei Ordnern; beide Felder sind damit belegt.
+async function beideBelegt() {
+  const s = await oberflaeche();
+  s.sag({ type: 'task_created', taskId: 'q1', task: auftrag('q1', 'proj-q', 'Lauf in Q') });
+  s.sag({ type: 'route_selected', taskId: 'q1', harness: 'Cline', command: 'cline', model: 'plan-free' });
+  s.sag({ type: 'output', taskId: 'q1', html: 'Q1-AUSGABE' });
+  await ruhen(4);
+  s.sag({ type: 'task_created', taskId: 'r1', task: auftrag('r1', 'proj-r', 'Lauf in R') });
+  s.sag({ type: 'route_selected', taskId: 'r1', harness: 'Qoder', command: 'qoder', model: 'auto' });
+  s.sag({ type: 'output', taskId: 'r1', html: 'R1-AUSGABE' });
+  await ruhen(4);
+
+  assert.strictEqual(s.feldMit('Q1-AUSGABE'), 0, 'der erste Auftrag liegt im ersten Feld');
+  assert.strictEqual(s.feldMit('R1-AUSGABE'), 1, 'der zweite Auftrag liegt im zweiten Feld');
+  return s;
+}
+
+async function dritterAuftrag(s, id, marker) {
+  s.sag({ type: 'task_created', taskId: id, task: auftrag(id, 'proj-s', `Auftrag ${marker}`) });
+  s.sag({ type: 'route_selected', taskId: id, harness: 'Cline', command: 'cline', model: 'plan-free' });
+  s.sag({ type: 'output', taskId: id, html: marker });
+  await ruhen(4);
+}
+
+test('weicht ohne Wahl der ältere Lauf', async () => {
+  const s = await beideBelegt();
+
+  await dritterAuftrag(s, 's1', 'S1-AUSGABE');
+
+  assert.strictEqual(s.feldMit('S1-AUSGABE'), 0, 'ohne Wahl nimmt der neue Auftrag das ältere Feld');
+  assert.match(s.text(1), /R1-AUSGABE/, 'der jüngere Lauf bleibt unangetastet stehen');
+});
+
+test('zieht ein Auftrag in das zuletzt mit der Maus aktivierte Feld', async () => {
+  const s = await beideBelegt();
+
+  s.mitMaus(1);
+  await dritterAuftrag(s, 's2', 'S2-AUSGABE');
+
+  assert.strictEqual(s.feldMit('S2-AUSGABE'), 1, 'das mit der Maus gewählte Feld bekommt den Auftrag');
+  assert.match(s.text(0), /Q1-AUSGABE/, 'das andere Feld behält seinen Lauf');
+  assert.doesNotMatch(s.text(1), /R1-AUSGABE/, 'das gewählte Feld weicht dem neuen Auftrag');
+});
+
+test('gilt genauso für die Tastatur', async () => {
+  const s = await beideBelegt();
+
+  s.mitTastatur(0);
+  await dritterAuftrag(s, 's3', 'S3-AUSGABE');
+
+  assert.strictEqual(s.feldMit('S3-AUSGABE'), 0, 'das mit der Tastatur gewählte Feld bekommt den Auftrag');
+  assert.match(s.text(1), /R1-AUSGABE/, 'das andere Feld bleibt stehen');
+});
+
+test('nimmt ein leeres Feld den Auftrag vor jeder Wahl', async () => {
+  const s = await oberflaeche();
+  s.sag({ type: 'task_created', taskId: 'q1', task: auftrag('q1', 'proj-q', 'Lauf in Q') });
+  s.sag({ type: 'route_selected', taskId: 'q1', harness: 'Cline', command: 'cline', model: 'plan-free' });
+  s.sag({ type: 'output', taskId: 'q1', html: 'Q1-AUSGABE' });
+  await ruhen(4);
+
+  s.mitMaus(0);
+  await dritterAuftrag(s, 'r1', 'R1-AUSGABE');
+
+  assert.strictEqual(s.feldMit('R1-AUSGABE'), 1, 'ein leeres Feld geht der Wahl vor — dort geht nichts verloren');
+  assert.match(s.text(0), /Q1-AUSGABE/);
+});
+
+test('lässt die Wahl wieder fallen, wenn dort kein Lauf mehr liegt', async () => {
+  const s = await beideBelegt();
+
+  s.mitMaus(1);
+  s.sag({ type: 'done', taskId: 'r1', exitCode: 0, message: 'Fertig' });
+  await ruhen(4);
+  s.sag({ type: 'done', taskId: 'q1', exitCode: 0, message: 'Fertig' });
+  await ruhen(4);
+
+  await dritterAuftrag(s, 's4', 'S4-AUSGABE');
+
+  assert.strictEqual(s.feldMit('S4-AUSGABE'), 1, 'das gewählte Feld ist immer noch das Ziel');
 });

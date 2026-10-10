@@ -10,19 +10,11 @@ const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
 const {
   knownBrokenBlocker,
-  ptyOwnershipBlocker,
   dispatchSlotDecision,
-  busyHarnessBlocker,
   gatewayEnvFromShell,
   isJobDue,
   RUN_IDLE_TIMEOUT_MS
 } = require('./routing');
-let pty = null;
-try {
-  pty = require('node-pty');
-} catch (err) {
-  console.error('[PTY] node-pty konnte nicht geladen werden, interaktives Terminal deaktiviert:', err.message);
-}
 
 const ANSI_COLORS = {
   0: '#000000',
@@ -95,9 +87,6 @@ if (!fs.existsSync(SCHEDULES_FILE)) {
 }
 
 app.use(express.json({ limit: '50mb' }));
-// xterm.js is served straight from node_modules so no build step or CDN is needed.
-app.use('/vendor/xterm', express.static(path.join(__dirname, 'node_modules', '@xterm', 'xterm')));
-app.use('/vendor/xterm-addon-fit', express.static(path.join(__dirname, 'node_modules', '@xterm', 'addon-fit')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Model presets per harness (defaults + dynamic discovery)
@@ -147,16 +136,6 @@ const DEFAULT_MODEL_PRESETS = {
     { id: 'Standard', label: 'Standard / Default' },
     { id: 'Qwen3.8-Max', label: 'Qwen 3.8 Max' },
     { id: 'Qwen3.8-Flash', label: 'Qwen 3.8 Flash' }
-  ],
-  freebuff: [
-    { id: 'Standard', label: 'Standard (GLM 5.3 Flash)' },
-    { id: 'glm-5.3-flash', label: 'GLM 5.3 Flash (Gratis & Unmetered)' },
-    { id: 'stealth/space-bunny-alpha', label: 'Space Bunny Alpha' },
-    { id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
-    { id: 'deepseek-v3', label: 'DeepSeek V3' },
-    { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
-    { id: 'mimo-2.6-flash', label: 'MiMo 2.6 Flash' },
-    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }
   ],
   codebuddy: [
     { id: 'Standard', label: 'Standard (hy3)' },
@@ -313,18 +292,7 @@ async function fetchDynamicModelPresets() {
     result.antigravity_cli = agyList;
   } catch (e) {}
 
-  // 7. Freebuff: inspect ~/.config/manicode/settings.json
-  try {
-    const manicodePath = path.join(os.homedir(), '.config', 'manicode', 'settings.json');
-    if (fs.existsSync(manicodePath)) {
-      const mData = JSON.parse(fs.readFileSync(manicodePath, 'utf8'));
-      if (mData.freebuffModel && !result.freebuff.some(m => m.id === mData.freebuffModel)) {
-        result.freebuff.splice(1, 0, { id: mData.freebuffModel, label: `${mData.freebuffModel} (Aktiv in manicode settings)` });
-      }
-    }
-  } catch (e) {}
-
-  // 8. CodeBuddy: inspect configured model from ~/.codebuddy/settings.json
+  // 7. CodeBuddy: inspect configured model from ~/.codebuddy/settings.json
   try {
     const cbPath = path.join(os.homedir(), '.codebuddy', 'settings.json');
     if (fs.existsSync(cbPath)) {
@@ -465,32 +433,6 @@ const { HARNESS_REGISTRY, CLI_INSTALL_REGISTRY, resolveHarness, normalizeRoutes,
 const { resolveWorkspaceDirectory, resolveAgentFile } = require('./runtime/workspace');
 const { runHarness } = require('./runtime/harness-runtime');
 
-// Harnesses whose CLI has no headless/print flag and only renders a full-screen TUI.
-// Without a real TTY they abort immediately ("Terminal protocol transition failed")
-// and leave their screen-redraw bytes in the output pipe, so they cannot be dispatched.
-const TUI_ONLY_COMMANDS = new Set(Object.values(HARNESS_REGISTRY).filter((entry) => entry.transport === 'pty').flatMap((entry) => entry.commands));
-
-// Harnesses, deren Anbieter dem Konto nur eine gleichzeitig aktive Session zugesteht.
-// Eine zweite Instanz verdrängt die erste (HTTP 409 session_superseded), und das ältere
-// Terminal zeigt einen Fehler, obwohl der Nutzer dort gar nichts getan hat.
-const SINGLE_SESSION_COMMANDS = new Set(Object.values(HARNESS_REGISTRY).filter((entry) => entry.singleSession).flatMap((entry) => entry.commands));
-
-// A TUI-only launcher has no --version shortcut: `freebuff --version` still starts the
-// full agent, which on startup migrates its token through the Keychain. That Keychain
-// item's ACL is pinned to the cdhash of one specific self-updated binary, so the request
-// is denied and macOS asks for the login password. Version info comes from the harness's
-// own update metadata instead of a process launch.
-function readTuiVersion(cmd) {
-  if (cmd !== 'freebuff') return null;
-  try {
-    const meta = JSON.parse(fs.readFileSync(
-      path.join(os.homedir(), '.config', 'manicode', 'freebuff-metadata.json'), 'utf8'));
-    return meta.version ? `v${meta.version}` : null;
-  } catch {
-    return null;
-  }
-}
-
 let healthCache = null;
 let healthCacheTime = 0;
 
@@ -512,20 +454,16 @@ function checkSingleCliHealth(meta) {
     if (p) {
       available = true;
       binaryPath = p;
-      if (TUI_ONLY_COMMANDS.has(meta.cmd)) {
-        version = readTuiVersion(meta.cmd);
-      } else {
-        try {
-          const vOut = execFileSync(p, ['--version'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-          version = vOut.split('\n')[0].trim();
-          if (version.length > 32) version = version.slice(0, 32);
-        } catch {}
-      }
+      try {
+        const vOut = execFileSync(p, ['--version'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        version = vOut.split('\n')[0].trim();
+        if (version.length > 32) version = version.slice(0, 32);
+      } catch {}
     }
   } catch {
     available = false;
   }
-  return { ...meta, available, path: binaryPath, version, tuiOnly: TUI_ONLY_COMMANDS.has(meta.cmd) };
+  return { ...meta, available, path: binaryPath, version };
 }
 
 // Harness health check with memory cache
@@ -731,17 +669,6 @@ function fetchCliCostsAndUsage(forceRefresh = false) {
       cost: 'Credits inklusive',
       badge: 'Credits aktiv'
     },
-    freebuff: {
-      id: 'freebuff',
-      name: 'Freebuff',
-      command: 'freebuff',
-      available: false,
-      plan: 'Community Unmetered',
-      contextWindow: '128.000 Tokens',
-      remaining: 'Unbegrenzt (GLM 5.3 / Space Bunny)',
-      cost: '$0.00',
-      badge: 'Unbegrenzt'
-    },
     codebuddy: {
       id: 'codebuddy',
       name: 'CodeBuddy',
@@ -796,7 +723,6 @@ function fetchCliCostsAndUsage(forceRefresh = false) {
     if (key === 'cline_cli') key = 'cline';
     if (key === 'opencode_cli') key = 'opencode';
     if (key === 'qoder_cli') key = 'qoder';
-    if (key === 'freebuff_cli') key = 'freebuff';
     if (key === 'codebuddy_cli') key = 'codebuddy';
     if (key === 'cursor_cli') key = 'cursor';
 
@@ -1562,12 +1488,9 @@ function pumpRuns() {
     for (const entry of dispatchQueue) {
       const decision = dispatchSlotDecision({
         maxConcurrent: max,
-        singleSessionCommands: SINGLE_SESSION_COMMANDS,
         running: runningForGate(),
         incoming: {
-          projectPath: entry.workingDir,
-          requires: entry.requires,
-          candidates: entry.candidates
+          projectPath: entry.workingDir
         }
       });
       if (decision) {
@@ -1758,177 +1681,11 @@ function broadcastToClients(msg, excludeWs) {
   });
 }
 
-// --- INTERACTIVE PTY SESSIONS ---
-// Each browser tab gets its own pseudo-terminal, so TUI-only harnesses such as
-// freebuff run with a real TTY and can stream output and keystrokes both ways.
-const PTY_PLATFORM_DIR = path.join(__dirname, 'node_modules', 'node-pty', 'prebuilds', `${process.platform}-${process.arch}`);
-
-function ensurePtyHelperExecutable() {
-  // The npm prebuild ships spawn-helper without the executable bit and a missing
-  // bit makes every pty.spawn fail with the unhelpful "posix_spawnp failed".
-  try {
-    const helper = path.join(PTY_PLATFORM_DIR, 'spawn-helper');
-    if (fs.existsSync(helper) && !(fs.statSync(helper).mode & 0o111)) {
-      fs.chmodSync(helper, 0o755);
-    }
-  } catch (err) {
-    console.warn('[PTY] spawn-helper konnte nicht ausführbar gemacht werden:', err.message);
-  }
-}
-ensurePtyHelperExecutable();
-
-const PTY_ALLOWED_COMMANDS = new Set(HARNESS_REGISTRY.freebuff.commands);
-
-function resolvePtyCommand(command) {
-  if (!PTY_ALLOWED_COMMANDS.has(command)) return null;
-  for (const candidate of HARNESS_REGISTRY.freebuff.commands) {
-    try {
-      execFileSync('which', [candidate], { stdio: 'ignore' });
-      return candidate;
-    } catch {}
-  }
-  return null;
-}
-
-let ptySessionSeq = 0;
-const livePtySessions = new Set();
-
-function writePty(ws, obj) {
-  if (ws.readyState === 1) {
-    try { ws.send(JSON.stringify(obj)); } catch {}
-  }
-}
-
-function killPtySession(ws, notifyClient = true, notice) {
-  const session = ws._ptySession;
-  if (!session) return;
-  // Mark first: proc.onExit would otherwise emit a second pty_exit for this kill.
-  session.killedByUser = true;
-  livePtySessions.delete(session);
-  ws._ptySession = null;
-  try { session.proc.kill(); } catch {}
-  if (notifyClient) writePty(ws, { type: 'pty_exit', sessionId: session.id, exitCode: null, killed: true, notice });
-}
-
-function startPtySession(ws, payload) {
-  const { command, cwd } = payload || {};
-
-  if (!pty) {
-    return writePty(ws, { type: 'pty_error', error: 'node-pty ist auf diesem Server nicht verfügbar.' });
-  }
-  if (typeof command !== 'string' || !PTY_ALLOWED_COMMANDS.has(command)) {
-    return writePty(ws, { type: 'pty_error', error: `Unbekanntes Harness: ${command}` });
-  }
-  const resolved = resolvePtyCommand(command);
-  if (!resolved) {
-    return writePty(ws, { type: 'pty_error', error: `Befehl "${command}" nicht im PATH gefunden.` });
-  }
-
-  let workDir;
-  try {
-    const data = loadTasksData();
-    workDir = resolveWorkspaceDirectory(cwd, data.rootDirectory || DEFAULT_ROOT_DIR);
-  } catch (err) {
-    return writePty(ws, { type: 'pty_error', error: err.message });
-  }
-
-  const holder = ptyOwnershipBlocker({
-    singleSessionCommands: SINGLE_SESSION_COMMANDS,
-    sessions: [...livePtySessions],
-    command: resolved,
-    clientId: ws._ptyClientId
-  });
-  if (holder) {
-    if (!payload.takeover) {
-      const folder = String(holder.cwd).split('/').filter(Boolean).pop() || holder.cwd;
-      return writePty(ws, {
-        type: 'pty_error',
-        code: 'pty_in_use',
-        error: `${resolved} läuft bereits in einem anderen Fenster (Ordner ${folder}).`,
-        holder: { id: holder.id, command: holder.command, cwd: holder.cwd }
-      });
-    }
-    killPtySession(holder.ws, true, 'Ein anderes Fenster hat diese Session übernommen.');
-  }
-
-  killPtySession(ws, false);
-
-  const cols = Math.max(20, Math.min(500, parseInt(payload.cols, 10) || 80));
-  const rows = Math.max(5, Math.min(200, parseInt(payload.rows, 10) || 24));
-  const sessionId = `pty_${++ptySessionSeq}_${Date.now()}`;
-
-  let proc;
-  try {
-    proc = pty.spawn(resolved, [], {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd: workDir,
-      env: harnessEnv({
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        LANG: process.env.LANG || 'en_US.UTF-8',
-        PATH: `${process.env.HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}`
-      })
-    });
-  } catch (err) {
-    return writePty(ws, { type: 'pty_error', error: `PTY-Start fehlgeschlagen: ${err.message}` });
-  }
-
-  const session = { id: sessionId, proc, command: resolved, cwd: workDir, ws, clientId: ws._ptyClientId, killedByUser: false };
-  ws._ptySession = session;
-  livePtySessions.add(session);
-  writePty(ws, { type: 'pty_started', sessionId, command: resolved, cwd: workDir });
-
-  proc.onData((data) => {
-    writePty(ws, { type: 'pty_data', sessionId, data });
-  });
-
-  proc.onExit(({ exitCode, signal }) => {
-    livePtySessions.delete(session);
-    if (ws._ptySession && ws._ptySession.id === sessionId) ws._ptySession = null;
-    if (session.killedByUser) return;
-    writePty(ws, { type: 'pty_exit', sessionId, exitCode, signal });
-  });
-}
-
-function handlePtyMessage(ws, data) {
-  if (data.type === 'pty_start') {
-    startPtySession(ws, data);
-    return true;
-  }
-  if (data.type === 'pty_input') {
-    const session = ws._ptySession;
-    if (session) {
-      try { session.proc.write(String(data.data == null ? '' : data.data)); } catch {}
-    }
-    return true;
-  }
-  if (data.type === 'pty_resize') {
-    const session = ws._ptySession;
-    if (session) {
-      const cols = Math.max(20, Math.min(500, parseInt(data.cols, 10) || 80));
-      const rows = Math.max(5, Math.min(200, parseInt(data.rows, 10) || 24));
-      try { session.proc.resize(cols, rows); } catch {}
-    }
-    return true;
-  }
-  if (data.type === 'pty_kill') {
-    killPtySession(ws);
-    return true;
-  }
-  return false;
-}
-
 // WebSocket for live streaming execution
 wss.on('connection', (ws) => {
-  ws._ptyClientId = `client_${++ptySessionSeq}`;
-  ws.on('close', () => killPtySession(ws, false));
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-
-      if (handlePtyMessage(ws, data)) return;
 
       if (data.type === 'cancel') {
         cancelDispatch(data.taskId, ws);
@@ -2301,8 +2058,7 @@ function runDispatch(entry) {
       if (entry.cancelled) { finish('cancelled', null, 'Abgebrochen durch Benutzer'); return; }
       const route = candidateRoutes[index];
       const blocked = [
-        knownBrokenBlocker(route, dispatchHealthMarks, { explicitChoice: Boolean(harnessOverride && harnessOverride !== 'auto') }),
-        busyHarnessBlocker(route, runningForGate().filter((run) => run.taskId !== taskId), SINGLE_SESSION_COMMANDS)
+        knownBrokenBlocker(route, dispatchHealthMarks, { explicitChoice: Boolean(harnessOverride && harnessOverride !== 'auto') })
       ].filter(Boolean);
       if (blocked.length) {
         const html = `<div class="route-fallback-banner"><strong>${escapeHtml(route.name)}</strong> wird übersprungen: ${escapeHtml(blocked.join('; '))}.</div>\n`;

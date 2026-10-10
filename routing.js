@@ -78,47 +78,16 @@ function startupRefusal(rawOutput = '') {
   return line ? line.trim().slice(0, 200) : null;
 }
 
-// Harnesses wie freebuff nehmen dem Konto genau eine Session ab: startet ein zweites
-// Fenster dieselbe CLI, verdrängt die neue die alte und das alte Terminal meldet
-// "released or taken over". Ein Fenster darf seinen eigenen Prozess neu starten, weil
-// der Server ihn vor dem Spawn fegt.
-function ptyOwnershipBlocker({ singleSessionCommands, sessions = [], command, clientId } = {}) {
-  if (!singleSessionCommands || !singleSessionCommands.has(command)) return null;
-  return sessions.find((s) => s.command === command && s.clientId !== clientId) || null;
-}
-
 // Ein Auftrag startet nur, wenn zwei Dinge frei sind: ein Platz an der Kappe (0 oder
 // fehlend = keine Kappe) und der Ordner — zwei Agenten im selben Repo schreiben sich
-// gegenseitig in den Arbeitsbaum. Der Harness blockiert nur noch bei Einkonto-Befehlen
-// (`singleSessionCommands`): zwei Cline-Laeufe in zwei Ordner sind in Ordnung, zwei
-// Freebuff-Laeufe nicht, weil das Konto die zweite Session mit 409 session_superseded
-// killt. `requires` sind die Befehle, die der Auftrag fest braucht — eine Route, ein
-// freier Wille, zwei Engines im Konsens.
-function dispatchSlotDecision({ maxConcurrent, singleSessionCommands = new Set(), running = [], incoming = {} } = {}) {
+// gegenseitig in den Arbeitsbaum.
+function dispatchSlotDecision({ maxConcurrent, running = [], incoming = {} } = {}) {
   if (maxConcurrent && running.length >= maxConcurrent) return { reason: 'capacity' };
 
   const sameFolder = running.find((r) => r.projectPath === incoming.projectPath);
   if (sameFolder) return { reason: 'project', blocker: sameFolder };
 
-  const usesCommand = (run, command) => (run.commands || []).includes(command);
-  const allein = (command) => singleSessionCommands.has(command);
-  const required = (incoming.requires || []).filter(allein);
-  const busyRequired = running.find((r) => required.some((c) => usesCommand(r, c)));
-  if (busyRequired) return { reason: 'harness', blocker: busyRequired };
-
-  const candidates = (incoming.candidates || []).filter(allein);
-  const allBusy = candidates.length > 0 && candidates.every((c) => running.some((r) => usesCommand(r, c)));
-  if (allBusy) return { reason: 'harness', blocker: running.find((r) => candidates.some((c) => usesCommand(r, c))) };
   return null;
-}
-
-// Dieselbe Regel noch einmal im laufenden Ausweichen: nur ein Einkonto-Befehl, der schon
-// in einem anderen Task arbeitet, gilt als Grund, eine Route zu ueberspringen.
-function busyHarnessBlocker(route = {}, running = [], singleSessionCommands = new Set()) {
-  if (!singleSessionCommands.has(route.command)) return null;
-  const busy = running.find((r) => (r.commands || []).includes(route.command));
-  if (!busy) return null;
-  return `${route.name || route.command} arbeitet bereits in einem anderen Task`;
 }
 
 // Nur die genannten Variablen wandern aus der Shell-Umgebung in den Lauf: ein Marker des
@@ -154,9 +123,7 @@ module.exports = {
   armIdleWatchdog,
   knownBrokenBlocker,
   startupRefusal,
-  ptyOwnershipBlocker,
   dispatchSlotDecision,
-  busyHarnessBlocker,
   gatewayEnvFromShell,
   isJobDue,
   formatAge
