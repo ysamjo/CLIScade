@@ -300,6 +300,10 @@ pruefe("jedes Feld hat eigene Ausgabe",
   document.querySelectorAll("#run-split .run-pane-body").length === 2);
 pruefe("jedes Feld hat eigenen Abbrechen-Knopf",
   document.querySelectorAll("#run-split .run-pane-cancel").length === 2);
+pruefe("Kopieren und Abbrechen sind beschriftete Icons unten", [...document.querySelectorAll(".run-pane")].every(p => ["copy", "cancel"].every(action => {
+  const button = p.querySelector(`.run-pane-${action}`);
+  return button.closest(".run-pane-actions") && button.querySelector("svg") && button.getAttribute("aria-label");
+})));
 pruefe("die Einzelkonsole ist raus", document.querySelector("#terminal-body") === null);
 pruefe("das globale Routing-Banner ist raus", document.querySelector("#active-routing-card") === null);
 
@@ -354,6 +358,20 @@ await ruhen(4);
 pruefe("der dritte Auftrag nimmt das Feld des beendeten", (konsole(1)?.textContent || "").includes("AUSGABE-C"));
 pruefe("C verdrängt A nicht aus dem laufenden Feld", (konsole(0)?.textContent || "").includes("AUSGABE-A"));
 pruefe("C löscht B's Ausgabe aus seinem Feld", !(konsole(1)?.textContent || "").includes("AUSGABE-B"));
+
+let copiedOutput;
+Object.defineProperty(window.navigator, "clipboard", {configurable:true, value:{writeText:async text => { copiedOutput = text; }}});
+const copyButton = konsole(0).querySelector(".run-pane-copy");
+const outputBody = konsole(0).querySelector(".run-pane-body");
+// jsdom hat kein gerendertes innerText; der Browser liefert es nativ.
+Object.defineProperty(outputBody, "innerText", {configurable:true, value:"AUSGABE-A"});
+copyButton.click();
+await ruhen(2);
+pruefe("Kopieren überträgt nur die eigene Ausgabe und behält das Icon", copiedOutput === "AUSGABE-A" && copyButton.querySelector("svg") && copyButton.getAttribute("aria-label") === "Ausgabe kopiert");
+window.navigator.clipboard.writeText = async () => { throw new Error("Verweigert"); };
+copyButton.click();
+await ruhen(2);
+pruefe("Fehlgeschlagenes Kopieren meldet keinen Erfolg", copyButton.title === "Kopieren fehlgeschlagen" && copyButton.querySelector("svg"));
 
 konsole(0)?.querySelector(".run-pane-cancel")?.click();
 await ruhen(2);
@@ -748,7 +766,7 @@ for (const [id, type, status, code] of [
   sag({ type: "route_selected", taskId: id, harness: "Cline", model: "Standard" });
   if (type === "cancelled") {
     sag({ type: "abbruch_laeuft", taskId: id });
-    pruefe("Abbruch wird sofort quittiert", [...document.querySelectorAll(".run-pane-cancel")].some((b) => b.disabled && b.textContent === "Bricht ab…"));
+    pruefe("Abbruch wird sofort quittiert", [...document.querySelectorAll(".run-pane-cancel")].some((b) => b.disabled && b.getAttribute("aria-label") === "Bricht ab…" && b.querySelector("svg")));
   }
   sag({ type, taskId: id, status, exitCode: code, message: id });
   const item = document.querySelector(`.task-item[data-task-id="${id}"]`);

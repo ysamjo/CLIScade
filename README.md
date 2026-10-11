@@ -26,7 +26,7 @@ HOST=127.0.0.1 npm start
 - Moderne dunkle Oberfläche mit abgestuften Flächen, klarer Schrift, ruhigem Akzent und zusammenhängenden Eingabekarten; Desktop und Mobilansicht bleiben bedienbar.
 - Beads arbeitet in eingerichteten Projekten automatisch. Status, optionale Aufgabenbindung und bewusste Fehlerausnahme stehen ausschließlich im aufklappbaren Bereich **Projektgedächtnis** oberhalb der Konsolen. Die Eingabe braucht keine Beads-Auswahl.
 - Zu Beginn eine breite Konsole; erst ein zweiter geöffneter Auftrag oder neuer Task zeigt die zweite Konsole. Der auswählbare Projektordner ist der Konsolentitel, der Auftrag erscheint als Unterzeile.
-- Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Bildauswahl und Kontextvorschau als Icons mit Tooltip und Tastaturbedienung.
+- Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Kopieren, Abbrechen, Bildauswahl und Kontextvorschau unten als Icons mit Tooltip und Tastaturbedienung.
 
 
 ## Weitere Coding-CLIs
@@ -152,4 +152,4 @@ Node.js ab 22.13 wird über PATH und lokale nvm-Installationen erkannt; `HARNESS
 
 **Bild wählen** öffnet die Foto-/Dateiauswahl und verwendet dieselbe Vorschau und Größenprüfung wie Einsetzen. Pro Auftrag ein Bild: PNG, JPEG, GIF oder WebP bis 10 MB. Abbrechen der Auswahl erhält den bisherigen Entwurf.
 
-**Kontext ansehen** lädt Regeln und Beads frisch für den aktuellen Entwurf. Die Vorschau zeigt die tatsächliche Kontextzusammenstellung, Regelquellen, Erinnerungen, Bildhinweis, Git-Stand und Zeichenbudget; ausgelassene Inhalte bleiben erkennbar. Sie lädt Bilder nicht hoch, startet keinen Harness und schreibt keine Erinnerungen. Eine angekreuzte Fortsetzung ohne Beads gilt auch für die Vorschau. Beim späteren Start wird der Kontext erneut geladen; zwischenzeitliche Projektänderungen können ihn verändern.
+Die Kontextvorschau ist optional; für normale Aufträge sind dort keine Einstellungen nötig. **Kontext ansehen** lädt Regeln und Beads frisch für den aktuellen Entwurf. Die Vorschau zeigt die tatsächliche Kontextzusammenstellung, Regelquellen, Erinnerungen, Bildhinweis, Git-Stand und Zeichenbudget; ausgelassene Inhalte bleiben erkennbar. Sie lädt Bilder nicht hoch, startet keinen Harness und schreibt keine Erinnerungen. Eine angekreuzte Fortsetzung ohne Beads gilt auch für die Vorschau. Beim späteren Start wird der Kontext erneut geladen; zwischenzeitliche Projektänderungen können ihn verändern.

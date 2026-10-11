@@ -727,7 +727,8 @@ function renderRunPane(slot) {
   pane.folder.textContent = stream.folder || '';
   pane.cancel.hidden = TaskState.terminal(stream.status);
   pane.cancel.disabled = Boolean(stream.cancelling);
-  pane.cancel.textContent = stream.cancelling ? 'Bricht ab…' : 'Abbrechen';
+  pane.cancel.setAttribute('aria-label', stream.cancelling ? 'Bricht ab…' : 'Auftrag abbrechen');
+  pane.cancel.title = stream.cancelling ? 'Bricht ab…' : 'Nur diesen Auftrag abbrechen';
   const grund = konsoleHtml(stream)
     || `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
   pane.body.innerHTML = grund + wartendeHtml(stream);
@@ -776,10 +777,20 @@ function setupRunPanes() {
       stream.falten[schluessel] = ordner.open;
     }, true);
 
-    pane.copy.addEventListener('click', () => {
-      navigator.clipboard.writeText(pane.body.innerText);
-      pane.copy.textContent = 'Kopiert!';
-      setTimeout(() => { pane.copy.textContent = 'Kopieren'; }, 1500);
+    pane.copy.addEventListener('click', async () => {
+      const feedback = (name, label) => {
+        pane.copy.innerHTML = `<span aria-hidden="true">${icon(name)}</span>`;
+        pane.copy.setAttribute('aria-label', label);
+        pane.copy.title = label;
+      };
+      try {
+        await navigator.clipboard.writeText(pane.body.innerText);
+        feedback('check', 'Ausgabe kopiert');
+      } catch {
+        feedback('x', 'Kopieren fehlgeschlagen');
+      }
+      clearTimeout(pane.copyFeedbackTimer);
+      pane.copyFeedbackTimer = setTimeout(() => feedback('copy', 'Ausgabe kopieren'), 1500);
     });
 
     pane.cancel.addEventListener('click', () => {
