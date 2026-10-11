@@ -129,3 +129,5 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Konsolen-Composer: mehrzeilige Eingabe über volle Breite, darunter Ziel/Routing und Icon-Aktionen für Bild und Kontext. Icon-Buttons behalten `aria-label`, Tooltip und sichtbaren Tastaturfokus; Bild-/Kontextpfade bleiben unverändert.
 
 - Seitenleisten-Zustand liegt in localStorage (`hrg_collapsed_projects`, `hrg_show_taskless_folders`); defekte Speicherwerte dürfen den Start nicht verhindern. AGENTS-Marken öffnen ausschließlich den Projekteditor. Archivaktionen nur bei feinem Hover-Zeiger ausblenden; Fokus und Touch bleiben bedienbar.
+
+- Oberflächengestaltung: Farb- und Radiusvariablen in `public/style.css` zentral halten. Konsolen und Composer bilden ruhige Karten; Desktop-/Mobil-Screenshots über Ego Lite prüfen. `100dvh` hält die Arbeitsfläche innerhalb der sichtbaren Browserhöhe.

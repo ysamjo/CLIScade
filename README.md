@@ -23,6 +23,7 @@ HOST=127.0.0.1 npm start
 - Optionales Beads-Projektgedächtnis mit relevanten Erkenntnissen, Prüfbelegen und geprüften Sicherungen.
 - Browser-Oberfläche, abgesicherter LAN-Zugang, Zeitpläne und Telegram-Steuerung.
 - Die Seitenleiste merkt sich eingeklappte Ordner und den Filter für Ordner ohne Aufgaben; AGENTS-Marken öffnen den Projektregel-Editor. Archiv-Icons erscheinen am Desktop bei Hover oder Tastaturfokus und bleiben auf Touch-Geräten sichtbar.
+- Moderne dunkle Oberfläche mit abgestuften Flächen, klarer Schrift, ruhigem Akzent und zusammenhängenden Eingabekarten; Desktop und Mobilansicht bleiben bedienbar.
 - Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Bildauswahl und Kontextvorschau als Icons mit Tooltip und Tastaturbedienung.
 
 
