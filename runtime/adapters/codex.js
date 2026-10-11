@@ -18,7 +18,7 @@ module.exports = {
     if (obj.type === 'item.completed' && item.type === 'agent_message') return [{ type: 'text', text: item.text || '' }];
     if (obj.type === 'item.completed' && item.type === 'reasoning') return [{ type: 'thinking', text: item.text || '' }];
     if (obj.type === 'item.started' && item.type === 'command_execution') return [{ type: 'tool_start', name: 'shell', input: { command: item.command }, id: item.id }];
-    if (obj.type === 'item.completed' && item.type === 'command_execution') return [{ type: 'tool_result', text: item.aggregated_output || '', id: item.id }];
+    if (obj.type === 'item.completed' && item.type === 'command_execution') return [{ type: 'tool_result', text: item.aggregated_output || '', exitCode: Number.isInteger(item.exit_code) ? item.exit_code : null, id: item.id }];
     return [];
   }
 };

@@ -16,7 +16,7 @@ module.exports = {
       if (block.type === 'text') return [{ type: 'text', text: block.text || '' }];
       if (block.type === 'thinking') return [{ type: 'thinking', text: block.thinking || '' }];
       if (block.type === 'tool_use') return [{ type: 'tool_start', name: block.name, input: block.input, id: block.id }];
-      if (block.type === 'tool_result') return [{ type: 'tool_result', text: typeof block.content === 'string' ? block.content : JSON.stringify(block.content), id: block.tool_use_id }];
+      if (block.type === 'tool_result') return [{ type: 'tool_result', text: typeof block.content === 'string' ? block.content : JSON.stringify(block.content), exitCode: Number.isInteger(block.exit_code) ? block.exit_code : null, id: block.tool_use_id }];
       return [];
     });
   }

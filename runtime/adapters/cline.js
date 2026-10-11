@@ -15,7 +15,7 @@ module.exports = {
     if (event.type === 'content_end' && event.contentType === 'text') return [{ type: 'text', text: event.text || '' }];
     if (event.type === 'content_end' && ['reasoning', 'thinking'].includes(event.contentType)) return [{ type: 'thinking', text: event.text || '' }];
     if (event.type === 'content_start' && event.contentType === 'tool') return [{ type: 'tool_start', name: event.toolName, input: event.input, id: event.toolCallId }];
-    if (event.type === 'content_end' && event.contentType === 'tool') return [{ type: 'tool_result', text: event.output || '', id: event.toolCallId }];
+    if (event.type === 'content_end' && event.contentType === 'tool') return [{ type: 'tool_result', text: event.output || '', exitCode: Number.isInteger(event.exitCode) ? event.exitCode : null, id: event.toolCallId }];
     return [];
   }
 };

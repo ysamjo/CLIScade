@@ -11,6 +11,8 @@ const QRCode = require('qrcode');
 const { TaskStore } = require('./services/task-store');
 const { createDispatchService, DEFAULT_MAX_CONCURRENT } = require('./services/dispatch-service');
 const { loadRules, gitState, checkpoint, buildContext } = require('./services/context-service');
+const { BeadsBackupService, defaultNas } = require('./services/beads-backup');
+const { recordToolEvidence } = require('./services/project-memory');
 const { BeadsAdapter } = require('./services/beads-adapter');
 const { createAccessControl } = require('./services/access-control');
 const { terminalMessage } = require('./public/task-state');
@@ -74,6 +76,9 @@ if (!fs.existsSync(AGENTS_MD_FILE)) {
 
 const taskStore = new TaskStore(STATE_DIR, DEFAULT_ROOT_DIR);
 const beads = new BeadsAdapter();
+const backupService = new BeadsBackupService({ beads, stateDirectory: STATE_DIR,
+  nas: defaultNas(),
+  onChange: (projectPath, backup) => broadcastToClients({ type: 'backup_status', projectPath, backup }) });
 const access = createAccessControl(STATE_DIR);
 
 const UPLOADS_DIR = path.join(STATE_DIR, 'uploads');
@@ -1423,7 +1428,7 @@ app.post('/api/schedules/:id/run', (req, res) => {
 // Laufs tragen seine Task-ID, damit zwei gleichzeitige Konsolen trennbar bleiben.
 const { liveRuns, dispatchQueue, maxConcurrentRuns, submitDispatch, cancelDispatch, writeTask, sendRunMessage } = createDispatchService({
   loadConfig, loadTasksData, taskStore, DEFAULT_ROOT_DIR, buildAgentsContext, broadcastToClients,
-  prepareAttachment, prepareBead, saveCheckpoint, runConsensusDispatch, runDispatch
+  prepareAttachment, prepareBead, saveCheckpoint, runConsensusDispatch, runDispatch, finalizeTask
 });
 
 function escapeHtml(str) {
@@ -1589,14 +1594,22 @@ function saveCheckpoint(record, resultText) {
 
 async function prepareBead(entry) {
   try {
-    entry.beadsContext = await beads.context(entry.workingDir);
+    if (entry.payload.withoutBeads === true) {
+      entry.record.beadsContext = { state: 'bypassed' };
+      sendRunMessage(entry.ws, entry.taskId, { type: 'context_status', projectPath: entry.workingDir, state: 'bypassed' });
+      return;
+    }
+    entry.beadsContext = await beads.context(entry.workingDir, { prompt: entry.payload.prompt });
   } catch (err) {
+    sendRunMessage(entry.ws, entry.taskId, { type: 'context_status', projectPath: entry.workingDir, state: 'error', error: err.message });
     throw new Error(`Beads-Projektkontext konnte nicht geladen werden: ${err.message}`);
   }
   if (entry.beadsContext) {
     entry.record.beadsContext = { loadedAt: new Date().toISOString(),
-      characters: entry.beadsContext.prime.length, availableTasks: entry.beadsContext.availableTasks };
+      state: 'ready', characters: entry.beadsContext.prime.length, memoryCount: entry.beadsContext.memoryCount, availableTasks: entry.beadsContext.availableTasks };
   }
+  sendRunMessage(entry.ws, entry.taskId, { type: 'context_status', projectPath: entry.workingDir,
+    state: entry.beadsContext ? 'ready' : 'disabled', memoryCount: entry.beadsContext?.memoryCount || 0 });
   if (entry.payload.beadId) {
     entry.bead = await beads.show(entry.workingDir, entry.payload.beadId);
     entry.record.bead = entry.bead;
@@ -1606,11 +1619,29 @@ async function prepareBead(entry) {
 app.get('/api/beads', async (req, res) => {
   try {
     const directory = resolveWorkspaceDirectory(req.query.projectPath, loadTasksData().rootDirectory);
-    res.json({ enabled: beads.enabled(directory), tasks: await beads.ready(directory) });
+    res.json({ ...(await beads.status(directory)), backup: backupService.status(directory) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 app.get('/api/tasks/:id/attempts', (req, res) => res.json({ attempts: taskStore.attempts(req.params.id) }));
+
+function captureToolEvidence(record, event, attemptId) {
+  const entry = liveRuns.get(record.id);
+  if (!entry) return;
+  entry.toolEvidence ||= new Map();
+  const state = event.type === 'tool_start' && (event.input?.command || event.input?.cmd) ? gitState(record.projectPath) : {};
+  recordToolEvidence(record, entry.toolEvidence, event, state, attemptId);
+}
+
+async function finalizeTask(entry) {
+  if (entry.payload.withoutBeads === true || !beads.enabled(entry.workingDir) || !entry.beadsContext) return;
+  try {
+    entry.record.memoryStatus = await beads.learn(entry.workingDir, entry.record);
+    backupService.request(entry.workingDir, { force: entry.record.memoryStatus.saved > 0 });
+  } catch (error) { entry.record.memoryStatus = { state: 'error', error: error.message }; }
+  sendRunMessage(entry.ws, entry.taskId, { type: 'context_status', projectPath: entry.workingDir,
+    ...entry.record.memoryStatus, backup: backupService.status(entry.workingDir) });
+}
 
 // Consensus Mode Dispatch (Dual-Agent Collaboration & Synthesis)
 function runConsensusDispatch(entry) {
@@ -1786,6 +1817,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     },
     onEvent: (event) => {
       taskStore.addEvent(attemptId, event);
+      captureToolEvidence(taskRecord, event, attemptId);
       const output = renderRuntimeEvent(event, renderChunk);
       if (!output) return;
       taskRecord.outputHtml += output.html;
@@ -1888,6 +1920,7 @@ function runDispatch(entry) {
           },
           onEvent: (event) => {
             taskStore.addEvent(attemptId, event);
+            captureToolEvidence(taskRecord, event, attemptId);
             const output = renderRuntimeEvent(event, renderChunk);
             if (!output) return;
             taskRecord.outputHtml += output.html;
@@ -2580,6 +2613,10 @@ server.listen(PORT, HOST, () => {
   const lanHint = HOST === '0.0.0.0' ? ` (LAN: http://${getLanIp()}:${PORT})` : '';
   console.log(`Harness Studio running on http://${HOST}:${PORT}${lanHint}`);
   reconcileOrphanedTasks();
+  if (process.env.HARNESS_BEADS_BACKUPS !== '0') backupService.start(() => {
+    const root = loadTasksData().rootDirectory;
+    return scanProjects(root).filter(p => p.name !== 'Archiv').flatMap(p => beads.enabled(p.path) ? [p.path] : scanProjects(p.path).filter(c => beads.enabled(c.path)).map(c => c.path));
+  });
   gatewayEnv();
   startTelegramBot().catch(err => console.error("Telegram Bot Start:", err));
 });
@@ -2588,6 +2625,7 @@ let shuttingDown = false;
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
   if (shuttingDown) return;
   shuttingDown = true;
+  backupService.stop();
   for (const entry of liveRuns.values()) {
     entry.cancelled = true;
     for (const controller of entry.controllers) controller.abort();

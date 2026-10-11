@@ -11,6 +11,8 @@ Stand: 11. Oktober 2026. Die Oberfläche bleibt Vanilla JS ohne Bundler; Ausfüh
 | `services/context-service.js` | Richtlinien, Aufgabe, Bild, Git-Stand und belegter beziehungsweise unbestätigter Zwischenstand |
 | `services/access-control.js` | LAN-Anmeldung, Origin-/Host-Prüfung und HTTP-/WebSocket-Zugang |
 | `services/beads-adapter.js` | Automatischer Projektkontext und optionale Aufgabenwahl; pro Projekt serialisiert |
+| `services/project-memory.js` | Strukturierte Erkenntnisse, Quellen, Prüfnachweise und Relevanzauswahl |
+| `services/beads-backup.js` | Native versionierte Sicherungen, echte Wiederherstellungsprobe und NAS-Prüfsumme |
 | `public/task-state.js` | Gemeinsamer Vertrag für Erfolg, Fehler, Abbruch und unvollständige Ausführung |
 | `runtime/` | Feste Programme, CLI-Argumente, Prozesssteuerung, normalisierte Ereignisse und native Sessions |
 | `routing.js` | Reine Routing- und Scheduler-Entscheidungen |
@@ -19,13 +21,15 @@ Stand: 11. Oktober 2026. Die Oberfläche bleibt Vanilla JS ohne Bundler; Ausfüh
 
 Eine fachliche Aufgabe kann mehrere Harness-Versuche haben. Der Router speichert diese Versuche samt Ereignissen lokal. Beim Fallback oder einer Fortsetzung übergibt er Regeln, Auftrag, Bildhinweis, Git-Stand und den letzten gespeicherten Arbeitsstand. Agentenaussagen sind keine unabhängig verifizierten Fakten und ersetzen keine Richtlinien.
 
-In bereits eingerichteten Projektordnern mit `.beads/` lädt der Router bei jedem Auftrag automatisch Projektwissen und Workflow aus `bd prime --full --readonly` sowie verfügbare Aufgaben aus `bd ready --json --readonly`. Die Aufgabenwahl ist optional und ergänzt Details über `bd show <id> --json --readonly`. Fallback und Konsens erhalten denselben Kontextstand; eine Fortsetzung liest den Projektkontext frisch. Ladefehler werden vor dem Harness-Start sichtbar, Aufträge ohne Beads bleiben unverändert. Umfang und Ladezeit werden am Auftrag gespeichert.
+In eingerichteten Beads-Projekten lädt jeder Auftrag automatisch Workflow, getrennte Erinnerungen und verfügbare Aufgaben. Eine optionale Aufgabenwahl ergänzt Details. Das gemeinsame Kontextbudget beträgt 64.000 Zeichen und übernimmt ganze relevante Einträge. Ladefehler erscheinen in der Konsole; eine bewusste Fortsetzung ohne Beads ist möglich.
 
-Der Router initialisiert keine Beads-Datenbanken, übernimmt oder erstellt keine Aufgabe automatisch und schließt sie nicht nach einem CLI-Exit. Beads verwaltet fachlichen Status, Abhängigkeiten und ausdrücklich gespeichertes Projektwissen; der Router verwaltet Ausführungsstatus und Protokolle. Wissensextraktion und fachliche Abnahme sind keine automatischen Nebenwirkungen eines Laufs.
+Strukturierte Abschlussberichte speichern Entscheidungen und offene Schritte mit stabilen Schlüsseln, Quellen und Prüfstatus zurück nach Beads. Werkzeugereignisse liefern tatsächliche Test-Exit-Codes samt Zeit und Git-Stand; Agentenbehauptungen bleiben unbestätigt. Ein Auftrag wird erst nach seinem Speicher-Versuch abgeschlossen. Fachliche Aufgaben und AGENTS-Regeln werden nicht automatisch geändert.
+
+Native Beads-Sicherungen entstehen täglich und nach neuen Erkenntnissen. Jede neue Version wird in einer Wegwerf-Datenbank wiederhergestellt und mit allen Aufgaben sowie Erinnerungen verglichen. NAS-Übertragung ist erst nach bestätigter Prüfsumme erfolgreich; ein ausgefallenes NAS bleibt sichtbar ausstehend. Einzelheiten und manuelle Befehle stehen in der README.
 
 ## Nächste begrenzte Erweiterungen
 
-1. Prüfbelege strukturiert erfassen: Befehl, Ergebnis, Zeitpunkt und Git-Stand; separat von Agentenbehauptungen.
+1. Werkzeugbelege auch für Harnesses ergänzen, die derzeit keine strukturierten Exit-Codes liefern.
 2. Kontextvorschau mit Quellen und Umfang anzeigen, bevor ein Auftrag startet.
 3. Explizite Beads-Übernahme und Abschluss nach überprüften Abnahmekriterien ergänzen; keine doppelte Pflege des fachlichen Status.
 4. Scheduler und Telegram bei Änderungen schrittweise als Integrationen herauslösen.

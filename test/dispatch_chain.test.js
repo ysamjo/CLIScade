@@ -876,6 +876,8 @@ test('Beads-Kontext: normaler Auftrag, Fallback und Fortsetzung laden ohne Aufga
   makeStub('bd', `case "$1" in
 prime) echo BEADS_WISSEN_MARKER; echo x >> '${countFile}' ;;
 ready) echo '[{"id":"bd-123","title":"BEADS_AUFGABE_MARKER"}]' ;;
+memories) echo '{"wissen":"BEADS_WISSEN_MARKER"}' ;;
+remember) echo gespeichert ;;
 *) exit 1 ;;
 esac`);
   makeStub('stub-beads-context', 'printf "%s\\n" "$*"');
@@ -904,4 +906,7 @@ esac`);
   assert.equal(failed.at(-1).type, 'error');
   assert.match(failed.at(-1).message, /Beads-Projektkontext konnte nicht geladen werden/);
   assert.deepEqual(routes(failed), []);
+  const bypassed = await runDispatch({ prompt: 'Ohne Projektgedächtnis weiter', withoutBeads: true });
+  assert.equal(bypassed.at(-1).type, 'done');
+  assert.ok(bypassed.some(m => m.type === 'context_status' && m.state === 'bypassed'));
 });

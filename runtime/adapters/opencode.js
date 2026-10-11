@@ -17,7 +17,7 @@ module.exports = {
     if (obj.type === 'tool' || part.type === 'tool') {
       const state = part.state || obj.state || {};
       return state.status === 'completed'
-        ? [{ type: 'tool_result', text: state.output || '', id: part.callID }]
+        ? [{ type: 'tool_result', text: state.output || '', exitCode: Number.isInteger(state.metadata?.exit) ? state.metadata.exit : null, id: part.callID }]
         : [{ type: 'tool_start', name: part.tool || obj.tool, input: state.input, id: part.callID }];
     }
     return [];

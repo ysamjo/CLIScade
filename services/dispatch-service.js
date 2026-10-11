@@ -7,7 +7,7 @@ const DEFAULT_MAX_CONCURRENT = 0;
 
 function createDispatchService({ loadConfig, loadTasksData, taskStore, DEFAULT_ROOT_DIR,
   buildAgentsContext, broadcastToClients, prepareAttachment, prepareBead, saveCheckpoint,
-  runConsensusDispatch, runDispatch }) {
+  runConsensusDispatch, runDispatch, finalizeTask = async () => {} }) {
 const liveRuns = new Map();
 const dispatchQueue = [];
 const requestEntries = new Map();
@@ -104,9 +104,18 @@ function startRun(entry) {
   // Der Lauf gibt seine Plätze erst zurück, wenn er wirklich geendet hat — danach
   // rückt die Warteschlange nach.
   entry.finish = (err, record) => {
-    liveRuns.delete(entry.taskId);
-    if (entry.onComplete) entry.onComplete(err, record);
-    pumpRuns();
+    if (entry.finalizing) return entry.finalizing;
+    entry.finalizing = Promise.resolve().then(() => finalizeTask(entry)).catch(() => {
+      entry.record.memoryStatus = { state: 'error', error: 'Projektwissen konnte nicht gespeichert werden' };
+    }).finally(() => {
+      writeTask(entry.record);
+      const message = entry.pendingTerminal || terminalMessage(entry.record, err?.message || 'Auftrag abgeschlossen');
+      liveRuns.delete(entry.taskId);
+      sendRunMessage(entry.ws, entry.taskId, message);
+      if (entry.onComplete) entry.onComplete(err, record);
+      pumpRuns();
+    });
+    return entry.finalizing;
   };
   Promise.resolve().then(async () => {
     if (entry.cancelled) throw new Error('Abgebrochen durch Benutzer');
@@ -126,6 +135,8 @@ function startRun(entry) {
 }
 
 function sendRunMessage(ws, taskId, obj) {
+  const active = liveRuns.get(taskId);
+  if (active && ['done', 'error', 'cancelled'].includes(obj.type)) { active.pendingTerminal = obj; return; }
   const msg = { ...obj, taskId: obj.taskId || taskId };
   const json = JSON.stringify(msg);
   if (ws && ws.readyState === 1) {
@@ -182,8 +193,9 @@ function submitDispatch(payload, ws, onComplete) {
   entry.record = {
     id: entry.taskId,
     requestId,
-    payload: { prompt: payload.prompt, projectPath: workingDir, harnessOverride: payload.harnessOverride, modelOverride: payload.modelOverride, imagePath: payload.imagePath, previousTaskId: payload.previousTaskId, beadId: payload.beadId },
+    payload: { prompt: payload.prompt, projectPath: workingDir, harnessOverride: payload.harnessOverride, modelOverride: payload.modelOverride, imagePath: payload.imagePath, previousTaskId: payload.previousTaskId, beadId: payload.beadId, withoutBeads: payload.withoutBeads === true },
     beadId: payload.beadId || null,
+    memoryThreadId: payload.previousTaskId ? (taskStore.get(payload.previousTaskId).memoryThreadId || payload.previousTaskId) : entry.taskId,
     projectPath: workingDir,
     projectName: path.basename(workingDir),
     prompt: payload.prompt,

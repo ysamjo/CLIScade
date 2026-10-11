@@ -749,5 +749,23 @@ for (const [id, type, status, code] of [
   pruefe(`${status} gibt das Konsolenfeld frei`, [...document.querySelectorAll(".run-pane")].filter((pane) => pane.querySelector(".run-pane-title").textContent === id).every((pane) => pane.querySelector(".run-pane-cancel").hidden));
 }
 
+// Beads-Zustand und ausdrückliche Fortsetzung ohne Projektgedächtnis.
+const memoryPane = document.querySelector('#run-pane-0');
+const memoryProject = memoryPane.querySelector('.run-pane-target').value;
+sag({ type: 'context_status', taskId: 'memory-status', projectPath: memoryProject, state: 'ready', memoryCount: 12,
+  backup: { local: 'verified', remote: 'pending' } });
+pruefe('Beads zeigt geladene Erkenntnisse', memoryPane.querySelector('.run-pane-memory-status').textContent.includes('12 Erkenntnisse'));
+pruefe('NAS ausstehend wird nicht als bestätigt gezeigt', memoryPane.querySelector('.run-pane-backup-status').textContent.includes('NAS ausstehend'));
+sag({ type: 'backup_status', projectPath: memoryProject, backup: { local: 'verified', remote: 'verified' } });
+pruefe('Sicherungsereignisse aktualisieren nur die Sicherung und erhalten den Wissensstand', memoryPane.querySelector('.run-pane-backup-status').textContent.includes('NAS bestätigt') && memoryPane.querySelector('.run-pane-memory-status').textContent.includes('12 Erkenntnisse'));
+sag({ type: 'context_status', taskId: 'memory-status', projectPath: memoryProject, state: 'error', error: 'CLI nicht verfügbar' });
+pruefe('Beads-Fehler bleibt sichtbar', memoryPane.querySelector('.run-pane-memory-status').textContent.includes('nicht verfügbar'));
+pruefe('Ausdrückliche Fortsetzung ist im Fehlerfall verfügbar', !memoryPane.querySelector('.run-pane-memory-recovery').hidden);
+memoryPane.querySelector('.run-pane-without-beads').checked = true;
+memoryPane.querySelector('.run-pane-input').value = 'Ohne Beads prüfen';
+memoryPane.querySelector('.run-pane-send').click();
+pruefe('Nur bewusste Auswahl übermittelt withoutBeads', frames.some(frame => frame.type === 'dispatch' && frame.prompt === 'Ohne Beads prüfen' && frame.withoutBeads === true));
+pruefe('Die Beads-Ausnahme gilt nur für den gerade gesendeten Auftrag', !memoryPane.querySelector('.run-pane-without-beads').checked);
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

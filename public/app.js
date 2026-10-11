@@ -68,6 +68,10 @@ const dom = {
       target: root.querySelector('.run-pane-target'),
       routing: root.querySelector('.run-pane-routing'),
       beads: root.querySelector('.run-pane-beads'),
+      memoryStatus: root.querySelector('.run-pane-memory-status'),
+      backupStatus: root.querySelector('.run-pane-backup-status'),
+      memoryRecovery: root.querySelector('.run-pane-memory-recovery'),
+      withoutBeads: root.querySelector('.run-pane-without-beads'),
       input: root.querySelector('.run-pane-input'),
       send: root.querySelector('.run-pane-send')
     };
@@ -447,6 +451,10 @@ function setupWebSocket() {
         appendRunOutput(stream, `<div class="run-queue-note">[${escapeHtml(data.message || 'Warteschlange')}]</div>\n`);
         renderRunPane(stream.slot);
       }
+    } else if (data.type === 'backup_status') {
+      for (const pane of dom.runPanes) if (pane?.target.value === data.projectPath) renderBackupStatus(pane, data.backup);
+    } else if (data.type === 'context_status') {
+      for (const pane of dom.runPanes) if (pane?.target.value === data.projectPath) renderMemoryStatus(pane, data);
     } else if (data.type === 'output') {
       const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
       appendRunOutput(stream, data.html || data.raw);
@@ -2274,18 +2282,41 @@ function updateNewRouteModelOptions() {
   dom.newRouteName.placeholder = `${harnessKey}_${modelSlug}`;
 }
 
+function renderMemoryStatus(pane, data) {
+  if (!pane.memoryStatus) return;
+  const labels = { disabled: 'Ohne Beads', bypassed: 'Beads für diesen Auftrag übersprungen', error: 'Projektgedächtnis nicht verfügbar' };
+  pane.memoryStatus.textContent = data.state === 'ready' ? `Beads aktiv · ${data.memoryCount || 0} Erkenntnisse` : (labels[data.state] || 'Projektgedächtnis wird geprüft…');
+  pane.memoryStatus.title = data.error || '';
+  pane.memoryStatus.dataset.state = data.state || 'loading';
+  if (pane.memoryRecovery) pane.memoryRecovery.hidden = data.state !== 'error';
+  if ('backup' in data || data.state === 'disabled') renderBackupStatus(pane, data.state === 'disabled' ? null : data.backup);
+}
+function renderBackupStatus(pane, backup) {
+  if (pane.backupStatus) {
+    pane.backupStatus.textContent = !backup ? '' : backup.remote === 'verified' ? 'Sicherung auf NAS bestätigt' :
+      backup.local === 'verified' ? (backup.remote === 'disabled' ? 'Lokal gesichert' : 'Lokal gesichert · NAS ausstehend') :
+      backup.local === 'error' ? 'Sicherung fehlgeschlagen' : backup.local === 'running' ? 'Sicherung läuft' : 'Noch keine Sicherung';
+    pane.backupStatus.title = backup?.remoteError || backup?.error || '';
+  }
+}
+
 async function loadBeads(pane) {
   if (!pane.beads) return;
   const project = pane.target.value;
   pane.beads.hidden = true;
+  if (pane.withoutBeads) pane.withoutBeads.checked = false;
+  renderMemoryStatus(pane, { state: 'loading', backup: null });
   pane.beads.replaceChildren(new Option('Ohne Beads-Aufgabe', ''));
   try {
     const response = await fetch(`/api/beads?projectPath=${encodeURIComponent(project)}`);
     const data = await response.json();
-    if (pane.target.value !== project || !response.ok || !data.enabled) return;
+    if (pane.target.value !== project) return;
+    if (!response.ok) throw new Error(data.error || 'Projektgedächtnis konnte nicht geladen werden');
+    renderMemoryStatus(pane, data);
+    if (!data.enabled || data.state === 'error') return;
     for (const task of data.tasks || []) pane.beads.add(new Option(`${task.id}: ${task.title}`, task.id));
     pane.beads.hidden = false;
-  } catch { /* Normale Aufträge bleiben ohne Beads verfügbar. */ }
+  } catch (error) { if (pane.target.value === project) renderMemoryStatus(pane, { state: 'error', error: error.message }); }
 }
 
 // --- DISPATCH TASK ---
@@ -2311,11 +2342,13 @@ function sendPrompt(slot = 0) {
   };
   if (folge?.model) payload.modelOverride = folge.model;
   if (folge?.previousTaskId) payload.previousTaskId = folge.previousTaskId;
-  if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;
+  if (pane.withoutBeads?.checked) payload.withoutBeads = true;
+  else if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));
     pane.input.value = '';
+    if (pane.withoutBeads) pane.withoutBeads.checked = false;
     // Der neue Lauf zieht wieder in dieses Feld: nur so bleibt das alte Protokoll darüber.
     // Angenommen wird die Fortsetzung über den Aufgabentext, weil die Task-ID hier noch fehlt.
     state.fortsetzung = state.fortsetzung.filter((f) => Date.now() - f.at < 15000);

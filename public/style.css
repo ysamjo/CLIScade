@@ -3057,3 +3057,15 @@ kbd {
 #access-error { color: var(--danger); min-height: 1.5em; }
 .run-pane-beads { max-width: 100%; }
 .run-pane-beads[hidden] { display: none; }
+
+/* Projektgedächtnis: kurze Zustände mit ausdrücklicher Fehlerbehandlung. */
+.run-pane-context { display:flex; flex-wrap:wrap; gap:6px 12px; padding:6px 12px; font-size:12px; color:var(--text-muted); }
+.run-pane-memory-status[data-state="error"] { color:var(--danger); }
+.run-pane-memory-status[data-state="ready"] { color:var(--success); }
+.run-pane-memory-recovery { display:flex; align-items:center; gap:5px; cursor:pointer; }
+.run-pane-memory-recovery[hidden] { display:none; }
+/* Die optionale Aufgabenwahl lässt Platz für Eingabe und Senden, auch in schmalen Konsolen. */
+.run-pane-composer { flex-wrap:wrap; }
+.run-pane-composer textarea { flex:1 1 160px; }
+.run-pane-beads { flex:0 1 140px; min-width:0; max-width:140px; font-size:11.5px; }
+.run-pane-context { flex:0 0 auto; }

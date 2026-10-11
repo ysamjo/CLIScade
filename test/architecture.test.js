@@ -125,13 +125,13 @@ test('Beads-Kontext lädt Projektwissen und Aufgaben automatisch ohne Auswahl', 
   const adapter = new BeadsAdapter({ execute: async (cwd, args) => {
     assert.equal(cwd, fs.realpathSync(dir));
     calls.push(args);
-    return args[0] === 'prime' ? 'PROJEKTWISSEN_MARKER' : JSON.stringify([{ id: 'bd-123', title: 'Offene Aufgabe' }]);
+    return args[0] === 'prime' ? 'WORKFLOW_MARKER' : args[0] === 'memories' ? JSON.stringify({ marker: 'PROJEKTWISSEN_MARKER' }) : JSON.stringify([{ id: 'bd-123', title: 'Offene Aufgabe' }]);
   } });
   assert.equal(await adapter.context(dir), null);
   assert.deepEqual(calls, []);
   fs.mkdirSync(path.join(dir, '.beads'));
   const context = await adapter.context(dir);
-  assert.deepEqual(calls, [['prime', '--full', '--readonly'], ['ready', '--json', '--readonly']]);
+  assert.deepEqual(calls, [['prime', '--full', '--no-memories', '--readonly'], ['memories', '--json', '--readonly'], ['ready', '--json', '--readonly']] );
   const text = buildContext({ prompt: 'Normaler Auftrag', beadsContext: context });
   assert.match(text, /PROJEKTWISSEN_MARKER/);
   assert.match(text, /Offene Aufgabe/);
@@ -143,7 +143,7 @@ test('Beads-Kontext wird frisch gelesen und verbirgt keinen Ladefehler', async (
   const dir = temporary(t);
   fs.mkdirSync(path.join(dir, '.beads'));
   let reads = 0;
-  const adapter = new BeadsAdapter({ execute: async (cwd, args) => args[0] === 'prime' ? `Wissen ${++reads}` : '[]' });
+  const adapter = new BeadsAdapter({ execute: async (cwd, args) => args[0] === 'prime' ? `Wissen ${++reads}` : args[0] === 'memories' ? '{}' : '[]' });
   assert.match((await adapter.context(dir)).prime, /Wissen 1/);
   assert.match((await adapter.context(dir)).prime, /Wissen 2/);
   const broken = new BeadsAdapter({ execute: async () => { throw new Error('Beads-CLI ist nicht installiert'); } });
@@ -157,10 +157,12 @@ test('Beads-Kontext begrenzt große Wissens- und Aufgabenmengen sichtbar', async
   const dir = temporary(t);
   fs.mkdirSync(path.join(dir, '.beads'));
   const adapter = new BeadsAdapter({ execute: async (cwd, args) => args[0] === 'prime' ? 'x'.repeat(50000)
-    : JSON.stringify(Array.from({ length: 25 }, (_, i) => ({ id: `bd-${i}`, title: 'y'.repeat(2000) }))) });
+    : args[0] === 'memories' ? '{}' : JSON.stringify(Array.from({ length: 25 }, (_, i) => ({ id: `bd-${i}`, title: 'y'.repeat(2000) }))) });
   const context = await adapter.context(dir);
   assert.equal(context.availableTasks, 25);
   assert.equal(context.ready.length, 20);
-  assert.equal(context.ready[0].title.length, 1000);
-  assert.match(context.prime, /Kontext gekürzt/);
+  assert.equal(context.ready[0].title.length, 2000);
+  const text = buildContext({ prompt: 'Aufgabe', beadsContext: context });
+  assert.ok(text.length <= 64000);
+  assert.match(text, /Kontextbudget/);
 });

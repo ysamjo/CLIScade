@@ -36,3 +36,19 @@ test('strukturierte Fehler werden von allen vier Adaptern erfasst', () => {
     assert.match(event.message, /Authentication/);
   }
 });
+
+
+test('Tool-Exit-Codes bleiben strukturiert; fehlende Codes werden nicht aus Text erraten', () => {
+ const cases = {
+  codex: exit => ({type:'item.completed',item:{type:'command_execution',id:'tool',aggregated_output:'Tests grün',exit_code:exit}}),
+  claude: exit => ({type:'user',message:{content:[{type:'tool_result',tool_use_id:'tool',content:'Tests grün',exit_code:exit}]}}),
+  cline: exit => ({type:'agent_event',event:{type:'content_end',contentType:'tool',toolCallId:'tool',output:'Tests grün',exitCode:exit}}),
+  opencode: exit => ({type:'tool',part:{type:'tool',callID:'tool',state:{status:'completed',output:'Tests grün',metadata:{exit}}}})
+ };
+ for (const [id,payload] of Object.entries(cases)) {
+  const adapter = require(`../../runtime/adapters/${id}`);
+  assert.equal(adapter.normalize(payload(0))[0].exitCode,0);
+  assert.equal(adapter.normalize(payload(2))[0].exitCode,2);
+  assert.equal(adapter.normalize(payload(undefined))[0].exitCode,null);
+ }
+});
