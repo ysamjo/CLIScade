@@ -59,7 +59,7 @@ function zeileKlassifizieren(text) {
   if (LEER.test(text)) return "leer";
   if (DENKE_MARKER.test(text)) return "denke";
   if (NOTIZ_MARKER.test(text)) return "notiz";
-  if (WERKZEUG_MARKER.test(text)) return "werkzeug";
+  if (WERKZEUG_MARKER.test(text) || /^Werkzeug:\s/.test(text)) return "werkzeug";
   if (WERKZEUG_FOLGE.test(text)) return "werkzeug";
   if (JSON_FORTSETZUNG.test(text)) return "werkzeug";
   return "antwort";
@@ -76,8 +76,10 @@ function inZeilen(html) {
   let tiefe = 0;
   const waege = (text) =>
     (text.match(BLOCK_ZAEHLEN) || []).length - (text.match(BLOCK_ZU) || []).length;
-  const nimmBlock = (inhalt) =>
-    zeilen.push({ schicht: "block", html: inhalt, text: textLesen(inhalt) });
+  const nimmBlock = (inhalt) => {
+    const layer = inhalt.match(/^<div data-console-layer="(denke|werkzeug)">/);
+    zeilen.push({ schicht: layer ? layer[1] : "block", typed: Boolean(layer), html: inhalt, text: textLesen(inhalt) });
+  };
 
   for (const teil of teile) {
     if (sammel !== null) {
@@ -126,6 +128,12 @@ function zeilenSchieben(zeilen) {
   };
 
   for (const zeile of zeilen) {
+    if (zeile.typed) {
+      region = null;
+      freie = 0;
+      gruppe(zeile.schicht, zeile);
+      continue;
+    }
     if (zeile.schicht === "block") {
       region = null;
       lauf = null;
@@ -204,7 +212,7 @@ class KonsoleFormatierer {
 
   // mal() zerlegt den Puffer. `offen` sind die Wünsche des Nutzers: ein Objekt mit
   // Schluessel → wahr/falsch, oder eine Liste nur-geöffneter Schluessel. Ohne Wunsch
-  // gilt die Regel: ein wachsender Denkthread bleibt auf, alles andere zu.
+  // gilt: laufende Arbeit bleibt auf, eine folgende Antwort klappt sie einmal zu.
   mal({ html = "", lebt = false, offen = null } = {}) {
     const gesichert = Array.isArray(offen) ? new Set(offen) : offen;
     const wunsch = (schluessel) => {
@@ -213,23 +221,33 @@ class KonsoleFormatierer {
       return schluessel in gesichert ? Boolean(gesichert[schluessel]) : undefined;
     };
 
-    this.bloecke = zeilenSchieben(inZeilen(html)).map((block, idx) => {
+    const previous = new Map(this.blocks.map(block => [block.schluessel, block]));
+    this.autoGeschlossen = [];
+    const parsed = zeilenSchieben(inZeilen(html));
+    this.bloecke = parsed.map((block, idx) => {
       const schluessel = `${block.schicht}:${idx}`;
       const art = ART[block.schicht];
-      const wachsend = block.schicht === "denke" && !block.geschlossen && lebt;
+      const process = block.schicht === "denke" || block.schicht === "werkzeug";
+      const erledigt = process && (!lebt || parsed.slice(idx + 1).some(next => next.schicht === "antwort"));
+      const wachsend = process && !erledigt;
+      const autoClose = erledigt && previous.get(schluessel)?.erledigt === false;
+      if (autoClose) this.autoGeschlossen.push(schluessel);
       const zeilenHtml = block.zeilen.filter((z) => z.html && z.html.trim()).map((z) => z.html);
+      const lineCount = block.zeilen.reduce((count, line) => count + (line.typed
+        ? line.html.split(UMBRUCH).filter(part => textLesen(part)).length : (line.html.trim() ? 1 : 0)), 0);
       return {
         idx,
         schicht: block.schicht,
         schluessel,
         wachsend,
+        erledigt,
         zusammenfaltbar: art.ordner,
-        offen: art.ordner ? (wunsch(schluessel) ?? wachsend) : true,
+        offen: art.ordner ? (autoClose ? false : (wunsch(schluessel) ?? wachsend)) : true,
         gezaehlt: art.ordner,
         zeilen: zeilenHtml,
         text: block.text,
         titel: art.titel,
-        zaehler: art.ordner ? `${zeilenHtml.length} ${zeilenHtml.length === 1 ? "Zeile" : "Zeilen"}` : "",
+        zaehler: art.ordner ? `${lineCount} ${lineCount === 1 ? "Zeile" : "Zeilen"}` : "",
         kurz: art.ordner ? kürzen(block.text.replace(DENKE_KOPF, "").replace(DENKE_MARKER, "").replace(/^\[[a-z_]+\]\s*/, "").trim(), 90) : ""
       };
     });

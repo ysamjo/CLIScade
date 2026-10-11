@@ -576,6 +576,10 @@ function konsoleHtml(stream) {
     lebt: stream.status === 'running' || stream.status === 'queued',
     offen: stream.falten
   });
+  // Eine Antwort beendet die vorherige Arbeit; alte Wünsche gelten danach nicht mehr.
+  for (const key of stream.formatierer.autoGeschlossen || []) {
+    if (stream.falten) delete stream.falten[key];
+  }
   // Was gerade gemalt ist, ist keine Nutzerwahl: der Browser meldet das Einfügen
   // eines offenen Ordners ebenfalls als toggle. Nur die Abweichung zählt.
   stream.faltenspuren = {};

@@ -195,6 +195,23 @@ pruefe("zeileKlassifizieren kennt die Marker",
   zeileKlassifizieren("Tokens: 4,090 (2,446 Prompt / 1,644 Antwort)") === "notiz" &&
   zeileKlassifizieren("Ich schreibe die Datei.") === "antwort");
 
+// Laufende Arbeit bleibt sichtbar, die Antwort klappt sie einmalig zu.
+const typed = `<div data-console-layer="denke">[thinking] Zeile eins
+Zeile zwei</div>\n` +
+  `<div data-console-layer="werkzeug">Werkzeug: shell
+⎿ Ergebnis eins
+Ergebnis zwei</div>\n`;
+const live = new KonsoleFormatierer().mal({html:typed,lebt:true});
+pruefe("Mehrzeiliges Reasoning bleibt vollständig im Denkbereich", live.blocks.some(b => b.schicht === "denke" && /Zeile zwei/.test(b.text)));
+pruefe("Werkzeugaufruf und mehrzeiliges Ergebnis bleiben im Werkzeugbereich", live.blocks.some(b => b.schicht === "werkzeug" && /Ergebnis zwei/.test(b.text) && b.zaehler === "3 Zeilen"));
+pruefe("Laufendes Reasoning und Werkzeuge sind offen", live.blocks.length === 2 && live.blocks.every(b=>b.offen));
+const choices = Object.fromEntries(live.blocks.map(b=>[b.schluessel,true]));
+live.mal({html:typed+'Antwort ist da',lebt:true,offen:choices});
+pruefe("Die Antwort klappt zuvor geöffnete Arbeit automatisch zu", live.blocks.length === 2 && live.blocks.every(b=>!b.offen));
+live.mal({html:typed+'Antwort ist da',lebt:true,offen:choices});
+pruefe("Nach der Antwort lassen sich Bereiche wieder öffnen", live.blocks.every(b=>b.offen));
+pruefe("Historische Werkzeugköpfe werden als Werkzeug erkannt", zeileKlassifizieren("Werkzeug: shell") === "werkzeug");
+
 const fehl = tests.filter((t) => !t.ok);
 console.log(`\n${tests.length - fehl.length} bestanden, ${fehl.length} fehlgeschlagen`);
 process.exitCode = fehl.length ? 1 : 0;

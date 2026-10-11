@@ -717,6 +717,29 @@ pruefe("ein aufgeklappter Ordner bleibt offen",
 pruefe("ein zugeklappter Ordner bleibt zu",
   body()?.querySelector("details.ko-werkzeug")?.open === false);
 
+sag({ type: "output", taskId: "task_l", html: `<div data-console-layer="werkzeug">Werkzeug: shell
+⎿ erste Zeile
+zweite Zeile</div>\n` });
+await ruhen(4);
+const activeTool = [...body().querySelectorAll("details.ko-werkzeug")].at(-1);
+pruefe("Aktueller Werkzeugbereich ist offen und enthält das vollständige Ergebnis", activeTool.open && /zweite Zeile/.test(activeTool.textContent));
+activeTool.open = false;
+activeTool.dispatchEvent(new window.Event("toggle"));
+await ruhen(2);
+activeTool.open = true;
+activeTool.dispatchEvent(new window.Event("toggle"));
+await ruhen(2);
+sag({ type: "output", taskId: "task_l", html: "FERTIGE-ANTWORT<br/>" });
+await ruhen(4);
+pruefe("Neue Antwort klappt den zuvor manuell geöffneten Werkzeugbereich zu", ![...body().querySelectorAll("details.ko-werkzeug")].at(-1).open);
+const finishedTool = [...body().querySelectorAll("details.ko-werkzeug")].at(-1);
+finishedTool.open = true;
+finishedTool.dispatchEvent(new window.Event("toggle"));
+await ruhen(2);
+sag({ type: "output", taskId: "task_l", html: "Weitere Antwort<br/>" });
+await ruhen(4);
+pruefe("Nach der Antwort erneut geöffnete Werkzeuge bleiben offen", [...body().querySelectorAll("details.ko-werkzeug")].at(-1).open);
+
 // Ein Denkordner, der noch mitten im Lauf wächst, meldet das — sonst wirkt die
 // Konsole leer, obwohl der Harness gerade denkt.
 sag({ type: "output", taskId: "task_l", html: "&lt;think&gt;offener Gedanke ohne Ende<br/>" });
@@ -729,7 +752,7 @@ await ruhen(4);
 pruefe("nach dem Lauf ist kein Ordner mehr lebendig",
   body()?.querySelector("details.ko-wachsend") === null);
 pruefe("nach dem Lauf bleiben die Ordner zugeklappt, die der Nutzer nicht öffnete",
-  [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).length <= 1);
+  [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).every(d => [ersterDenk.dataset.schluessel, finishedTool.dataset.schluessel].includes(d.dataset.schluessel)));
 
 // --- 14. Ein Klick auf einen Auftrag zeigt sein Feld ---------------------
 // Zwei Konsolen desselben Harness waren nicht zu unterscheiden: der Titel trug nur

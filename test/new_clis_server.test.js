@@ -23,7 +23,7 @@ const fs=require('node:fs');
 const args=process.argv.slice(2);
 if(args.includes('--version')){console.log('test-1.0');process.exit(0);}
 fs.appendFileSync(${JSON.stringify(path.join(root,'calls.jsonl'))},JSON.stringify({id:${JSON.stringify(id)},args,cwd:process.cwd(),model:process.env.VIBE_ACTIVE_MODEL})+'\\n');
-${mode === 'quota' ? "console.error('quota exceeded');process.exit(1);" : `process.stdout.write(${JSON.stringify(response(id))});`}
+${mode === 'layers' ? `process.stdout.write(${JSON.stringify([{type:'reasoning',part:{text:'Gedanke eins\nGedanke zwei'}},{type:'tool_use',part:{tool:'shell',callID:'test-tool',state:{status:'completed',output:'Ergebnis eins\nErgebnis zwei',metadata:{exit:0}}}},{type:'text',part:{text:'FERTIGE_ANTWORT'}}].map(JSON.stringify).join('\n')+'\n')});` : mode === 'quota' ? "console.error('quota exceeded');process.exit(1);" : `process.stdout.write(${JSON.stringify(response(id))});`}
 `, { mode: 0o755 });
 }
 async function api(url, body) {
@@ -96,6 +96,18 @@ test('Konfiguration persistiert alle fünf; jeder Dispatcher erhält Regeln und 
     const args=calls.at(-1).args.join('\n');
     assert.match(args,/PROJEKTREGEL_NEUE_CLIS/); assert.ok(args.includes(`AUFTRAG_${id}`));
   }
+});
+
+test('Strukturierte Denk- und Werkzeugausgaben bleiben mehrzeilig im passenden Konsolenbereich',async()=>{
+  stub('kilo','layers');
+  await api('/api/config',{clis:[{harnessId:'kilo',name:'Kilo',enabled:true}]});
+  const messages=await dispatch('SCHICHTEN_TEST');
+  assert.equal(messages.at(-1).type,'done');
+  const output=messages.filter(m=>m.type==='output').map(m=>m.html).join('');
+  assert.match(output,/<div data-console-layer="denke">[\s\S]*Gedanke zwei[\s\S]*<\/div>/);
+  assert.match(output,/<div data-console-layer="werkzeug">Werkzeug: shell/);
+  assert.match(output,/<div data-console-layer="werkzeug">[\s\S]*Ergebnis zwei[\s\S]*<\/div>/);
+  assert.match(output,/FERTIGE_ANTWORT/);
 });
 
 test('Quota-Kaskade wechselt durch alle fünf zum bestehenden Harness ohne Kontextverlust',async()=>{

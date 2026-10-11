@@ -46,7 +46,7 @@ HOST=127.0.0.1 npm start         # nur lokal erreichbar, nicht im LAN
 python3 tools/start-detached.py  # Dauerbetrieb: setsid + gesäuberte Umgebung
 node test/ui-smoke.mjs           # Oberfläche im jsdom (Struktur + Verhalten)
 node test/konsole_schichten.test.js
-                                 # 34 Behauptungen: Schichten aus echten Protokollen
+                                 # 40 Behauptungen: Schichten aus echten Protokollen
 npm run test:routing             # Node-Tests inklusive runtime/ und Dispatch-Ketten
 npm test                         # Gesamtsuite inklusive UI-Smoke
 
@@ -135,3 +135,5 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Beads-Bedienung ausschließlich im gemeinsamen `#project-memory`: je Konsole eigene Referenzen über `#memory-pane-<slot>`, zentrale Fehlerzusammenfassung immer sichtbar. Keine automatische Fehlerumgehung. Composer-Werkzeugleiste gruppiert Ziel/Routing und die Icon-Aktionen (Kopieren, Abbrechen, Bild, Kontext und Senden) separat; Senden darf nicht allein umbrechen.
 
 - Sichtbarkeit der zweiten Konsole: initial `hidden`, erst `openRunPane()` oder bewusster neuer Task ruft `revealPane()` auf. Ordnerauswahl im Kopf; Aufgabenunterzeile bleibt erhalten. Gedächtniszusammenfassung berücksichtigt nur sichtbare Felder.
+
+- Konsolenschichten: strukturierte Denk-/Werkzeugereignisse tragen `data-console-layer` auch in gespeicherten HTML-Ausgaben. Laufende Bereiche offen; bei nachfolgender Antwort oder Laufende einmalig automatisch schließen und frühere Faltwünsche löschen. Erneutes manuelles Öffnen danach bleibt erhalten.

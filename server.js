@@ -1762,8 +1762,12 @@ function renderRuntimeEvent(event, renderChunk) {
   else if (event.type === 'session_lost') raw = `${event.message}\n`;
   else if (event.type === 'error') raw = `${event.message}\n`;
   if (!raw) return null;
-  const html = event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
-    ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
+  const layer = event.type === 'thinking' ? 'denke'
+    : ['tool_start', 'tool_result'].includes(event.type) ? 'werkzeug' : null;
+  const html = layer ? `\n<div data-console-layer="${layer}">${renderChunk(raw)}</div>
+`
+    : event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
+      ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
   return { raw, html };
 }
 
