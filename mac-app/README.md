@@ -29,3 +29,5 @@ npm run open:mac
 ```
 
 Bilder und Screenshots mit **⌘V** in die Auftragseingabe einsetzen. Die App wandelt native TIFF-Bilder in PNG um; Vorschau und Entfernen erfolgen direkt in der jeweiligen Konsole. Node.js mindestens 22.13 und Python werden lokal vorausgesetzt.
+
+Die Foto-/Dateiauswahl über **Bild wählen** öffnet einen nativen Dateidialog. **Kontext ansehen** zeigt den Entwurf samt Regeln und Erinnerungen vor dem Start. Python wird aus dem Nutzer-PATH erkannt (`CLISCADE_PYTHON` als Vorgabe); Node >=22.13 erkennt der Launcher über PATH/nvm (`HARNESS_NODE` als Vorgabe).

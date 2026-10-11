@@ -1,7 +1,8 @@
 import AppKit
 import WebKit
+import UniformTypeIdentifiers
 
-public final class MainWindowController: NSWindowController, WKNavigationDelegate, NSWindowDelegate {
+public final class MainWindowController: NSWindowController, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     public private(set) var webView: WKWebView!
     private var loadingView: NSView!
     private var spinner: NSProgressIndicator!
@@ -46,6 +47,7 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
         webView = WKWebView(frame: contentView.bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground") // Transparent bis Seite geladen ist
         contentView.addSubview(webView)
 
@@ -108,6 +110,15 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
     public func hideLoading() {
         spinner.stopAnimation(nil)
         loadingView.isHidden = true
+    }
+
+    public func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                        initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.png, .jpeg, .gif, .webP]
+        panel.begin { response in completionHandler(response == .OK ? panel.urls : nil) }
     }
 
     public func pasteClipboard() {

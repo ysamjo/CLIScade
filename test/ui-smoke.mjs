@@ -817,5 +817,35 @@ memoryPane.querySelector('.run-pane-image-remove').click();
 imageInput.blur();
 pruefe('Mac-Brücke lässt andere Eingabefelder unverändert', window.harnessPasteImage('data:image/png;base64,iVBORw==') === false);
 
+// Mobile Datei-Auswahl, Kontextvorschau und Neuladen der Nutzerkonfiguration.
+window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+const beforePreview = frames.filter(frame => frame.type === 'dispatch').length;
+let previewRequest;
+const previousFetch = window.fetch;
+window.fetch = async (url, options) => {
+  if (url === '/api/context/preview') {
+    previewRequest = JSON.parse(options.body);
+    return {ok:true,json:async()=>({context:'<script>Quelle</script>',characters:25,budget:64000,sources:[{path:'AGENTS.md'}],memories:2,omittedMemories:1,image:'foto.png'})};
+  }
+  if (url === '/api/user-environment/reload') return {ok:true,json:async()=>({names:['ANTHROPIC_MODEL']})};
+  return previousFetch(url, options);
+};
+const fileInput = memoryPane.querySelector('.run-pane-image-file');
+Object.defineProperty(fileInput, 'files', {value:[imageFile],configurable:true});
+fileInput.dispatchEvent(new window.Event('change'));
+pruefe('Dateiauswahl zeigt dasselbe Bild wie Einsetzen', !memoryPane.querySelector('.run-pane-attachment').hidden);
+imageInput.value = 'Kontext prüfen';
+memoryPane.querySelector('.run-pane-context-preview').click();
+await ruhen(5);
+pruefe('Kontextvorschau enthält den aktuellen Entwurf und Bildnamen', previewRequest.prompt === 'Kontext prüfen' && previewRequest.imageName === 'test.png');
+pruefe('Kontextvorschau bleibt lesend und interpretiert Quellen nicht als HTML', frames.filter(frame=>frame.type==='dispatch').length === beforePreview && document.getElementById('context-preview-content').textContent === '<script>Quelle</script>' && !document.getElementById('context-preview-content').querySelector('script'));
+pruefe('Vorschau zeigt Budget und ausgelassene Erinnerungen', document.getElementById('context-preview-summary').textContent.includes('64000') && document.getElementById('context-preview-summary').textContent.includes('ausgelassen'));
+document.getElementById('context-preview-close').click();
+pruefe('Kontextvorschau schließt ohne Entwurfsverlust', !document.getElementById('context-preview-dialog').open && imageInput.value === 'Kontext prüfen');
+document.getElementById('user-config-reload').click();
+await ruhen(5);
+pruefe('Nutzerkonfiguration neu laden nennt ausschließlich die Anzahl', document.getElementById('user-config-status').textContent.includes('1 Einstellungen') && !document.getElementById('user-config-reload').disabled);
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

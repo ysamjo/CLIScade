@@ -27,6 +27,12 @@
   }
   window.HarnessImages = {
     setup(pane) {
+      const fileInput = pane.querySelector('.run-pane-image-file');
+      pane.querySelector('.run-pane-image-select').addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files?.[0]) attach(pane, fileInput.files[0]);
+        fileInput.value = '';
+      });
       pane.querySelector('.run-pane-image-remove').addEventListener('click', () => clear(pane));
       pane.querySelector('.run-pane-input').addEventListener('paste', event => {
         const file = Array.from(event.clipboardData?.items || []).find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile()
@@ -34,7 +40,7 @@
         if (file) { event.preventDefault(); attach(pane, file); }
       });
     },
-    has:pane => images.has(pane), clear,
+    has:pane => images.has(pane), name:pane => images.get(pane)?.file.name || null, clear,
     async upload(pane) {
       const attachment = images.get(pane);
       if (!attachment) return null;

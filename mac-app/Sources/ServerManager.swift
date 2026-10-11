@@ -38,7 +38,7 @@ public final class ServerManager {
         }
 
         // 4. Standard-Entwicklungsverzeichnis
-        let defaultDevDir = "/Users/family/Developer/CLIScade"
+        let defaultDevDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Developer/CLIScade").path
         if FileManager.default.fileExists(atPath: "\(defaultDevDir)/server.js") {
             return defaultDevDir
         }
@@ -46,13 +46,16 @@ public final class ServerManager {
         return FileManager.default.currentDirectoryPath
     }
 
-    public func findPythonExecutable() -> String {
-        for candidate in ["/opt/homebrew/bin/python3", "/usr/bin/python3", "/usr/local/bin/python3"] {
-            if FileManager.default.isExecutableFile(atPath: candidate) {
-                return candidate
-            }
+    public func findPythonExecutable() -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        if let configured = environment["CLISCADE_PYTHON"], FileManager.default.isExecutableFile(atPath: configured) { return configured }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let directories = (environment["PATH"] ?? "").components(separatedBy: ":") + ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+        for directory in directories where !directory.isEmpty && !directory.contains("cli/vendor/shim") {
+            let candidate = URL(fileURLWithPath: directory).appendingPathComponent("python3").path
+            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
         }
-        return "/usr/bin/python3"
+        return nil
     }
 
     public func checkServerRunning(completion: @escaping (Bool) -> Void) {
@@ -88,7 +91,10 @@ public final class ServerManager {
                 return
             }
 
-            let pythonBin = self.findPythonExecutable()
+            guard let pythonBin = self.findPythonExecutable() else {
+                completion(false, "Python 3 fehlt. Python installieren oder CLISCADE_PYTHON setzen.")
+                return
+            }
             let process = Process()
             process.executableURL = URL(fileURLWithPath: pythonBin)
             process.arguments = [detachedScript]

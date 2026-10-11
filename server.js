@@ -1501,63 +1501,29 @@ wss.on('connection', (ws) => {
 // Doppelklick, Launchservices oder Agent-Shell gestarteter Server sieht diese Exporte nie —
 // also einmal die Shell selbst fragen, denn sie ist die einzige Quelle, die genau das
 // nachbaut, was im Terminal gilt. Nur die Gateway-Namen wandern mit, nie die Shell-Kosmetik.
-const GATEWAY_ENV_NAMES = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL'];
-let shellGatewayEnv = null;
-
-// Die Namen reichen als Beleg — Werte in einem Log wären weitergegebene Anmeldedaten.
-function logGatewayEnv(umgebung) {
-  const namen = Object.keys(umgebung);
-  console.log(namen.length
-    ? `[Gateway] Umbiegung aus der Login-Shell: ${namen.join(', ')}`
-    : '[Gateway] Login-Shell kennt keine Umbiegung, claude läuft direkt');
-}
-
-function readShellGatewayEnv() {
-  const shell = process.env.SHELL || '/bin/zsh';
-  try {
-    const ausgabe = execFileSync(shell, ['-lic', 'env'], {
-      encoding: 'utf8',
-      timeout: 6000,
-      env: {
-        HOME: process.env.HOME,
-        USER: process.env.USER,
-        LOGNAME: process.env.LOGNAME,
-        PATH: process.env.PATH,
-        TERM: 'xterm-256color'
-      },
-      stdio: ['ignore', 'pipe', 'ignore']
-    });
-    const shellEnv = {};
-    for (const zeile of ausgabe.split('\n')) {
-      const treffer = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(zeile);
-      if (treffer && GATEWAY_ENV_NAMES.includes(treffer[1])) shellEnv[treffer[1]] = treffer[2];
-    }
-    logGatewayEnv(shellEnv);
-    return shellEnv;
-  } catch (err) {
-    console.error('[Gateway] Login-Shell nicht befragt, claude läuft ohne Umbiegung:', err.message);
-    return {};
-  }
-}
-
+const { UserEnvironment } = require('./runtime/user-environment');
+const userEnvironment = new UserEnvironment();
 function gatewayEnv() {
-  // Einmal fragen und behalten — auch ein leeres Ergebnis, damit keine Nachfragen folgen.
-  if (!shellGatewayEnv) shellGatewayEnv = readShellGatewayEnv();
-  return shellGatewayEnv;
+  try { return userEnvironment.environment(); }
+  catch { console.error('[Konfiguration] Shell-Konfiguration konnte nicht geladen werden.'); return process.env; }
 }
-
 function harnessEnv(overrides = {}) {
-  const env = {
-    ...gatewayEnvFromShell({ shellEnv: gatewayEnv(), currentEnv: process.env, names: GATEWAY_ENV_NAMES }),
-    ...process.env,
-    FORCE_COLOR: '1',
-    ...overrides
-  };
+  const env = { ...gatewayEnv(), FORCE_COLOR: '1', ...overrides };
   delete env.QODER_AGENT_SDK_ENTRYPOINT;
   return env;
 }
+app.post('/api/user-environment/reload', (req, res) => {
+  try { res.json(userEnvironment.reload()); }
+  catch (error) { res.status(503).json({ error: error.message }); }
+});
+app.post('/api/context/preview', async (req, res) => {
+  try {
+    const { previewContext } = require('./services/context-preview');
+    res.json(await previewContext(req.body, {rootDirectory: loadTasksData().rootDirectory,
+      globalFile: AGENTS_MD_FILE, beads, taskStore}));
+  } catch (error) { res.status(400).json({error: error.message}); }
+});
 
-// Hierarchical AGENTS.md: developer root, then the project, global only as a fallback.
 function buildAgentsContext(workingDir) {
   const { rules, sources } = loadRules(workingDir, loadTasksData().rootDirectory || DEFAULT_ROOT_DIR, AGENTS_MD_FILE);
   return { agentsContext: rules, agentsSources: sources.map((source) => `${path.basename(path.dirname(source.path))}/AGENTS.md (${source.bytes} Bytes)`) };

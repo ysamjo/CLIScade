@@ -109,3 +109,15 @@ Das Skills-Inventar (`GET /api/skills`) liest nur. Verlinken geschieht ausdrück
 In die Auftragseingabe klicken und mit **⌘V** (Mac) oder **Strg+V** ein Bild einsetzen. Jede Konsole zeigt eine eigene Vorschau mit „Bild entfernen“. Unterstützt werden PNG, JPEG, GIF und WebP bis 10 MB. Erst beim Senden wird das Bild lokal hochgeladen und für den Agenten in den gewählten Projektordner kopiert. Ohne Text lautet der Auftrag „Analysiere das beigefügte Bild.“ Bei Übertragungsfehlern bleiben Bild und Text erhalten.
 
 Die native Mac-App wandelt auch TIFF-Screenshots aus der Zwischenablage in PNG um. Bauen: `npm run build:mac`; installieren: `npm run install:mac`. Node.js ab 22.13 und Python müssen lokal verfügbar sein. Lokale Beads-Daten werden nicht in das App-Bundle aufgenommen.
+
+### Nutzerkonfiguration und portable Installation
+
+CLIScade verwendet die Login-Shell des aktuellen Nutzers. Neben `ANTHROPIC_*` werden Claude-Provider-Schalter, `CLAUDE_CONFIG_DIR`, AWS-/Vertex-/Foundry-Einstellungen sowie Proxy- und Zertifikatseinstellungen übernommen. Bereits beim direkten Serverstart gesetzte Werte haben Vorrang. Der bereinigte Mac-Launcher entfernt Gateway-Werte der aufrufenden Agentensitzung; der Server liest danach die Nutzershell. Unter **Einstellungen → CLI-Diagnose → Terminal-Konfiguration neu laden** wird der Shell-Stand ohne Serverneustart erneuert. Neue Läufe verwenden ihn; laufende Aufträge behalten ihren Stand. Die Rückmeldung enthält nur eine Anzahl, keine Zugangsdaten. Shell-Aliase und Funktionen sind keine registrierten ausführbaren CLIs.
+
+Node.js ab 22.13 wird über PATH und lokale nvm-Installationen erkannt; `HARNESS_NODE` erlaubt einen expliziten ausführbaren Pfad. Die Mac-App sucht Python 3 im Nutzer-PATH und üblichen Installationspfaden; `CLISCADE_PYTHON` erlaubt eine Vorgabe. Ohne passende Laufzeit erscheint eine konkrete Fehlermeldung. Der gebündelte Server und das aktuelle Nutzerverzeichnis ersetzen persönliche Entwicklerpfade.
+
+### Mobile Bilder und Kontextvorschau
+
+**Bild wählen** öffnet die Foto-/Dateiauswahl und verwendet dieselbe Vorschau und Größenprüfung wie Einsetzen. Pro Auftrag ein Bild: PNG, JPEG, GIF oder WebP bis 10 MB. Abbrechen der Auswahl erhält den bisherigen Entwurf.
+
+**Kontext ansehen** lädt Regeln und Beads frisch für den aktuellen Entwurf. Die Vorschau zeigt die tatsächliche Kontextzusammenstellung, Regelquellen, Erinnerungen, Bildhinweis, Git-Stand und Zeichenbudget; ausgelassene Inhalte bleiben erkennbar. Sie lädt Bilder nicht hoch, startet keinen Harness und schreibt keine Erinnerungen. Eine angekreuzte Fortsetzung ohne Beads gilt auch für die Vorschau. Beim späteren Start wird der Kontext erneut geladen; zwischenzeitliche Projektänderungen können ihn verändern.

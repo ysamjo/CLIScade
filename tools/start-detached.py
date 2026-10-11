@@ -37,9 +37,11 @@ import datetime
 import os
 import subprocess
 import sys
+import shutil
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NODE = os.environ.get("HARNESS_NODE") or "/Users/family/.local/bin/node"
+
 LOG = os.environ.get("HARNESS_LOG") or "/tmp/cliscade.log"
 
 # Namen, die genau so weg muessen.
@@ -86,7 +88,7 @@ SHIM_MARKER = "cli/vendor/shim"
 def sauberer_path(wert):
     teile = [t for t in (wert or "").split(":") if t and SHIM_MARKER not in t]
     # Die Standardpfade muessen bleiben, egal was die Session mitgebracht hat.
-    for p in ("/Users/family/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"):
+    for p in (str(Path.home() / ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin"):
         if p not in teile:
             teile.insert(0, p)
     for p in ("/usr/bin", "/bin", "/usr/sbin", "/sbin"):
@@ -95,35 +97,72 @@ def sauberer_path(wert):
     return ":".join(teile)
 
 
-umgebung = {
-    k: v for k, v in os.environ.items()
-    if k not in ZU_ENTFERNEN and not k.startswith(ZU_ENTFERNEN_PRAEFIX)
-}
-umgebung["PATH"] = sauberer_path(umgebung.get("PATH"))
+def find_node(environment):
+    configured = environment.get("HARNESS_NODE")
+    candidates = [configured] if configured else [shutil.which("node", path=environment["PATH"])]
+    if not configured:
+        candidates += [str(p) for p in sorted((Path.home() / ".nvm/versions/node").glob("*/bin/node"), reverse=True)]
+    for candidate in candidates:
+        if not candidate or not os.access(candidate, os.X_OK):
+            continue
+        try:
+            version = subprocess.check_output([candidate, "--version"], env=environment, timeout=5, stderr=subprocess.DEVNULL).decode().strip().lstrip("v")
+            if tuple(int(part) for part in version.split(".")[:2]) >= (22, 13):
+                return candidate
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    if not configured:
+        try:
+            shell = environment.get("SHELL", "/bin/zsh")
+            output = subprocess.check_output([shell, "-lic", "/usr/bin/env"], env=environment, timeout=6, stderr=subprocess.DEVNULL).decode()
+            shell_path = next((line[5:] for line in output.splitlines() if line.startswith("PATH=")), "")
+            candidate = shutil.which("node", path=sauberer_path(shell_path))
+            if candidate:
+                return find_node({**environment, "HARNESS_NODE": candidate})
+        except (OSError, subprocess.SubprocessError):
+            pass
+    raise RuntimeError("Node.js ab 22.13 fehlt. Node installieren oder HARNESS_NODE auf eine passende Version setzen.")
 
-# Nachweis: was das Geruest war, darf hier nicht mehr stehen.
-verdacht = sorted(
-    k for k in umgebung
-    if k.startswith(("CODEBUDDY", "WORKBUDDY", "QODER", "SANDBOX_CENTER"))
-    or k in ("NODE_OPTIONS", "BASH_ENV")
-)
-if verdacht:
-    print("WARNUNG, Geruest noch in der Umgebung:", ", ".join(verdacht), file=sys.stderr)
-if SHIM_MARKER in umgebung["PATH"]:
-    print("WARNUNG, Shim noch im PATH", file=sys.stderr)
 
-log = open(LOG, "ab", buffering=0)
-log.write(b"\n=== Start %s ===\n" % datetime.datetime.now().isoformat().encode())
+def main():
+    umgebung = {
+        k: v for k, v in os.environ.items()
+        if k not in ZU_ENTFERNEN and not k.startswith(ZU_ENTFERNEN_PRAEFIX)
+    }
+    umgebung["PATH"] = sauberer_path(umgebung.get("PATH"))
 
-prozess = subprocess.Popen(
-    [NODE, "server.js"],
-    cwd=REPO,
-    env=umgebung,
-    stdin=subprocess.DEVNULL,
-    stdout=log,
-    stderr=subprocess.STDOUT,
-    start_new_session=True,
-)
+    # Nachweis: was das Geruest war, darf hier nicht mehr stehen.
+    verdacht = sorted(
+        k for k in umgebung
+        if k.startswith(("CODEBUDDY", "WORKBUDDY", "QODER", "SANDBOX_CENTER"))
+        or k in ("NODE_OPTIONS", "BASH_ENV")
+    )
+    if verdacht:
+        print("WARNUNG, Geruest noch in der Umgebung:", ", ".join(verdacht), file=sys.stderr)
+    if SHIM_MARKER in umgebung["PATH"]:
+        print("WARNUNG, Shim noch im PATH", file=sys.stderr)
 
-print("pid", prozess.pid)
-sys.exit(0)
+    try:
+        node = find_node(umgebung)
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(1)
+
+    log = open(LOG, "ab", buffering=0)
+    log.write(b"\n=== Start %s ===\n" % datetime.datetime.now().isoformat().encode())
+
+    prozess = subprocess.Popen(
+        [node, "server.js"],
+        cwd=REPO,
+        env=umgebung,
+        stdin=subprocess.DEVNULL,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+
+    print("pid", prozess.pid)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

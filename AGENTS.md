@@ -112,3 +112,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Vor einem Restart aktive Prozesse und `/api/runs` prüfen. Unterbrochene Aufgaben benötigen ausdrückliche Fortsetzung; niemals automatisch erneut dispatchen.
 
 - Bild-Einsetzen: `public/image-composer.js` verwaltet je Konsole ein Bild (PNG/JPEG/GIF/WebP, 10 MB). Upload ausschließlich beim Senden über den angemeldeten `POST /api/images`; Ablage unter `~/.harness-dispatch/uploads`, anschließend bestehender Attachment-Pfad. Fehler erhalten den Entwurf. Mac-App: `mac-app/`, `npm run build:mac` / `npm run install:mac`; native Zwischenablage-TIFFs werden bei ⌘V nach PNG gewandelt. `.beads` nie ins Bundle aufnehmen.
+
+- Nutzerkonfiguration: `runtime/user-environment.js` liest ausschließlich freigegebene Provider-/Nutzer-Variablen der Login-Shell, filtert Shim-Pfade und erhält Startumgebungs-Vorrang. `POST /api/user-environment/reload` aktualisiert nur zukünftige Läufe und gibt keine Werte aus. Bei Fehler bleibt die letzte erfolgreiche Konfiguration erhalten.
+- Portable Laufzeit: Launcher erkennt Node >=22.13 über PATH/nvm oder `HARNESS_NODE`; Mac-App erkennt Python über Nutzer-PATH/Standardpfade oder `CLISCADE_PYTHON`. Keine persönlichen Entwicklerpfade voraussetzen.
+- `POST /api/context/preview` bleibt lesend und verwendet `buildContext` wie die Ausführung; Workspace-Grenzen, Beads-Ausnahme, Quellen und Budget gelten auch für die Vorschau. Mobile Dateiauswahl verwendet denselben Bildpfad wie Paste.

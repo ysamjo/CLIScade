@@ -30,7 +30,7 @@ Native Beads-Sicherungen entstehen täglich und nach neuen Erkenntnissen. Jede n
 ## Nächste begrenzte Erweiterungen
 
 1. Werkzeugbelege auch für Harnesses ergänzen, die derzeit keine strukturierten Exit-Codes liefern.
-2. Kontextvorschau mit Quellen und Umfang anzeigen, bevor ein Auftrag startet.
+2. Umgesetzt: lesende Kontextvorschau mit Quellen, Bildhinweis und Zeichenbudget vor dem Start.
 3. Explizite Beads-Übernahme und Abschluss nach überprüften Abnahmekriterien ergänzen; keine doppelte Pflege des fachlichen Status.
 4. Scheduler und Telegram bei Änderungen schrittweise als Integrationen herauslösen.
 5. Versionsgebundene Skills mit klaren Fähigkeiten prüfen; Inventar bleibt lesend, Synchronisierung bleibt eine ausdrückliche Aktion.

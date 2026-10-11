@@ -740,6 +740,7 @@ function setupRunPanes() {
 
     // Der Composer gehört zum Feld: hier tippen, hier senden, hierher der Auftrag.
     window.HarnessImages.setup(pane.root);
+    pane.root.querySelector('.run-pane-context-preview').addEventListener('click', () => previewPrompt(slot));
     pane.send.addEventListener('click', () => sendPrompt(slot));
     pane.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -1933,6 +1934,18 @@ function renderUsageTable() {
 function setupEventListeners() {
   // Konsolenfelder: jedes bricht nur seinen eigenen Auftrag ab, jedes tippt für sich
   setupRunPanes();
+  document.getElementById('context-preview-close').addEventListener('click', () => document.getElementById('context-preview-dialog').close());
+  document.getElementById('user-config-reload').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const status = document.getElementById('user-config-status');
+    button.disabled = true; status.textContent = 'Lädt…';
+    try {
+      const response = await fetch('/api/user-environment/reload', {method:'POST'});
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Neuladen fehlgeschlagen.');
+      status.textContent = `Neu geladen · ${data.names.length} Einstellungen · gilt für neue Läufe`;
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
 
   if (dom.archiveFilterBtn) {
     dom.archiveFilterBtn.addEventListener('click', () => {
@@ -2323,22 +2336,15 @@ async function loadBeads(pane) {
 // --- DISPATCH TASK ---
 // Die Composer sperren nicht: mehrere Aufträge schnell nacheinander einreichen ist der
 // Weg, den Pool zu füllen. Die Kappe nimmt der Server, nicht das Fenster.
-async function sendPrompt(slot = 0) {
+function promptPayload(slot) {
   const pane = dom.runPanes[slot];
-  if (!pane || pane.sending) return;
-  const image = window.HarnessImages.has(pane.root);
-  const prompt = pane.input.value.trim() || (image ? 'Analysiere das beigefügte Bild.' : '');
-  if (!prompt) return;
-
-  // Fortsetzung: der angeklickte Auftrag hat dem Feld sein Ziel geliehen. Sobald der
-  // Nutzer den Ordner selbst wählt, ist die Leihe vorbei und das globale Routing gilt.
+  const prompt = pane.input.value.trim() || (window.HarnessImages.has(pane.root) ? 'Analysiere das beigefügte Bild.' : '');
   const stream = streamAtSlot(slot);
   const folge = stream?.folge && pane.target.value === stream.folge.projectPath ? stream.folge : null;
 
   const payload = {
     type: 'dispatch',
     prompt,
-    requestId: window.crypto?.randomUUID?.(),
     harnessOverride: folge ? folge.harness : (pane.routing ? pane.routing.value : 'auto'),
     projectPath: pane.target.value || state.activeProject
   };
@@ -2346,11 +2352,41 @@ async function sendPrompt(slot = 0) {
   if (folge?.previousTaskId) payload.previousTaskId = folge.previousTaskId;
   if (pane.withoutBeads?.checked) payload.withoutBeads = true;
   else if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;
+  return {payload, stream, folge};
+}
+async function previewPrompt(slot) {
+  const pane = dom.runPanes[slot];
+  const button = pane.root.querySelector('.run-pane-context-preview');
+  const dialog = document.getElementById('context-preview-dialog');
+  const summary = document.getElementById('context-preview-summary');
+  const content = document.getElementById('context-preview-content');
+  const {payload} = promptPayload(slot);
+  if (!payload.prompt) { window.HarnessImages.error(pane.root, 'Aufgabe für die Vorschau eingeben.'); return; }
+  payload.imageName = window.HarnessImages.name(pane.root);
+  button.disabled = true;
+  summary.textContent = 'Kontext wird geladen…'; content.textContent = '';
+  if (!dialog.open) dialog.showModal();
+  try {
+    const response = await fetch('/api/context/preview', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Kontext konnte nicht geladen werden.');
+    summary.textContent = `${data.characters} / ${data.budget} Zeichen · ${data.sources.length} Regelquellen · ${data.memories} Erinnerungen${data.omittedMemories ? ` · ${data.omittedMemories} ausgelassen` : ''}${data.image ? ' · Bild enthalten' : ''}`;
+    content.textContent = data.context;
+  } catch (error) { summary.textContent = error.message; }
+  finally { button.disabled = false; }
+}
+
+async function sendPrompt(slot = 0) {
+  const pane = dom.runPanes[slot];
+  if (!pane || pane.sending) return;
+  const image = window.HarnessImages.has(pane.root);
+  const {payload, stream, folge} = promptPayload(slot);
+  if (!payload.prompt) return;
+  payload.requestId = window.crypto?.randomUUID?.();
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     if (image) {
       pane.sending = true;
-      const controls = [pane.input, pane.send, pane.target, pane.routing, pane.beads, pane.withoutBeads, pane.root.querySelector('.run-pane-image-remove')].filter(Boolean);
+      const controls = [pane.input, pane.send, pane.target, pane.routing, pane.beads, pane.withoutBeads, pane.root.querySelector('.run-pane-image-remove'), pane.root.querySelector('.run-pane-image-select')].filter(Boolean);
       controls.forEach(control => { control.disabled = true; });
       try {
         payload.imagePath = await window.HarnessImages.upload(pane.root);

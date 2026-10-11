@@ -112,6 +112,9 @@
                 </select>
                 <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" title="Optional: vorhandene Beads-Aufgabe verknüpfen" hidden></select>
                 <textarea class="run-pane-input" rows="1" placeholder="Aufgabe … Bild mit ⌘V / Strg+V einfügen" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
+                <input class="run-pane-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="btn-text run-pane-image-select" aria-label="Foto oder Bild auswählen">Bild wählen</button>
+                <button type="button" class="btn-text run-pane-context-preview">Kontext ansehen</button>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
             </div>
@@ -147,6 +150,9 @@
                 </select>
                 <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" title="Optional: vorhandene Beads-Aufgabe verknüpfen" hidden></select>
                 <textarea class="run-pane-input" rows="1" placeholder="Aufgabe … Bild mit ⌘V / Strg+V einfügen" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
+                <input class="run-pane-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="btn-text run-pane-image-select" aria-label="Foto oder Bild auswählen">Bild wählen</button>
+                <button type="button" class="btn-text run-pane-context-preview">Kontext ansehen</button>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
             </div>
@@ -396,6 +402,11 @@
             <div class="settings-section-header-row">
               <div class="settings-section-header">
                 <h4>Lokale Harness-Diagnose & Systemstatus</h4>
+  <div class="user-config-refresh">
+    <button type="button" id="user-config-reload" class="btn-text">Terminal-Konfiguration neu laden</button>
+    <span id="user-config-status" role="status" aria-live="polite"></span>
+  </div>
+
                 <p id="diagnostics-summary">—</p>
               </div>
               <button id="settings-open-installer-btn" class="btn btn-primary" style="white-space:nowrap;">1-Klick Installations-Center</button>
@@ -842,6 +853,12 @@
   </dialog>
   <script src="/konsole-schichten.js"></script>
   <script src="/task-state.js"></script>
+  <dialog id="context-preview-dialog" aria-labelledby="context-preview-title">
+    <h2 id="context-preview-title">Auftragskontext</h2>
+    <p id="context-preview-summary" role="status"></p>
+    <pre id="context-preview-content"></pre>
+    <button type="button" id="context-preview-close" class="btn">Schließen</button>
+  </dialog>
   <script src="image-composer.js"></script>
   <script src="app.js"></script>
 </body>
