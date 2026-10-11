@@ -752,22 +752,27 @@ for (const [id, type, status, code] of [
 }
 
 // Beads-Zustand und ausdrückliche Fortsetzung ohne Projektgedächtnis.
+pruefe('Beads ist zentral und aus beiden Eingaben entfernt', document.querySelectorAll('#project-memory').length === 1 && !document.querySelector('.run-pane .run-pane-context, .run-pane .run-pane-beads'));
+const automaticPayload = window.promptPayload(0).payload;
+pruefe('Normaler Auftrag braucht keine Beads-Auswahl oder Ausnahme', !automaticPayload.beadId && !automaticPayload.withoutBeads);
 const memoryPane = document.querySelector('#run-pane-0');
+const memoryDetails = document.querySelector('#memory-pane-0');
 const memoryProject = memoryPane.querySelector('.run-pane-target').value;
 sag({ type: 'context_status', taskId: 'memory-status', projectPath: memoryProject, state: 'ready', memoryCount: 12,
   backup: { local: 'verified', remote: 'pending' } });
-pruefe('Beads zeigt geladene Erkenntnisse', memoryPane.querySelector('.run-pane-memory-status').textContent.includes('12 Erkenntnisse'));
-pruefe('NAS ausstehend wird nicht als bestätigt gezeigt', memoryPane.querySelector('.run-pane-backup-status').textContent.includes('NAS ausstehend'));
+pruefe('Beads zeigt geladene Erkenntnisse', memoryDetails.querySelector('.run-pane-memory-status').textContent.includes('12 Erkenntnisse'));
+pruefe('NAS ausstehend wird nicht als bestätigt gezeigt', memoryDetails.querySelector('.run-pane-backup-status').textContent.includes('NAS ausstehend'));
 sag({ type: 'backup_status', projectPath: memoryProject, backup: { local: 'verified', remote: 'verified' } });
-pruefe('Sicherungsereignisse aktualisieren nur die Sicherung und erhalten den Wissensstand', memoryPane.querySelector('.run-pane-backup-status').textContent.includes('NAS bestätigt') && memoryPane.querySelector('.run-pane-memory-status').textContent.includes('12 Erkenntnisse'));
+pruefe('Sicherungsereignisse aktualisieren nur die Sicherung und erhalten den Wissensstand', memoryDetails.querySelector('.run-pane-backup-status').textContent.includes('NAS bestätigt') && memoryDetails.querySelector('.run-pane-memory-status').textContent.includes('12 Erkenntnisse'));
 sag({ type: 'context_status', taskId: 'memory-status', projectPath: memoryProject, state: 'error', error: 'CLI nicht verfügbar' });
-pruefe('Beads-Fehler bleibt sichtbar', memoryPane.querySelector('.run-pane-memory-status').textContent.includes('nicht verfügbar'));
-pruefe('Ausdrückliche Fortsetzung ist im Fehlerfall verfügbar', !memoryPane.querySelector('.run-pane-memory-recovery').hidden);
-memoryPane.querySelector('.run-pane-without-beads').checked = true;
+pruefe('Beads-Fehler erscheint in der zentralen Zusammenfassung', document.querySelector('#memory-summary').textContent.includes('Problem'));
+pruefe('Beads-Fehler bleibt sichtbar', memoryDetails.querySelector('.run-pane-memory-status').textContent.includes('nicht verfügbar'));
+pruefe('Ausdrückliche Fortsetzung ist im Fehlerfall verfügbar', !memoryDetails.querySelector('.run-pane-memory-recovery').hidden);
+memoryDetails.querySelector('.run-pane-without-beads').checked = true;
 memoryPane.querySelector('.run-pane-input').value = 'Ohne Beads prüfen';
 memoryPane.querySelector('.run-pane-send').click();
 pruefe('Nur bewusste Auswahl übermittelt withoutBeads', frames.some(frame => frame.type === 'dispatch' && frame.prompt === 'Ohne Beads prüfen' && frame.withoutBeads === true));
-pruefe('Die Beads-Ausnahme gilt nur für den gerade gesendeten Auftrag', !memoryPane.querySelector('.run-pane-without-beads').checked);
+pruefe('Die Beads-Ausnahme gilt nur für den gerade gesendeten Auftrag', !memoryDetails.querySelector('.run-pane-without-beads').checked);
 
 // Bild-Einsetzen: getrennte Konsolen, Entwurfserhalt und einmaliger Dispatch.
 let uploadFails = true;

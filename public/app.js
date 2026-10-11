@@ -88,8 +88,9 @@ const dom = {
   runPanes: [0, 1].map((i) => {
     const root = document.getElementById(`run-pane-${i}`);
     if (!root) return null;
+    const memoryPanel = document.getElementById(`memory-pane-${i}`);
     return {
-      root,
+      root, memoryPanel,
       title: root.querySelector('.run-pane-title'),
       harness: root.querySelector('.run-pane-harness'),
       folder: root.querySelector('.run-pane-folder'),
@@ -98,11 +99,11 @@ const dom = {
       cancel: root.querySelector('.run-pane-cancel'),
       target: root.querySelector('.run-pane-target'),
       routing: root.querySelector('.run-pane-routing'),
-      beads: root.querySelector('.run-pane-beads'),
-      memoryStatus: root.querySelector('.run-pane-memory-status'),
-      backupStatus: root.querySelector('.run-pane-backup-status'),
-      memoryRecovery: root.querySelector('.run-pane-memory-recovery'),
-      withoutBeads: root.querySelector('.run-pane-without-beads'),
+      beads: memoryPanel.querySelector('.run-pane-beads'),
+      memoryStatus: memoryPanel.querySelector('.run-pane-memory-status'),
+      backupStatus: memoryPanel.querySelector('.run-pane-backup-status'),
+      memoryRecovery: memoryPanel.querySelector('.run-pane-memory-recovery'),
+      withoutBeads: memoryPanel.querySelector('.run-pane-without-beads'),
       input: root.querySelector('.run-pane-input'),
       send: root.querySelector('.run-pane-send')
     };
@@ -2360,7 +2361,9 @@ function renderMemoryStatus(pane, data) {
   pane.memoryStatus.title = data.error || '';
   pane.memoryStatus.dataset.state = data.state || 'loading';
   if (pane.memoryRecovery) pane.memoryRecovery.hidden = data.state !== 'error';
+  if (['disabled', 'error', 'bypassed'].includes(data.state)) pane.beads.hidden = true;
   if ('backup' in data || data.state === 'disabled') renderBackupStatus(pane, data.state === 'disabled' ? null : data.backup);
+  renderMemorySummary();
 }
 function renderBackupStatus(pane, backup) {
   if (pane.backupStatus) {
@@ -2368,6 +2371,25 @@ function renderBackupStatus(pane, backup) {
       backup.local === 'verified' ? (backup.remote === 'disabled' ? 'Lokal gesichert' : 'Lokal gesichert · NAS ausstehend') :
       backup.local === 'error' ? 'Sicherung fehlgeschlagen' : backup.local === 'running' ? 'Sicherung läuft' : 'Noch keine Sicherung';
     pane.backupStatus.title = backup?.remoteError || backup?.error || '';
+    pane.backupStatus.dataset.state = backup?.local || '';
+    renderMemorySummary();
+  }
+}
+
+function renderMemorySummary() {
+  const summary = document.getElementById('memory-summary');
+  const panes = dom.runPanes.filter(pane => pane?.target.value);
+  const states = panes.map(pane => pane.memoryStatus.dataset.state);
+  const failed = states.includes('error') || panes.some(pane => pane.backupStatus.dataset.state === 'error');
+  summary.dataset.state = failed ? 'error' : states.includes('loading') ? 'loading' : states.includes('ready') ? 'ready' : 'disabled';
+  summary.textContent = failed ? 'Problem – Details öffnen' : states.includes('loading') ? 'Wird geprüft…' :
+    states.includes('ready') ? 'Automatisch aktiv' : 'Nicht eingerichtet';
+  for (const pane of dom.runPanes) {
+    if (!pane) continue;
+    const slot = dom.runPanes.indexOf(pane);
+    const project = pane.target.selectedOptions[0]?.textContent || 'Kein Projekt';
+    pane.memoryPanel.querySelector('.memory-pane-title').textContent = `Konsole ${slot + 1} · ${project}`;
+    pane.memoryPanel.querySelector('.memory-task-label').hidden = pane.beads.hidden;
   }
 }
 
@@ -2377,7 +2399,7 @@ async function loadBeads(pane) {
   pane.beads.hidden = true;
   if (pane.withoutBeads) pane.withoutBeads.checked = false;
   renderMemoryStatus(pane, { state: 'loading', backup: null });
-  pane.beads.replaceChildren(new Option('Ohne Beads-Aufgabe', ''));
+  pane.beads.replaceChildren(new Option('Automatisch – keine feste Aufgabe', ''));
   try {
     const response = await fetch(`/api/beads?projectPath=${encodeURIComponent(project)}`);
     const data = await response.json();
@@ -2386,7 +2408,8 @@ async function loadBeads(pane) {
     renderMemoryStatus(pane, data);
     if (!data.enabled || data.state === 'error') return;
     for (const task of data.tasks || []) pane.beads.add(new Option(`${task.id}: ${task.title}`, task.id));
-    pane.beads.hidden = false;
+    pane.beads.hidden = !(data.tasks || []).length;
+    renderMemorySummary();
   } catch (error) { if (pane.target.value === project) renderMemoryStatus(pane, { state: 'error', error: error.message }); }
 }
 

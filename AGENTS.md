@@ -131,3 +131,5 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Seitenleisten-Zustand liegt in localStorage (`hrg_collapsed_projects`, `hrg_show_taskless_folders`); defekte Speicherwerte dürfen den Start nicht verhindern. AGENTS-Marken öffnen ausschließlich den Projekteditor. Archivaktionen nur bei feinem Hover-Zeiger ausblenden; Fokus und Touch bleiben bedienbar.
 
 - Oberflächengestaltung: Farb- und Radiusvariablen in `public/style.css` zentral halten. Konsolen und Composer bilden ruhige Karten; Desktop-/Mobil-Screenshots über Ego Lite prüfen. `100dvh` hält die Arbeitsfläche innerhalb der sichtbaren Browserhöhe.
+
+- Beads-Bedienung ausschließlich im gemeinsamen `#project-memory`: je Konsole eigene Referenzen über `#memory-pane-<slot>`, zentrale Fehlerzusammenfassung immer sichtbar. Keine automatische Fehlerumgehung. Composer-Werkzeugleiste gruppiert Ziel/Routing und alle drei Aktionen separat; Senden darf nicht allein umbrechen.

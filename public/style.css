@@ -3152,3 +3152,41 @@ body, .app-layout { height:100dvh; }
   .run-pane-context { padding:5px 12px; }
   .run-pane-composer { margin:0 8px 8px; padding:8px; gap:6px; }
 }
+
+/* Eingabe und Werkzeugleiste sind feste Gruppen; Senden bleibt bei den Icons. */
+.run-pane-composer { display:block; }
+.run-pane-composer textarea { display:block; width:100%; margin-bottom:8px; }
+.run-pane-toolbar { display:flex; align-items:center; gap:10px; min-width:0; }
+.run-pane-targets { display:flex; flex:1 1 auto; gap:6px; min-width:0; }
+.run-pane-targets .custom-select { flex:1 1 0; width:0; min-width:0; max-width:none; }
+.run-pane-actions { display:flex; align-items:center; flex:0 0 auto; gap:4px; }
+.run-pane-actions .run-pane-send { margin-inline-start:0; }
+.project-memory { flex:0 0 auto; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-secondary); font-size:12px; }
+.project-memory > summary { display:flex; align-items:center; gap:8px; padding:10px 14px; cursor:pointer; list-style:none; color:var(--text-muted); }
+.project-memory > summary::-webkit-details-marker { display:none; }
+.project-memory > summary:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; border-radius:inherit; }
+#memory-summary { margin-inline-start:auto; font-size:11px; }
+#memory-summary[data-state="error"] { color:var(--danger); font-weight:600; }
+.memory-details { max-height:35dvh; overflow:auto; padding:0 14px 12px; border-top:1px solid var(--border-soft); }
+.memory-details > p { padding-block:12px; color:var(--text-muted); line-height:1.6; }
+.memory-pane { padding-block:10px; }
+.memory-pane + .memory-pane { border-top:1px solid var(--border-soft); }
+.memory-pane-title { font-size:12px; font-weight:600; }
+.memory-pane .run-pane-context { padding:6px 0; }
+.memory-task-label { display:flex; flex-wrap:wrap; align-items:center; gap:8px; color:var(--text-muted); }
+.memory-task-label[hidden] { display:none; }
+.memory-pane .run-pane-beads { max-width:100%; width:min(100%,320px); font-size:12px; }
+@media (max-width:480px) {
+  .run-pane-toolbar { gap:6px; }
+  .run-pane-targets { gap:4px; }
+  .run-pane-actions { gap:2px; }
+  .run-pane-targets .custom-select { padding-inline:4px; font-size:11px; }
+  .project-memory > summary { padding:9px 10px; font-size:11px; }
+}
+
+.project-memory > summary::after { content:""; width:6px; height:6px; border-right:1px solid currentColor; border-bottom:1px solid currentColor; transform:rotate(45deg); flex-shrink:0; }
+.project-memory[open] > summary::after { transform:rotate(225deg); }
+
+@media (max-width:600px) {
+  .run-pane-actions button { flex:0 0 48px; width:48px; height:48px; }
+}
