@@ -61,10 +61,12 @@ Nach einem Server-Neustart stehen zuvor laufende oder wartende Aufgaben als `inc
 
 Zum Sichern von `studio.sqlite` den Server zuerst ohne aktive Aufträge beenden und danach die Datenbank kopieren; eine einzelne Dateikopie während des WAL-Betriebs ist kein vollständiges Backup. Die alte JSON-Datei ist nach der Migration nur noch Sicherung, kein aktiver Speicher. Niemals bei laufendem Server durch eine JSON-Datei ersetzen.
 
-## Optionale Beads-Aufgaben
+## Automatischer Beads-Projektkontext
 
-Das externe Beads-CLI `bd` muss separat installiert und im jeweiligen Projekt eingerichtet sein. Der Router verändert dabei weder `AGENTS.md` noch die Beads-Konfiguration. Bei vorhandener `.beads/`-Ablage erscheint im Composer eine Aufgabenwahl aus `bd ready --json`; die gewählte Aufgabe wird mit `bd show <id> --json` in den Kontext geladen. Zugriffe des Routers sind pro Projekt serialisiert. Ohne Beads bleibt die normale Eingabe unverändert verfügbar. Fehler beim Laden einer ausdrücklich gewählten Beads-Aufgabe stoppen diesen Auftrag sichtbar.
+Das externe Beads-CLI `bd` muss im Server-PATH installiert und im jeweiligen Projekt eingerichtet sein. Bei vorhandener `.beads/`-Ablage lädt der Router vor **jedem Auftrag automatisch** `bd prime --full --readonly` (Workflow und gespeichertes Projektwissen) sowie `bd ready --json --readonly` (verfügbare Aufgaben). Eine Aufgabe muss dafür nicht ausgewählt werden. Der Kontext wird beim Harness-Wechsel und in allen Konsensphasen weitergegeben; eine ausdrückliche Fortsetzung liest ihn erneut. Bis zu 20 Aufgaben und 48.000 Zeichen Prime-Kontext werden übergeben; eine Kürzung wird im Kontext gekennzeichnet.
 
-Eine Beads-Aufgabe kann mehrere Router-Ausführungen besitzen. Der Router liest den fachlichen Status, übernimmt und schließt Beads-Aufgaben aber nicht automatisch. Abhängigkeiten und Projektwissen verwaltet Beads; Ausführungsfehler, Abbrüche und Prüfprotokolle verwaltet der Router. Aktuell angebunden sind Aufgabenwahl und Kontext, keine automatische Wissensextraktion. Siehe [ROADMAP.md](ROADMAP.md).
+Die Aufgabenwahl im Composer ist optional: Eine gewählte ID ergänzt ihre Details aus `bd show <id> --json --readonly`. Zugriffe des Routers sind pro Projekt serialisiert und verwenden die lokale `.beads/`-Ablage statt eines geerbten `BEADS_DIR`. Ladezeit, Umfang und Aufgabenanzahl werden am Router-Auftrag gespeichert. Ein Fehler in einem eingerichteten Beads-Projekt stoppt den Auftrag sichtbar, bevor ein Harness startet; ohne Beads bleibt die normale Eingabe verfügbar.
+
+Der Router initialisiert keine Datenbanken und verändert weder `AGENTS.md` noch die Beads-Konfiguration. Er übernimmt, erstellt oder schließt keine Beads-Aufgaben automatisch und extrahiert kein neues Wissen aus Agentenausgaben. Bereits gespeichertes Beads-Projektwissen wird automatisch gelesen; fachliche Abnahme und Wissenspflege bleiben ausdrückliche Aktionen. Projektregeln und aktueller Auftrag haben Vorrang vor Beads-Inhalten. Siehe [ROADMAP.md](ROADMAP.md).
 
 Das Skills-Inventar (`GET /api/skills`) liest nur. Verlinken geschieht ausdrücklich über Synchronisierung oder Installation.

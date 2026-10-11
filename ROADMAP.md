@@ -10,7 +10,7 @@ Stand: 11. Oktober 2026. Die Oberfläche bleibt Vanilla JS ohne Bundler; Ausfüh
 | `services/task-store.js` | SQLite-Transaktionen, Aufgaben, einzelne Versuche und strukturierte Ereignisse |
 | `services/context-service.js` | Richtlinien, Aufgabe, Bild, Git-Stand und belegter beziehungsweise unbestätigter Zwischenstand |
 | `services/access-control.js` | LAN-Anmeldung, Origin-/Host-Prüfung und HTTP-/WebSocket-Zugang |
-| `services/beads-adapter.js` | Optionale, pro Projekt serialisierte Zugriffe auf vorhandene Beads-Aufgaben |
+| `services/beads-adapter.js` | Automatischer Projektkontext und optionale Aufgabenwahl; pro Projekt serialisiert |
 | `public/task-state.js` | Gemeinsamer Vertrag für Erfolg, Fehler, Abbruch und unvollständige Ausführung |
 | `runtime/` | Feste Programme, CLI-Argumente, Prozesssteuerung, normalisierte Ereignisse und native Sessions |
 | `routing.js` | Reine Routing- und Scheduler-Entscheidungen |
@@ -19,7 +19,9 @@ Stand: 11. Oktober 2026. Die Oberfläche bleibt Vanilla JS ohne Bundler; Ausfüh
 
 Eine fachliche Aufgabe kann mehrere Harness-Versuche haben. Der Router speichert diese Versuche samt Ereignissen lokal. Beim Fallback oder einer Fortsetzung übergibt er Regeln, Auftrag, Bildhinweis, Git-Stand und den letzten gespeicherten Arbeitsstand. Agentenaussagen sind keine unabhängig verifizierten Fakten und ersetzen keine Richtlinien.
 
-Beads ist eine optionale Anbindung an das externe `bd`-Projekt, kein selbstgebauter Name für Laufstatistiken. In bereits eingerichteten Projektordnern mit `.beads/` zeigt der Composer verfügbare Aufgaben aus `bd ready --json`. Eine gewählte ID wird vor der Ausführung mit `bd show <id> --json` gelesen und dem Kontext hinzugefügt. Der Router initialisiert keine Beads-Datenbanken, übernimmt keine Aufgabe automatisch und schließt sie nicht nach einem CLI-Exit. Beads bleibt für fachlichen Aufgabenstatus und Abhängigkeiten zuständig, der Router für Ausführungsstatus und Protokoll. Die aktuelle Anbindung liest Aufgaben; `bd prime`, dauerhafte Fakten und explizite Übernahme sind mögliche spätere Erweiterungen.
+In bereits eingerichteten Projektordnern mit `.beads/` lädt der Router bei jedem Auftrag automatisch Projektwissen und Workflow aus `bd prime --full --readonly` sowie verfügbare Aufgaben aus `bd ready --json --readonly`. Die Aufgabenwahl ist optional und ergänzt Details über `bd show <id> --json --readonly`. Fallback und Konsens erhalten denselben Kontextstand; eine Fortsetzung liest den Projektkontext frisch. Ladefehler werden vor dem Harness-Start sichtbar, Aufträge ohne Beads bleiben unverändert. Umfang und Ladezeit werden am Auftrag gespeichert.
+
+Der Router initialisiert keine Beads-Datenbanken, übernimmt oder erstellt keine Aufgabe automatisch und schließt sie nicht nach einem CLI-Exit. Beads verwaltet fachlichen Status, Abhängigkeiten und ausdrücklich gespeichertes Projektwissen; der Router verwaltet Ausführungsstatus und Protokolle. Wissensextraktion und fachliche Abnahme sind keine automatischen Nebenwirkungen eines Laufs.
 
 ## Nächste begrenzte Erweiterungen
 
@@ -39,4 +41,4 @@ Embeddings, automatische Harness-Umsortierung und automatisch erzeugte AGENTS-Re
 - Regeln und Zwischenstand bleiben bei Fallback, fehlender Session und Konsens-Synthese erhalten.
 - Historie und Request-IDs überleben Neustarts; unterbrochene Arbeit startet erst auf ausdrückliche Fortsetzung.
 - LAN-Clients benötigen Anmeldung; fremde Origins dürfen weder HTTP-Aktionen noch WebSocket-Dispatch starten.
-- Normale Aufträge bleiben ohne Beads nutzbar. Die Beads-Anbindung wird mit Stub-CLI getestet; echte Beads-Datenbanken benötigen zusätzlich einen Integrationstest.
+- Normale Aufträge bleiben ohne Beads nutzbar. Automatischer Beads-Kontext wird ohne Auswahl bei Start, Fallback, Fortsetzung und Konsens mit Stub-CLI geprüft; zusätzlich wurde Beads 1.3.1 mit einer echten Wegwerf-Datenbank getestet.

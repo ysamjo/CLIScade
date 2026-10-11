@@ -865,3 +865,43 @@ test('Skills-Inventar erzeugt keine Harness-Verzeichnisse', async () => {
   await httpJson('/api/skills');
   assert.equal(fs.existsSync(target), false);
 });
+
+
+test('Beads-Kontext: normaler Auftrag, Fallback und Fortsetzung laden ohne Aufgabenauswahl', async (t) => {
+  await waitForServer();
+  const directory = path.join(projectDir, '.beads');
+  fs.mkdirSync(directory);
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const countFile = path.join(directory, 'reads');
+  makeStub('bd', `case "$1" in
+prime) echo BEADS_WISSEN_MARKER; echo x >> '${countFile}' ;;
+ready) echo '[{"id":"bd-123","title":"BEADS_AUFGABE_MARKER"}]' ;;
+*) exit 1 ;;
+esac`);
+  makeStub('stub-beads-context', 'printf "%s\\n" "$*"');
+  stubHarnesses['stub-beads-context'] = ['codebuddy', 'codebuddy'];
+  writeConfig([{ name: 'Haenger', command: 'stub-hang' }, { name: 'Kontext', command: 'stub-beads-context' }]);
+  const first = await runDispatch({ prompt: 'Normaler Auftrag' });
+  assert.deepEqual(routes(first), ['Haenger', 'Kontext']);
+  const output = describe(first);
+  assert.match(output, /BEADS_WISSEN_MARKER/);
+  assert.match(output, /BEADS_AUFGABE_MARKER/);
+  writeConfig([{ name: 'Kontext', command: 'stub-beads-context' }]);
+  const second = await runDispatch({ prompt: 'Fortsetzung', previousTaskId: createdIds(first)[0] });
+  assert.match(describe(second), /BEADS_WISSEN_MARKER/);
+  assert.equal(fs.readFileSync(countFile, 'utf8').trim().split('\n').length, 2);
+  writeConfig([{ name: 'Erster', command: 'stub-context' }, { name: 'Zweiter', command: 'stub-login' }]);
+  const consensus = await runDispatch({ prompt: 'Konsens', harnessOverride: 'consensus' });
+  assert.equal(consensus.at(-1).exitCode, 0);
+  assert.match(describe(consensus), /BEADS_WISSEN_MARKER/);
+  assert.equal(fs.readFileSync(countFile, 'utf8').trim().split('\n').length, 3);
+  writeConfig([{ name: 'Kontext', command: 'stub-beads-context' }]);
+  // Kein fremder Projektkontext in Projekten ohne Beads.
+  const other = await runDispatch({ prompt: 'Anderes Projekt', projectPath: projectDirB });
+  assert.doesNotMatch(describe(other), /BEADS_WISSEN_MARKER/);
+  makeStub('bd', 'exit 1');
+  const failed = await runDispatch({ prompt: 'Fehler sichtbar' });
+  assert.equal(failed.at(-1).type, 'error');
+  assert.match(failed.at(-1).message, /Beads-Projektkontext konnte nicht geladen werden/);
+  assert.deepEqual(routes(failed), []);
+});

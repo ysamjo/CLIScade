@@ -117,3 +117,50 @@ test('HTTP und WebSocket lehnen fremde Ursprünge vor dem Dispatch ab', async (t
   });
   assert.equal(status, 401);
 });
+
+
+test('Beads-Kontext lädt Projektwissen und Aufgaben automatisch ohne Auswahl', async (t) => {
+  const dir = temporary(t);
+  const calls = [];
+  const adapter = new BeadsAdapter({ execute: async (cwd, args) => {
+    assert.equal(cwd, fs.realpathSync(dir));
+    calls.push(args);
+    return args[0] === 'prime' ? 'PROJEKTWISSEN_MARKER' : JSON.stringify([{ id: 'bd-123', title: 'Offene Aufgabe' }]);
+  } });
+  assert.equal(await adapter.context(dir), null);
+  assert.deepEqual(calls, []);
+  fs.mkdirSync(path.join(dir, '.beads'));
+  const context = await adapter.context(dir);
+  assert.deepEqual(calls, [['prime', '--full', '--readonly'], ['ready', '--json', '--readonly']]);
+  const text = buildContext({ prompt: 'Normaler Auftrag', beadsContext: context });
+  assert.match(text, /PROJEKTWISSEN_MARKER/);
+  assert.match(text, /Offene Aufgabe/);
+  assert.match(text, /keine.*Übernahme/i);
+  assert.match(text, /Richtlinien.*Vorrang/i);
+});
+
+test('Beads-Kontext wird frisch gelesen und verbirgt keinen Ladefehler', async (t) => {
+  const dir = temporary(t);
+  fs.mkdirSync(path.join(dir, '.beads'));
+  let reads = 0;
+  const adapter = new BeadsAdapter({ execute: async (cwd, args) => args[0] === 'prime' ? `Wissen ${++reads}` : '[]' });
+  assert.match((await adapter.context(dir)).prime, /Wissen 1/);
+  assert.match((await adapter.context(dir)).prime, /Wissen 2/);
+  const broken = new BeadsAdapter({ execute: async () => { throw new Error('Beads-CLI ist nicht installiert'); } });
+  await assert.rejects(broken.context(dir), /Beads-CLI/);
+  const empty = new BeadsAdapter({ execute: async () => '' });
+  await assert.rejects(empty.context(dir), /Beads-Kontext ist leer/);
+});
+
+
+test('Beads-Kontext begrenzt große Wissens- und Aufgabenmengen sichtbar', async (t) => {
+  const dir = temporary(t);
+  fs.mkdirSync(path.join(dir, '.beads'));
+  const adapter = new BeadsAdapter({ execute: async (cwd, args) => args[0] === 'prime' ? 'x'.repeat(50000)
+    : JSON.stringify(Array.from({ length: 25 }, (_, i) => ({ id: `bd-${i}`, title: 'y'.repeat(2000) }))) });
+  const context = await adapter.context(dir);
+  assert.equal(context.availableTasks, 25);
+  assert.equal(context.ready.length, 20);
+  assert.equal(context.ready[0].title.length, 1000);
+  assert.match(context.prime, /Kontext gekürzt/);
+});

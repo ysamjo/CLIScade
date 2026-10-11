@@ -1564,7 +1564,7 @@ function taskContext(entry, extra = {}) {
   const prior = previous?.projectPath === entry.workingDir
     ? (previous.checkpoint || checkpoint(previous, null, 'Stand des früheren Laufs unbekannt')) : null;
   return buildContext({ rules: agentsContext, prompt: entry.payload.prompt, image: entry.record.image,
-    previous: extra.relay ? entry.record.checkpoint : prior, git: `${state.revision || 'unbekannt'}\n${state.changes}`, bead: entry.bead, ...extra });
+    previous: extra.relay ? entry.record.checkpoint : prior, git: `${state.revision || 'unbekannt'}\n${state.changes}`, bead: entry.bead, beadsContext: entry.beadsContext, ...extra });
 }
 
 function prepareAttachment(entry) {
@@ -1588,6 +1588,15 @@ function saveCheckpoint(record, resultText) {
 }
 
 async function prepareBead(entry) {
+  try {
+    entry.beadsContext = await beads.context(entry.workingDir);
+  } catch (err) {
+    throw new Error(`Beads-Projektkontext konnte nicht geladen werden: ${err.message}`);
+  }
+  if (entry.beadsContext) {
+    entry.record.beadsContext = { loadedAt: new Date().toISOString(),
+      characters: entry.beadsContext.prime.length, availableTasks: entry.beadsContext.availableTasks };
+  }
   if (entry.payload.beadId) {
     entry.bead = await beads.show(entry.workingDir, entry.payload.beadId);
     entry.record.bead = entry.bead;
