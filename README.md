@@ -22,6 +22,8 @@ HOST=127.0.0.1 npm start
 - Dauerhafte Aufgabenhistorie, ausdrückliche Fortsetzung und Konsensläufe.
 - Optionales Beads-Projektgedächtnis mit relevanten Erkenntnissen, Prüfbelegen und geprüften Sicherungen.
 - Browser-Oberfläche, abgesicherter LAN-Zugang, Zeitpläne und Telegram-Steuerung.
+- Die Seitenleiste merkt sich eingeklappte Ordner und den Filter für Ordner ohne Aufgaben; AGENTS-Marken öffnen den Projektregel-Editor. Archiv-Icons erscheinen am Desktop bei Hover oder Tastaturfokus und bleiben auf Touch-Geräten sichtbar.
+- Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Bildauswahl und Kontextvorschau als Icons mit Tooltip und Tastaturbedienung.
 
 
 ## Weitere Coding-CLIs

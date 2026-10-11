@@ -847,5 +847,22 @@ document.getElementById('user-config-reload').click();
 await ruhen(5);
 pruefe('Nutzerkonfiguration neu laden nennt ausschließlich die Anzahl', document.getElementById('user-config-status').textContent.includes('1 Einstellungen') && !document.getElementById('user-config-reload').disabled);
 
+// Wiederhergestellte Seitenleiste: Zustand überlebt das nächste Laden.
+window.toggleProjectExpand('/tmp/proj-b');
+pruefe('Zugeklappte Ordner werden gespeichert und wieder geladen', window.loadCollapsedProjects().has('/tmp/proj-b'));
+window.toggleProjectExpand('/tmp/proj-b');
+pruefe('Aufgeklappte Ordner verschwinden aus der gespeicherten Wahl', !window.loadCollapsedProjects().has('/tmp/proj-b'));
+window.localStorage.setItem('hrg_collapsed_projects', '{defekt');
+pruefe('Defekter Ordnerspeicher blockiert den Start nicht', window.loadCollapsedProjects().size === 0);
+window.localStorage.setItem('hrg_show_taskless_folders', 'false');
+pruefe('Ordnerfilter wird für das nächste Laden erhalten', window.loadShowTasklessFolders() === false);
+window.localStorage.removeItem('hrg_show_taskless_folders');
+const agentsButton = document.querySelector('.project-agents-btn');
+fetches.length = 0;
+agentsButton.click();
+await ruhen(5);
+pruefe('AGENTS-Marke lädt Regeln genau für den angeklickten Projektordner', fetches.some(f => f.schluessel === 'GET /api/agents-md?project=%2Ftmp%2Fcliscade'));
+pruefe('AGENTS-Marke öffnet den Projekteditor', document.querySelector('.agents-tab-btn[data-target="project"]')?.classList.contains('active'));
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

@@ -3066,7 +3066,11 @@ kbd {
 .run-pane-memory-recovery[hidden] { display:none; }
 /* Die optionale Aufgabenwahl lässt Platz für Eingabe und Senden, auch in schmalen Konsolen. */
 .run-pane-composer { flex-wrap:wrap; }
-.run-pane-composer textarea { flex:1 1 160px; }
+.run-pane-composer textarea { flex:1 0 100%; order:-1; min-height:76px; max-height:240px; font-size:16px; padding:10px 12px; resize:vertical; }
+.run-pane-tool, .run-pane-send { flex:0 0 40px; width:40px; height:40px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+.run-pane-tool .svg-icon { width:20px; height:20px; }
+.run-pane-tool:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
+@media (pointer:coarse) { .run-pane-tool, .run-pane-send { flex-basis:48px; width:48px; height:48px; } }
 .run-pane-beads { flex:0 1 140px; min-width:0; max-width:140px; font-size:11.5px; }
 .run-pane-context { flex:0 0 auto; }
 
@@ -3082,3 +3086,14 @@ kbd {
 #context-preview-dialog::backdrop { background:rgba(0,0,0,.65); }
 #context-preview-content { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; max-height:55vh; overflow:auto; }
 @media (max-width:600px) { .run-pane-image-select, .run-pane-context-preview { min-height:44px; } .user-config-refresh { flex-wrap:wrap; } }
+
+/* Wiederhergestellte kompakte Seitenleiste; auf Touch bleiben Aktionen sichtbar. */
+.project-agents-btn { cursor:pointer; font-family:inherit; line-height:1.2; appearance:none; }
+.project-agents-btn:hover { background:var(--border-color); color:var(--text-main); }
+.project-agents-btn:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
+@media (hover:hover) and (pointer:fine) {
+  .task-archive-btn, .task-restore-btn { opacity:0; }
+  .task-item:hover .task-archive-btn, .task-item:hover .task-restore-btn,
+  .task-item.active .task-archive-btn, .task-item.active .task-restore-btn,
+  .task-item:focus-within .task-archive-btn, .task-item:focus-within .task-restore-btn { opacity:1; }
+}

@@ -125,3 +125,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Kiro V3/stream-json: bestätigtes Headless-Envelope `sessionUpdate.data` und `runFinished.data` (CLI 2.28.0). Junie bewusst Textmodus ohne belegtes JSON-Schema; neue strukturierte Adapter dürfen unbekannte/malformed Ausgabe nicht als Antwort werten.
 - Alle fünf derzeit `resumable: false`: Fortsetzung über ContextService, keine globale/zuletzt aktive Hersteller-Session erraten. Fehlende Werkzeug-Exit-Codes bleiben `null`.
 - Zusätzliche Prüfungen: `node --test test/runtime/new-clis.test.js test/new_clis_server.test.js`; letzterer startet isolierten Server auf freiem Port und ausschließlich Stub-CLIs. Echte Modelltests verbrauchen ggf. Kontingent.
+
+- Konsolen-Composer: mehrzeilige Eingabe über volle Breite, darunter Ziel/Routing und Icon-Aktionen für Bild und Kontext. Icon-Buttons behalten `aria-label`, Tooltip und sichtbaren Tastaturfokus; Bild-/Kontextpfade bleiben unverändert.
+
+- Seitenleisten-Zustand liegt in localStorage (`hrg_collapsed_projects`, `hrg_show_taskless_folders`); defekte Speicherwerte dürfen den Start nicht verhindern. AGENTS-Marken öffnen ausschließlich den Projekteditor. Archivaktionen nur bei feinem Hover-Zeiger ausblenden; Fokus und Touch bleiben bedienbar.

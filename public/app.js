@@ -1,4 +1,35 @@
 // State
+const STORAGE_KEY_COLLAPSED = 'hrg_collapsed_projects';
+const STORAGE_KEY_SHOW_TASKLESS = 'hrg_show_taskless_folders';
+
+function loadCollapsedProjects() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_COLLAPSED);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function saveCollapsedProjects() {
+  try {
+    localStorage.setItem(STORAGE_KEY_COLLAPSED, JSON.stringify([...state.collapsedProjects]));
+  } catch {}
+}
+
+function loadShowTasklessFolders() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SHOW_TASKLESS);
+    if (raw !== null) return raw === 'true';
+  } catch {}
+  return true;
+}
+
+function saveShowTasklessFolders() {
+  try {
+    localStorage.setItem(STORAGE_KEY_SHOW_TASKLESS, String(state.showTasklessFolders));
+  } catch {}
+}
+
 let state = {
   rootDirectory: '',
   projects: [],
@@ -23,10 +54,10 @@ let state = {
   health: [],
   modelPresets: {},
   modelTests: {},
-  // Ordner sind standardmäßig ausgeklappt – hier landen nur bewusst zugeklappte.
-  collapsedProjects: new Set(),
-  // Alle Ordner des Workspace sind standardmäßig sichtbar (kompakt per Button reduzierbar).
-  showTasklessFolders: true,
+  // Gemerkter Ordnerzustand; ohne gespeicherte Wahl sind alle aufgeklappt.
+  collapsedProjects: loadCollapsedProjects(),
+  // Gemerkte Sichtbarkeit von Ordnern ohne Aufgaben.
+  showTasklessFolders: loadShowTasklessFolders(),
   // Archivierte Aufträge sind eingepackt, nicht gelöscht — erst der Schalter zeigt sie.
   showArchived: false,
   activeAgentsTab: 'rootDev',
@@ -1334,7 +1365,7 @@ function renderProjectTree() {
       <span class="folder-icon" data-icon="folder"></span>
       <span class="project-title" title="${escapeHtml(p.path)}">${escapeHtml(p.name)}</span>
       ${hasTasks ? `<span class="project-count" title="${projectTasks.length} Task(s) in diesem Ordner">${projectTasks.length}</span>` : ''}
-      ${p.hasAgentsMd ? '<span class="badge-tag">AGENTS</span>' : ''}
+      ${p.hasAgentsMd ? `<button type="button" class="badge-tag project-agents-btn" title="AGENTS.md für '${escapeHtml(p.name)}' bearbeiten">AGENTS</button>` : ''}
       <button class="add-task-btn" title="Neuen Task in '${escapeHtml(p.name)}' starten">＋</button>
     `;
 
@@ -1405,15 +1436,27 @@ function renderProjectTree() {
         return;
       }
 
+      if (e.target.closest('.project-agents-btn')) {
+        e.stopPropagation();
+        openProjectAgents(p.path);
+        return;
+      }
+
       if (e.target.classList.contains('toggle-arrow')) {
         e.stopPropagation();
         toggleProjectExpand(p.path);
         return;
       }
 
-      // Clicking the header selects project and expands it
+      if (p.path === state.activeProject) {
+        toggleProjectExpand(p.path);
+        return;
+      }
+
+      // Anderen Ordner auswählen und aufklappen
       selectProject(p.path);
       state.collapsedProjects.delete(p.path);
+      saveCollapsedProjects();
       renderProjectTree();
     });
 
@@ -1428,6 +1471,7 @@ function renderProjectTree() {
     more.textContent = `${hiddenTaskless.length} Ordner ohne Tasks ausgeblendet — einblenden`;
     more.addEventListener('click', () => {
       state.showTasklessFolders = true;
+      saveShowTasklessFolders();
       renderProjectTree();
     });
     dom.projectTree.appendChild(more);
@@ -1437,6 +1481,7 @@ function renderProjectTree() {
     less.textContent = 'Nur Ordner mit Tasks zeigen';
     less.addEventListener('click', () => {
       state.showTasklessFolders = false;
+      saveShowTasklessFolders();
       renderProjectTree();
     });
     dom.projectTree.appendChild(less);
@@ -1449,7 +1494,17 @@ function toggleProjectExpand(projectPath) {
   } else {
     state.collapsedProjects.add(projectPath);
   }
+  saveCollapsedProjects();
   renderProjectTree();
+}
+
+async function openProjectAgents(projectPath) {
+  state.activeProject = projectPath;
+  state.activeAgentsTab = 'project';
+  updateWorkspaceUI();
+  renderProjectTree();
+  await loadAgentsMd();
+  openSettingsModal('agents');
 }
 
 async function selectProject(projectPath) {
@@ -1506,6 +1561,7 @@ function selectTask(task) {
   if (task.projectPath && state.activeProject !== task.projectPath) {
     state.activeProject = task.projectPath;
     state.collapsedProjects.delete(task.projectPath);
+    saveCollapsedProjects();
     updateWorkspaceUI();
   }
 
