@@ -98,6 +98,11 @@
                 <span class="run-pane-backup-status"></span>
                 <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
               </div>
+              <div class="run-pane-attachment" hidden>
+                <img class="run-pane-image-preview" alt="Eingefügtes Bild">
+                <button type="button" class="btn-text run-pane-image-remove">Bild entfernen</button>
+              </div>
+              <span class="run-pane-image-status" role="status" aria-live="polite"></span>
               <div class="run-pane-composer">
                 <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
                 <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
@@ -106,7 +111,7 @@
                   <!-- Populated dynamically with available harnesses -->
                 </select>
                 <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" title="Optional: vorhandene Beads-Aufgabe verknüpfen" hidden></select>
-                <textarea class="run-pane-input" rows="1" placeholder="Aufgabe für diese Konsole…" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
+                <textarea class="run-pane-input" rows="1" placeholder="Aufgabe … Bild mit ⌘V / Strg+V einfügen" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
             </div>
@@ -128,6 +133,11 @@
                 <span class="run-pane-backup-status"></span>
                 <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
               </div>
+              <div class="run-pane-attachment" hidden>
+                <img class="run-pane-image-preview" alt="Eingefügtes Bild">
+                <button type="button" class="btn-text run-pane-image-remove">Bild entfernen</button>
+              </div>
+              <span class="run-pane-image-status" role="status" aria-live="polite"></span>
               <div class="run-pane-composer">
                 <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
                 <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
@@ -136,7 +146,7 @@
                   <!-- Populated dynamically with available harnesses -->
                 </select>
                 <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" title="Optional: vorhandene Beads-Aufgabe verknüpfen" hidden></select>
-                <textarea class="run-pane-input" rows="1" placeholder="Aufgabe für diese Konsole…" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
+                <textarea class="run-pane-input" rows="1" placeholder="Aufgabe … Bild mit ⌘V / Strg+V einfügen" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
             </div>
@@ -832,6 +842,7 @@
   </dialog>
   <script src="/konsole-schichten.js"></script>
   <script src="/task-state.js"></script>
+  <script src="image-composer.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

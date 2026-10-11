@@ -93,6 +93,7 @@ if (!fs.existsSync(SCHEDULES_FILE)) {
 
 app.use(express.json({ limit: '50mb' }));
 access.install(app, server, wss);
+require('./services/image-upload').installImageUpload(app, UPLOADS_DIR);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Model presets per harness (defaults + dynamic discovery)

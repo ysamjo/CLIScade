@@ -45,3 +45,14 @@ test('NAS gilt erst nach Übertragung und bestätigter Prüfsumme als gesichert'
  assert.match(remoteCalls.at(-1).args.at(-1),/sha256sum -c .*\.sha256/);
  assert.ok(fs.readFileSync(`${state.archive}.sha256`,'utf8').startsWith(state.checksum));
 });
+
+test('Standard sichert nur lokal und blendet alte ausstehende NAS-Transfers aus', t => {
+ const {defaultNas} = require('../services/beads-backup');
+ assert.equal(defaultNas('/Users/family'),null);
+ const f = fixture(t);
+ const service = new BeadsBackupService({beads:f.beads,stateDirectory:f.root});
+ const {digest} = require('../services/project-memory');
+ service.states[digest(fs.realpathSync(f.project))] = {local:'verified',remote:'pending',remoteError:'offline'};
+ assert.equal(service.status(f.project).remote,'disabled');
+ assert.equal(service.status(f.project).remoteError,undefined);
+});

@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "test": "npm run test:routing && node test/ui-smoke.mjs",
-    "test:routing": "node --test \"test/*.test.js\" \"test/runtime/*.test.js\""
+    "test:routing": "node --test \"test/*.test.js\" \"test/runtime/*.test.js\"",
+    "build:mac": "zsh mac-app/build.sh",
+    "open:mac": "open \"build/HarnessCascade.app\"",
+    "install:mac": "zsh mac-app/build.sh --install"
   },
   "keywords": [
     "harness",

@@ -166,6 +166,7 @@ window.Element.prototype.scrollIntoView = () => {};
 window.eval(readFileSync(join(PUBLIC, "icons.js"), "utf8"));
 window.eval(readFileSync(join(PUBLIC, "konsole-schichten.js"), "utf8"));
 window.eval(readFileSync(join(PUBLIC, "task-state.js"), "utf8"));
+window.eval(readFileSync(join(PUBLIC, "image-composer.js"), "utf8"));
 window.eval(readFileSync(join(PUBLIC, "app.js"), "utf8"));
 if (document.readyState !== "loading") {
   // Der Zuhörer auf DOMContentLoaded kam je nach jsdom-Timing zu spät.
@@ -767,6 +768,54 @@ memoryPane.querySelector('.run-pane-input').value = 'Ohne Beads prüfen';
 memoryPane.querySelector('.run-pane-send').click();
 pruefe('Nur bewusste Auswahl übermittelt withoutBeads', frames.some(frame => frame.type === 'dispatch' && frame.prompt === 'Ohne Beads prüfen' && frame.withoutBeads === true));
 pruefe('Die Beads-Ausnahme gilt nur für den gerade gesendeten Auftrag', !memoryPane.querySelector('.run-pane-without-beads').checked);
+
+// Bild-Einsetzen: getrennte Konsolen, Entwurfserhalt und einmaliger Dispatch.
+let uploadFails = true;
+let uploads = 0;
+const oldFetch = window.fetch;
+window.fetch = async (url, options) => {
+  if (url !== '/api/images') return oldFetch(url, options);
+  uploads++;
+  await ruhen(2);
+  return {ok:!uploadFails,json:async () => uploadFails ? {error:'Upload fehlgeschlagen'} : {imagePath:'/state/uploads/image.png'}};
+};
+window.URL.createObjectURL = () => 'blob:preview';
+window.URL.revokeObjectURL = () => {};
+const imageInput = memoryPane.querySelector('.run-pane-input');
+imageInput.focus();
+const imageFile = new window.File([new Uint8Array([137,80,78,71])], 'test.png', {type:'image/png'});
+function pasteImage() {
+  const event = new window.Event('paste', {bubbles:true,cancelable:true});
+  Object.defineProperty(event,'clipboardData',{value:{items:[{kind:'file',type:'image/png',getAsFile:() => imageFile}]}});
+  imageInput.dispatchEvent(event);
+  return event;
+}
+const textPaste = new window.Event('paste',{cancelable:true});
+imageInput.dispatchEvent(textPaste);
+pruefe('Text-Einsetzen bleibt unverändert', !textPaste.defaultPrevented);
+pruefe('Bild-Einsetzen wird verarbeitet', pasteImage().defaultPrevented);
+pruefe('Bildvorschau bleibt in ihrer Konsole', !memoryPane.querySelector('.run-pane-attachment').hidden && document.querySelector('#run-pane-1 .run-pane-attachment').hidden);
+imageInput.value = 'Bild prüfen';
+memoryPane.querySelector('.run-pane-image-remove').click();
+pruefe('Bild entfernen erhält den Text', imageInput.value === 'Bild prüfen' && memoryPane.querySelector('.run-pane-attachment').hidden);
+pasteImage();
+const dispatchCount = frames.filter(frame => frame.type === 'dispatch').length;
+memoryPane.querySelector('.run-pane-send').click();
+await ruhen(8);
+pruefe('Upload-Fehler erhält Bild und Text ohne Dispatch', imageInput.value === 'Bild prüfen' && !memoryPane.querySelector('.run-pane-attachment').hidden && frames.filter(frame => frame.type === 'dispatch').length === dispatchCount);
+uploadFails = false;
+imageInput.value = '';
+memoryPane.querySelector('.run-pane-send').click();
+memoryPane.querySelector('.run-pane-send').click();
+await ruhen(8);
+const imageDispatches = frames.filter(frame => frame.type === 'dispatch' && frame.imagePath);
+pruefe('Bild allein startet genau einen Auftrag mit Bildpfad', imageDispatches.length === 1 && imageDispatches[0].imagePath === '/state/uploads/image.png' && imageDispatches[0].prompt === 'Analysiere das beigefügte Bild.' && uploads === 2);
+pruefe('Erfolgreicher Dispatch leert die Vorschau', memoryPane.querySelector('.run-pane-attachment').hidden);
+imageInput.focus();
+pruefe('Mac-Brücke nimmt PNG bei fokussierter Auftragseingabe an', window.harnessPasteImage('data:image/png;base64,iVBORw==') && !memoryPane.querySelector('.run-pane-attachment').hidden);
+memoryPane.querySelector('.run-pane-image-remove').click();
+imageInput.blur();
+pruefe('Mac-Brücke lässt andere Eingabefelder unverändert', window.harnessPasteImage('data:image/png;base64,iVBORw==') === false);
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

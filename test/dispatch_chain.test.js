@@ -836,8 +836,12 @@ test('Kontext: Fallback erhält Richtlinien und Bild; Fortsetzung erhält Zwisch
   stubHarnesses['stub-context'] = ['codebuddy', 'codebuddy'];
   fs.writeFileSync(path.join(sandbox, 'AGENTS.md'), 'ROOT_KONTEXT_MARKER');
   fs.writeFileSync(path.join(projectDir, 'AGENTS.md'), 'PROJEKT_KONTEXT_MARKER');
-  const upload = path.join(stateDir, 'uploads', 'test.png');
-  fs.writeFileSync(upload, 'Testbild');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6t3AAAAAASUVORK5CYII=', 'base64');
+  const uploaded = await fetch(`http://127.0.0.1:${PORT}/api/images`, {
+    method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png
+  });
+  assert.equal(uploaded.status, 201);
+  const { imagePath: upload } = await uploaded.json();
   writeConfig([
     { name: 'Haenger', command: 'stub-hang' },
     { name: 'Kontext', command: 'stub-context' }
@@ -849,6 +853,7 @@ test('Kontext: Fallback erhält Richtlinien und Bild; Fortsetzung erhält Zwisch
   assert.match(output, /Beigefügtes Bild/);
   assert.match(output, /ZIEL_KONTEXT_MARKER/);
   const id = first.find((event) => event.type === 'task_created').task.id;
+  assert.deepEqual(fs.readFileSync(path.join(projectDir, `.harness-task-image-${id}.png`)), png);
   writeConfig([{ name: 'Kontext', command: 'stub-context' }]);
   const second = await runDispatch({ prompt: 'FORTSETZUNG_MARKER', previousTaskId: id });
   const resumed = second.filter((event) => event.type === 'output').map((event) => event.raw || '').join('');

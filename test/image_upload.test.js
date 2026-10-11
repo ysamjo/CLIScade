@@ -1,0 +1,26 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const express = require('express');
+const { installImageUpload } = require('../services/image-upload');
+test('Bild-Upload prüft Format, begrenzt Größe und speichert außerhalb des Projekts', async t => {
+ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cascade-images-'));
+ t.after(() => fs.rmSync(directory, { recursive:true, force:true }));
+ const app = express(); installImageUpload(app, directory);
+ const server = app.listen(0, '127.0.0.1'); t.after(() => server.close());
+ await new Promise(resolve => server.once('listening',resolve));
+ const url = `http://127.0.0.1:${server.address().port}/api/images`;
+ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6t3AAAAAASUVORK5CYII=', 'base64');
+ const post = (body, type) => fetch(url, {method:'POST',headers:{'Content-Type':type},body});
+ assert.equal((await post(png,'image/svg+xml')).status,415);
+ assert.equal((await post(Buffer.from('fake'),'image/png')).status,400);
+ assert.equal((await post(png,'image/jpeg')).status,400);
+ const response = await post(png,'image/png'); assert.equal(response.status,201);
+ const {imagePath} = await response.json(); assert.equal(path.dirname(imagePath), directory);
+ assert.deepEqual(fs.readFileSync(imagePath),png);
+ assert.equal(fs.statSync(imagePath).mode & 0o777,0o600);
+ assert.equal((await post(Buffer.alloc(10*1024*1024+1),'image/png')).status,413);
+ assert.equal(fs.readdirSync(directory).length,1);
+});

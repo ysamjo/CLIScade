@@ -17,7 +17,7 @@ async function main() {
   if (!beads.enabled(project)) throw new Error(`Beads fehlt in ${project}`);
   await service.request(project);
   const status = service.status(project);
-  console.log(`${index+1}/${projects.length} ${path.basename(project)}: lokal ${status.local}; NAS ${status.remote}`);
+  console.log(`${index+1}/${projects.length} ${path.basename(project)}: lokal ${status.local}`);
   if (status.local !== 'verified') process.exitCode = 1;
  }
  service.stop();

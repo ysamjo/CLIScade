@@ -4,10 +4,7 @@ const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { digest } = require('./project-memory');
-function defaultNas(home = process.env.HOME) {
- return home === '/Users/family' ? { host: 'root@192.168.178.162', key: '/Users/family/.ssh/id_ed25519_zimaos',
-  directory: '/DATA/AppData/harnessrouter/beads-backups' } : null;
-}
+function defaultNas() { return null; }
 function command(file, args, options = {}) {
  return new Promise((resolve, reject) => execFile(file, args, { timeout: 120000, maxBuffer: 1024 * 1024, ...options },
   (error, stdout) => error ? reject(new Error(`${path.basename(file)} fehlgeschlagen`)) : resolve(stdout)));
@@ -24,9 +21,12 @@ class BeadsBackupService {
  persist() {
   const temporary = `${this.file}.tmp`;
   fs.writeFileSync(temporary, JSON.stringify(this.states, null, 2), { mode: 0o600 }); fs.renameSync(temporary, this.file);
-  for (const state of Object.values(this.states)) if (state.projectPath) this.onChange(state.projectPath, state);
+  for (const state of Object.values(this.states)) if (state.projectPath) this.onChange(state.projectPath, this.nas ? state : { ...state, remote: 'disabled', remoteError: undefined });
  }
- status(cwd) { return this.states[digest(fs.realpathSync(cwd))] || { local: 'never', remote: this.nas ? 'pending' : 'disabled' }; }
+ status(cwd) {
+  const state = this.states[digest(fs.realpathSync(cwd))] || { local: 'never', remote: 'pending' };
+  return this.nas ? state : { ...state, remote: 'disabled', remoteError: undefined };
+ }
  request(cwd, { force = false } = {}) {
   if (this.stopped || !this.beads.enabled(cwd)) return Promise.resolve();
   const key = digest(fs.realpathSync(cwd));

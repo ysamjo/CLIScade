@@ -739,9 +739,10 @@ function setupRunPanes() {
     });
 
     // Der Composer gehört zum Feld: hier tippen, hier senden, hierher der Auftrag.
+    window.HarnessImages.setup(pane.root);
     pane.send.addEventListener('click', () => sendPrompt(slot));
     pane.input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         sendPrompt(slot);
       }
@@ -2322,10 +2323,11 @@ async function loadBeads(pane) {
 // --- DISPATCH TASK ---
 // Die Composer sperren nicht: mehrere Aufträge schnell nacheinander einreichen ist der
 // Weg, den Pool zu füllen. Die Kappe nimmt der Server, nicht das Fenster.
-function sendPrompt(slot = 0) {
+async function sendPrompt(slot = 0) {
   const pane = dom.runPanes[slot];
-  if (!pane) return;
-  const prompt = pane.input.value.trim();
+  if (!pane || pane.sending) return;
+  const image = window.HarnessImages.has(pane.root);
+  const prompt = pane.input.value.trim() || (image ? 'Analysiere das beigefügte Bild.' : '');
   if (!prompt) return;
 
   // Fortsetzung: der angeklickte Auftrag hat dem Feld sein Ziel geliehen. Sobald der
@@ -2346,7 +2348,23 @@ function sendPrompt(slot = 0) {
   else if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    if (image) {
+      pane.sending = true;
+      const controls = [pane.input, pane.send, pane.target, pane.routing, pane.beads, pane.withoutBeads, pane.root.querySelector('.run-pane-image-remove')].filter(Boolean);
+      controls.forEach(control => { control.disabled = true; });
+      try {
+        payload.imagePath = await window.HarnessImages.upload(pane.root);
+        if (state.ws.readyState !== WebSocket.OPEN) throw new Error('Verbindung zum Server unterbrochen. Bild und Text bleiben erhalten.');
+      } catch (error) {
+        window.HarnessImages.error(pane.root, error.message);
+        return;
+      } finally {
+        pane.sending = false;
+        controls.forEach(control => { control.disabled = false; });
+      }
+    }
     state.ws.send(JSON.stringify(payload));
+    window.HarnessImages.clear(pane.root);
     pane.input.value = '';
     if (pane.withoutBeads) pane.withoutBeads.checked = false;
     // Der neue Lauf zieht wieder in dieses Feld: nur so bleibt das alte Protokoll darüber.

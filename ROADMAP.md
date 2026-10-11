@@ -12,7 +12,7 @@ Stand: 11. Oktober 2026. Die Oberfläche bleibt Vanilla JS ohne Bundler; Ausfüh
 | `services/access-control.js` | LAN-Anmeldung, Origin-/Host-Prüfung und HTTP-/WebSocket-Zugang |
 | `services/beads-adapter.js` | Automatischer Projektkontext und optionale Aufgabenwahl; pro Projekt serialisiert |
 | `services/project-memory.js` | Strukturierte Erkenntnisse, Quellen, Prüfnachweise und Relevanzauswahl |
-| `services/beads-backup.js` | Native versionierte Sicherungen, echte Wiederherstellungsprobe und NAS-Prüfsumme |
+| `services/beads-backup.js` | Native versionierte Sicherungen, echte Wiederherstellungsprobe ohne automatische NAS-Übertragung |
 | `public/task-state.js` | Gemeinsamer Vertrag für Erfolg, Fehler, Abbruch und unvollständige Ausführung |
 | `runtime/` | Feste Programme, CLI-Argumente, Prozesssteuerung, normalisierte Ereignisse und native Sessions |
 | `routing.js` | Reine Routing- und Scheduler-Entscheidungen |
@@ -25,7 +25,7 @@ In eingerichteten Beads-Projekten lädt jeder Auftrag automatisch Workflow, getr
 
 Strukturierte Abschlussberichte speichern Entscheidungen und offene Schritte mit stabilen Schlüsseln, Quellen und Prüfstatus zurück nach Beads. Werkzeugereignisse liefern tatsächliche Test-Exit-Codes samt Zeit und Git-Stand; Agentenbehauptungen bleiben unbestätigt. Ein Auftrag wird erst nach seinem Speicher-Versuch abgeschlossen. Fachliche Aufgaben und AGENTS-Regeln werden nicht automatisch geändert.
 
-Native Beads-Sicherungen entstehen täglich und nach neuen Erkenntnissen. Jede neue Version wird in einer Wegwerf-Datenbank wiederhergestellt und mit allen Aufgaben sowie Erinnerungen verglichen. NAS-Übertragung ist erst nach bestätigter Prüfsumme erfolgreich; ein ausgefallenes NAS bleibt sichtbar ausstehend. Einzelheiten und manuelle Befehle stehen in der README.
+Native Beads-Sicherungen entstehen täglich und nach neuen Erkenntnissen. Jede neue Version wird in einer Wegwerf-Datenbank wiederhergestellt und mit allen Aufgaben sowie Erinnerungen verglichen. Die Sicherungen bleiben lokal; es erfolgt keine automatische NAS-Übertragung. Einzelheiten und manuelle Befehle stehen in der README.
 
 ## Nächste begrenzte Erweiterungen
 
