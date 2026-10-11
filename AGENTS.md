@@ -1,6 +1,6 @@
 # Harness Router GUI
 
-Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, codex, opencode, cline, codebuddy, qodercli, antigravity, cursor) parallel über die Projektordner eines Workspace dispatcht — inklusive Telegram-Relay.
+Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, codex, opencode, cline, codebuddy, qodercli, antigravity, cursor, grok, kiro) parallel über die Projektordner eines Workspace dispatcht — inklusive Telegram-Relay.
 
 ## Projekt-Kontext
 

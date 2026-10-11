@@ -1,7 +1,16 @@
 node_modules/
 .DS_Store
+build/
 *.log
 output.json
 
+
 # Lokale Sicherungen vor riskanten Umbauten
 Archiv/*.zip
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

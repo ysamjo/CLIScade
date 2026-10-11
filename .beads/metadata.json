@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "harness_router_gui",
+  "project_id": "e15026d0-dea0-4a38-8f9e-2b0e11f33c45"
+}
