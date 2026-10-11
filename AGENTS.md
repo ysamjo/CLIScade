@@ -145,3 +145,5 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Geöffnete Ausgabedetails zeigen keine wiederholte Vorschau/Kopfzeile. Das native `summary` bleibt als beschrifteter 24-Pixel-Pfeil mit Tastaturfokus bedienbar; geschlossen erscheint die Vorschau wieder.
 
 - Lange Modellnamen: Task-Status, CLI-Icon, Modell und Uhrzeit bleiben in einer Zeile; das Modell wird bei Platzmangel gekürzt und ist im Tooltip vollständig lesbar. Im Konsolenkopf erhält die Ordnerauswahl die volle Breite, CLI-Icon und Modell stehen darunter. Desktop und Mobil mit zwei Konsolen prüfen.
+
+- Folgeprompts nach einem Live-Lauf bleiben ohne Historienklick in derselben Konsole und übernehmen CLI, Modell und den jüngsten Vorgänger für den Kontext. Die Serverantwort wird über `requestId` zugeordnet; nur ältere Antworten ohne Anfrage-ID verwenden den Prompt als Rückfall. Ein bewusst neuer Task oder anderer Zielordner verwendet weiterhin die gewählte Route.

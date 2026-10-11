@@ -425,7 +425,9 @@ function setupWebSocket() {
       }
       // Der Auftrag hat sofort beim Einreichen sein Feld — auch wenn er danach wartet.
       // Die Harness-Bezeichnung kommt erst mit route_selected, vorher wäre sie geraten.
-      const Stelle = state.fortsetzung.findIndex((f) => f.prompt === data.task.prompt);
+      const Stelle = state.fortsetzung.findIndex((f) => data.task.requestId
+        ? f.requestId === data.task.requestId
+        : f.prompt === data.task.prompt);
       const besitzerSlot = Stelle === -1 ? slotFuerOrdner(data.task.projectPath) : undefined;
       if (besitzerSlot !== undefined) {
         const besitzer = streamAtSlot(besitzerSlot);
@@ -509,7 +511,11 @@ function setupWebSocket() {
         }
       }
       const stream = state.streams.get(data.taskId);
+      const finishedTask = state.tasks.find(task => task.id === data.taskId);
       if (stream) {
+        if (finishedTask?.projectPath && finishedTask.harness) {
+          stream.folge = { projectPath: finishedTask.projectPath, harness: finishedTask.harness, model: finishedTask.model || null, previousTaskId: finishedTask.id, beadId: finishedTask.beadId };
+        }
         stream.status = status === 'completed' ? 'done' : status;
         stream.cancelling = false;
         if (data.message) {
@@ -2519,18 +2525,16 @@ async function sendPrompt(slot = 0) {
         controls.forEach(control => { control.disabled = false; });
       }
     }
+    // Vor dem Senden zuordnen: auch eine sofortige Antwort gehört in dieses Feld.
+    if (folge && stream) {
+      state.fortsetzung.push({
+        requestId: payload.requestId, prompt: payload.prompt, slot, buffer: stream.buffer, folge: stream.folge
+      });
+    }
     state.ws.send(JSON.stringify(payload));
     window.HarnessImages.clear(pane.root);
     pane.input.value = '';
     if (pane.withoutBeads) pane.withoutBeads.checked = false;
-    // Der neue Lauf zieht wieder in dieses Feld: nur so bleibt das alte Protokoll darüber.
-    // Angenommen wird die Fortsetzung über den Aufgabentext, weil die Task-ID hier noch fehlt.
-    state.fortsetzung = state.fortsetzung.filter((f) => Date.now() - f.at < 15000);
-    if (folge && stream) {
-      state.fortsetzung.push({
-        prompt: payload.prompt, slot, buffer: stream.buffer, folge: stream.folge, at: Date.now()
-      });
-    }
     refreshRunPool();
   } else {
     alert("Verbindung zum Server unterbrochen.");

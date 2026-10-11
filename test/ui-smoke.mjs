@@ -953,5 +953,26 @@ await ruhen(2);
 const layoutPane = [...document.querySelectorAll('.run-pane')].find(p => p.querySelector('.run-pane-title').textContent === layoutTask.prompt);
 pruefe('Konsolenkopf zeigt CLI-Icon und vollständiges Modell im Tooltip', layoutPane?.querySelector('.run-pane-harness img')?.getAttribute('src') === '/harness-icons/opencode.png' && layoutPane?.querySelector('.run-pane-model')?.title === longModel);
 
+// Ein frisch beendeter Live-Lauf ist ohne Historienklick fortsetzbar.
+sag({type:'done',taskId:layoutTask.id,exitCode:0});
+await ruhen(2);
+const liveSlot = [...document.querySelectorAll('.run-pane')].indexOf(layoutPane);
+frames.length = 0;
+tippe(liveSlot, 'Weiter am Live-Auftrag');
+enter(liveSlot);
+await ruhen(2);
+const liveFollow = sendungen()[0];
+pruefe('Live-Folgeprompt übernimmt CLI, Modell und Vorgänger', liveFollow?.harnessOverride === 'opencode_cli' && liveFollow?.modelOverride === longModel && liveFollow?.previousTaskId === layoutTask.id, JSON.stringify(liveFollow));
+sag({type:'task_created',taskId:'live-follow',task:{...layoutTask,id:'live-follow',requestId:liveFollow.requestId,prompt:'Weiter am Live-Auftrag',status:'queued'}});
+sag({type:'route_selected',taskId:'live-follow',harness:'opencode_cli',command:'opencode',model:longModel});
+sag({type:'output',taskId:'live-follow',html:'LIVE-FOLGE-AUSGABE'});
+await ruhen(2);
+pruefe('Live-Folgeprompt bleibt in seiner Konsole', konsole(liveSlot).textContent.includes('LIVE-FOLGE-AUSGABE') && !konsole(1-liveSlot).textContent.includes('LIVE-FOLGE-AUSGABE'));
+sag({type:'done',taskId:'live-follow',exitCode:0});
+await ruhen(2);
+frames.length = 0;
+tippe(liveSlot, 'Zweite Live-Fortsetzung');enter(liveSlot);await ruhen(2);
+pruefe('Nächste Fortsetzung verweist auf den jüngsten Lauf', sendungen()[0]?.previousTaskId === 'live-follow');
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;
