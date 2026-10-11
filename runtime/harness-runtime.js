@@ -4,6 +4,7 @@ const { runProcess } = require('./process-runner');
 const { canonicalEvent } = require('./events');
 const { classifyError } = require('./errors');
 const { hasSession, acquireSession } = require('./session-store');
+const { prepareHeadlessPrompt } = require('./headless-prompt');
 
 const ADAPTERS = Object.freeze({
   claude: require('./adapters/claude'), codex: require('./adapters/codex'),
@@ -73,7 +74,7 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
       error: { kind: 'not_installed', retryability: 'next_harness', message: `${entry.name} ist nicht installiert` }, events, exitCode: null
     };
     if (entry.limitations) emit({ type: 'warning', text: `${entry.limitations}\n` });
-    const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env: runEnv, execution });
+    const args = adapter.build({ prompt: prepareHeadlessPrompt(prompt), model, sessionId: resume ? previousSessionId : null, cwd, env: runEnv, execution });
     const structured = entry.structuredOutput;
     const consume = (line) => {
       if (!line) return;

@@ -4,6 +4,16 @@ const { classifyError } = require('../../runtime/errors');
 
 test('Erfolgreiche Ausgabe mit Fehlerbegriffen bleibt erfolgreich', () => {
   assert.equal(classifyError({ raw: 'Die Dokumentation erwähnt HTTP 429 und Login.', exitCode: 0 }), null);
+  assert.equal(classifyError({ raw: 'Keine Rückfragen: Please select [1/2] ist ein Beispiel.\nPermission denied wurde im Test erwartet.', exitCode: 0 }), null);
+});
+
+test('Explizite Interaktionsverweigerung wird auch bei Exit 0 als Fallback behandelt', () => {
+  for (const raw of ['Interactive mode is required', 'Error: Cannot prompt in non-interactive mode', '\u001b[31mError: stdin is not a TTY\u001b[0m']) {
+    const error = classifyError({ raw, exitCode: 0 });
+    assert.equal(error.kind, 'interactive_required');
+    assert.equal(error.retryability, 'next_harness');
+  }
+  assert.equal(classifyError({ explicit: 'Interactive mode is required', exitCode: 1, reason: 'cancelled' }).kind, 'cancelled');
 });
 
 test('Explizite und fehlgeschlagene Fehler werden klassifiziert', () => {

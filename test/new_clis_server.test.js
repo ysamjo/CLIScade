@@ -8,6 +8,7 @@ const { spawn } = require('node:child_process');
 const net = require('node:net');
 const WebSocket = require('ws');
 const { HARNESS_REGISTRY } = require('../runtime/registry');
+const { HEADLESS_AUTONOMY_INSTRUCTION } = require('../runtime/headless-prompt');
 const ids = ['junie', 'kilo', 'copilot', 'kiro', 'vibe'];
 let root, bin, project, server, base, log = '';
 const response = id => id === 'junie' ? 'OK\n' : JSON.stringify({
@@ -23,7 +24,7 @@ const fs=require('node:fs');
 const args=process.argv.slice(2);
 if(args.includes('--version')){console.log('test-1.0');process.exit(0);}
 fs.appendFileSync(${JSON.stringify(path.join(root,'calls.jsonl'))},JSON.stringify({id:${JSON.stringify(id)},args,cwd:process.cwd(),model:process.env.VIBE_ACTIVE_MODEL})+'\\n');
-${mode === 'layers' ? `process.stdout.write(${JSON.stringify([{type:'reasoning',part:{text:'Gedanke eins\nGedanke zwei'}},{type:'tool_use',part:{tool:'shell',callID:'test-tool',state:{status:'completed',output:'Ergebnis eins\nErgebnis zwei',metadata:{exit:0}}}},{type:'text',part:{text:'FERTIGE_ANTWORT'}}].map(JSON.stringify).join('\n')+'\n')});` : mode === 'quota' ? "console.error('quota exceeded');process.exit(1);" : `process.stdout.write(${JSON.stringify(response(id))});`}
+${mode === 'layers' ? `process.stdout.write(${JSON.stringify([{type:'reasoning',part:{text:'Gedanke eins\nGedanke zwei'}},{type:'tool_use',part:{tool:'shell',callID:'test-tool',state:{status:'completed',output:'Ergebnis eins\nErgebnis zwei',metadata:{exit:0}}}},{type:'text',part:{text:'FERTIGE_ANTWORT'}}].map(JSON.stringify).join('\n')+'\n')});` : mode === 'idle' ? "console.log('Please select [1/2]');setInterval(()=>{},1000);" : mode === 'interactive' ? "console.log('Error: Cannot prompt in non-interactive mode');" : mode === 'permission' ? "console.error('Permission denied');process.exit(1);" : mode === 'quota' ? "console.error('quota exceeded');process.exit(1);" : `process.stdout.write(${JSON.stringify(response(id))});`}
 `, { mode: 0o755 });
 }
 async function api(url, body) {
@@ -57,7 +58,7 @@ test.before(async () => {
   fs.writeFileSync(path.join(bin,'codebuddy'),'#!/bin/sh\necho BESTEHENDES_HARNESS_OK\n',{mode:0o755});
   const port = await new Promise(resolve=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>resolve(p));});});
   base=`http://127.0.0.1:${port}`;
-  server=spawn(process.execPath,['server.js'],{cwd:path.join(__dirname,'..'),env:{HOME:root,PATH:`${bin}:/usr/bin:/bin`,SHELL:path.join(bin,'shell'),HOST:'127.0.0.1',PORT:String(port),HARNESS_BEADS_BACKUPS:'0'},stdio:['ignore','pipe','pipe']});
+  server=spawn(process.execPath,['server.js'],{cwd:path.join(__dirname,'..'),env:{HOME:root,PATH:`${bin}:/usr/bin:/bin`,SHELL:path.join(bin,'shell'),HOST:'127.0.0.1',PORT:String(port),HARNESS_BEADS_BACKUPS:'0',HARNESS_IDLE_TIMEOUT_MS:'1500'},stdio:['ignore','pipe','pipe']});
   server.stdout.on('data',c=>{log+=c}); server.stderr.on('data',c=>{log+=c});
   for(let n=0;n<100;n++){try{await api('/api/status');return;}catch{await new Promise(r=>setTimeout(r,50));}}
   throw new Error(log);
@@ -94,6 +95,7 @@ test('Konfiguration persistiert alle fünf; jeder Dispatcher erhält Regeln und 
     assert.equal(messages.at(-1).type,'done',JSON.stringify(messages));
     const calls=fs.readFileSync(path.join(root,'calls.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
     const args=calls.at(-1).args.join('\n');
+    assert.ok(args.includes(HEADLESS_AUTONOMY_INSTRUCTION));
     assert.match(args,/PROJEKTREGEL_NEUE_CLIS/); assert.ok(args.includes(`AUFTRAG_${id}`));
   }
 });
@@ -117,5 +119,26 @@ test('Quota-Kaskade wechselt durch alle fünf zum bestehenden Harness ohne Konte
   assert.deepEqual(messages.filter(m=>m.type==='route_selected').map(m=>m.harness),[...ids,'codebuddy']);
   assert.equal(messages.at(-1).type,'done');
   const calls=fs.readFileSync(path.join(root,'calls.jsonl'),'utf8').trim().split('\n').map(JSON.parse).slice(-5);
-  for(const call of calls){assert.match(call.args.join('\n'),/PROJEKTREGEL_NEUE_CLIS/);assert.match(call.args.join('\n'),/AUFTRAG_FALLBACK/);}
+  for(const call of calls){assert.ok(call.args.join('\n').includes(HEADLESS_AUTONOMY_INSTRUCTION));assert.match(call.args.join('\n'),/PROJEKTREGEL_NEUE_CLIS/);assert.match(call.args.join('\n'),/AUFTRAG_FALLBACK/);}
 });
+
+for (const mode of ['permission', 'interactive', 'idle']) {
+  test(`${mode}: kontrollierter Fallback erhält Autonomie, Regeln und Auftrag`, async () => {
+    stub('junie', mode);
+    stub('copilot');
+    await api('/api/config', { clis: ['junie', 'copilot'].map(id => ({ harnessId: id, name: id, enabled: true })) });
+    const messages = await dispatch(`AUTONOMIE_FALLBACK_${mode}`);
+    assert.deepEqual(messages.filter(m => m.type === 'route_selected').map(m => m.harness), ['junie', 'copilot']);
+    assert.equal(messages.at(-1).type, 'done');
+    const calls = fs.readFileSync(path.join(root, 'calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).slice(-2);
+    for (const call of calls) {
+      const args = call.args.join('\n');
+      assert.equal(args.split(HEADLESS_AUTONOMY_INSTRUCTION).length - 1, 1);
+      assert.match(args, /PROJEKTREGEL_NEUE_CLIS/);
+      assert.ok(args.includes(`AUTONOMIE_FALLBACK_${mode}`));
+      assert.ok(!call.args.includes('--allow-all-tools'));
+      assert.ok(!call.args.includes('--dangerously-skip-permissions'));
+    }
+    assert.match(calls[1].args.join('\n'), mode === 'permission' ? /Permission denied/ : mode === 'interactive' ? /interaktive Eingabe/ : /Keine Ausgabe innerhalb der Frist/);
+  });
+}

@@ -58,11 +58,23 @@ Dokumentationsstand: 11.10.2026. Grundlagen: [Junie Headless](https://junie.jetb
 
 ## Ausführung
 
-- **Claude Code, Codex, Cline, OpenCode, Qoder, Antigravity, CodeBuddy und Cursor** laufen headless über `runHarness()` und einen gemeinsamen Process Runner. Die vier erstgenannten Harnesses liefern strukturierte Ereignisse; die anderen Adapter verarbeiten ihre Textausgabe.
+- **Alle 13 Harnesses** laufen headless über `runHarness()` und einen gemeinsamen Process Runner. Claude Code, Codex, Cline, OpenCode, Kilo, Copilot, Kiro und Vibe liefern strukturierte Ereignisse; die anderen Adapter verarbeiten ihre Textausgabe.
 - `runtime/registry.js` ist die feste Liste der ausführbaren Programme und Fähigkeiten. In `config.yaml` stehen Routen mit `harnessId`, Name, Modell und Aktivierung. Alte bekannte `command`-Routen werden beim Laden migriert; davor entsteht einmalig `config.yaml.before-harness-migration` als Sicherung. Frei angegebene Programme werden nicht ausgeführt.
 - `runtime/adapters/` baut die CLI-Aufrufe und normalisiert Ausgaben. `runtime/process-runner.js` verwaltet Prozessgruppen, Abbruch und Zeitlimits. `runtime/session-store.js` prüft native Sessions vor Resume und verhindert parallele Turns derselben Session. `routing.js` trifft reine Routing- und Scheduler-Entscheidungen; `server.js` führt Queue, HTTP, WebSocket und Integrationen zusammen. Jeder Spawn erhält eine bereinigte Umgebung: das Gerüst der aufrufenden App (`SERVER__PORT`, `SERVER__HOST`) wird entfernt, sonst bindet der Harness deren belegten Web-UI-Port und bricht mit `EADDRINUSE` ab.
 
 Die Adapterstruktur orientiert sich an den [Runner-Mustern von HarnessRouter](https://github.com/HarnessRouter/harnessrouter). Dieses Projekt nutzt dessen Server oder Container nicht als Abhängigkeit.
+
+### Fachliche Autonomie ohne Rückfrage-Protokoll
+
+`runtime/headless-prompt.js` stellt jedem Auftragskontext unmittelbar vor dem Adapter-Aufruf dieselbe Autonomieinstruktion voran. Sie gilt für alle 13 Harnesses, neue Aufträge, native Fortsetzungen, Fallback, Konsens, Scheduler, Telegram und Modelltests. Auftrag, Projektregeln und vorhandener Kontext bleiben vollständig erhalten; die feste Instruktion kommt zusätzlich zum ContextService-Budget hinzu.
+
+Bei fachlichen Auswahlmöglichkeiten entscheiden die Agenten grundsätzlich selbst: keine Rückfragen oder Auswahlmenüs, keine Wartezeit auf Terminal-Eingaben. Sie wählen eine sinnvolle, möglichst kleine Lösung, dokumentieren wesentliche Annahmen samt Gründen kurz im Ergebnis und fahren mit Implementierung und passenden Tests fort. Explizite Nutzereinstellungen und Projekt-/AGENTS.md-Regeln haben Vorrang. Verlangen diese eine Bestätigung, darf der Agent sie nicht erfinden: Er soll die fehlende Voraussetzung als Fehler melden.
+
+**Autonomie erweitert keine Werkzeugrechte.** Die Instruktion verbietet zusätzliche Tools/Rechte, Änderungen an Trust-/Freigabekonfigurationen, pauschale Freigabeflags und Sandbox-Umgehung. Die bestehenden Adapterflags und ausdrücklich gespeicherten Ausführungseinstellungen bleiben unverändert; insbesondere ist Codex weiterhin standardmäßig `workspace-write`. Bestehende pauschale Freigabe-/Trust-Flags älterer Adapter werden durch diese Änderung weder eingeführt noch entfernt. Das ist eine fachliche Arbeitsanweisung, keine zusätzliche technische Sandbox und keine Garantie für das Verhalten eines Modells.
+
+STDIN bleibt geschlossen (`ignore`): Der Router sendet keine Auswahlantworten oder Freigaben. Erfasste Berechtigungsfehler sowie eindeutige CLI-Diagnosezeilen wie `Interactive mode is required`, `Cannot prompt in non-interactive mode` oder `stdin is not a TTY` enden kontrolliert mit Fallback, auch wenn die CLI dabei Exit-Code 0 liefert. Allgemeine Fragen oder zitierte Menütexte werden nicht heuristisch beantwortet. Blockiert eine CLI ohne verwertbare Fehlermeldung, gelten weiterhin 180 Sekunden ohne Ausgabe (`HARNESS_IDLE_TIMEOUT_MS` für Tests konfigurierbar) und 30 Minuten Gesamtzeit, auch bei wiederholt ausgegebenen Menüs. Anschließend SIGTERM, nach fünf Sekunden nötigenfalls SIGKILL; Benutzerabbruch bleibt `cancelled`. Ein einzelner oder letzter fehlgeschlagener Versuch endet als Fehler. Es gibt kein neues ACP-/WebSocket-Interaktionsprotokoll und keine UI-Rückfragen.
+
+Die Tests `test/runtime/headless-prompt.test.js`, `test/runtime/process-runner.test.js`, `test/runtime/errors.test.js` und `test/new_clis_server.test.js` prüfen die Promptweitergabe an alle 13 Adapter, unveränderte Argumente/Berechtigungen, STDIN-EOF, native Fortsetzung, wiederholte Menüs mit Gesamtzeitlimit und Server-Fallback bei Berechtigungsfehlern, Interaktionsverweigerung und stillen Blockaden. Diese Prüfungen verwenden echte Kindprozesse mit Stub-CLIs; sie belegen keine autonome Entscheidung realer Anbietermodelle.
 
 ## Start und Zustand
 
