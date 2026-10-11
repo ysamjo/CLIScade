@@ -139,8 +139,8 @@ function runDispatch(payload, onMessage) {
       const msg = JSON.parse(raw.toString());
       messages.push(msg);
       if (onMessage) onMessage(msg, ws);
-      if (msg.type === 'done') { clear(); finish(); }
-      if (msg.type === 'error') { clear(); reject(new Error(msg.message + '\n' + describe(messages))); }
+      if (['done', 'error', 'cancelled'].includes(msg.type) && msg.taskId) { clear(); finish(); }
+      if (msg.type === 'error' && !msg.taskId) { clear(); reject(new Error(msg.message + '\n' + describe(messages))); }
     });
   });
 }
@@ -263,18 +263,18 @@ function runMany(payloads, onMessage) {
       const msg = JSON.parse(raw.toString());
       messages.push(msg);
       if (onMessage) onMessage(msg, ws);
-      if (msg.type === 'done') {
+      if (['done', 'error', 'cancelled'].includes(msg.type) && msg.taskId) {
         finished += 1;
         if (finished >= payloads.length) { stop(); resolve(messages); }
       }
-      if (msg.type === 'error') { stop(); reject(new Error(msg.message + '\n' + describe(messages))); }
+      if (msg.type === 'error' && !msg.taskId) { stop(); reject(new Error(msg.message + '\n' + describe(messages))); }
     });
   });
 }
 
 const createdIds = (messages) => messages.filter((m) => m.type === 'task_created').map((m) => m.task.id);
 const startStopSeq = (messages) => messages
-  .filter((m) => m.type === 'route_selected' || m.type === 'done')
+  .filter((m) => m.type === 'route_selected' || ['done', 'error', 'cancelled'].includes(m.type))
   .map((m) => `${m.type}:${m.taskId}`);
 
 test('parallel: zwei Projekte ueberlappen, statt aufeinander zu warten', async () => {
@@ -410,7 +410,7 @@ test('parallel: Abbrechen trifft nur den eigenen Task', async () => {
     ws.send(JSON.stringify({ type: 'cancel', taskId: msg.taskId }));
   });
 
-  const dones = messages.filter((m) => m.type === 'done');
+  const dones = messages.filter((m) => ['done', 'error', 'cancelled'].includes(m.type));
   const cancelled = dones.find((d) => /Abgebrochen/.test(d.message || ''));
   const other = dones.find((d) => d.taskId !== (cancelled && cancelled.taskId));
   const trail = describe(messages);
@@ -439,7 +439,7 @@ test('Wartenden Auftrag abbrechen speichert den Abbruch-Code', async () => {
   const saved = (await httpJson('/api/tasks')).tasks.find((task) => task.id === cancelledId);
   assert.equal(saved.status, 'cancelled');
   assert.equal(saved.exitCode, 130);
-  assert.equal(messages.filter((message) => message.type === 'done').length, 2);
+  assert.equal(messages.filter((message) => ['done', 'error', 'cancelled'].includes(message.type)).length, 2);
 });
 
 test('parallel: die Ausgabe eines tickenden Laufs bleibt Zeile fuer Zeile', async () => {
@@ -635,11 +635,10 @@ test('Skill-Installation führt Repository-URLs nicht als Shell-Befehl aus', asy
 });
 
 function legeTasks(taskList) {
-  fs.writeFileSync(path.join(parState, 'studio-tasks.json'), JSON.stringify({
-    rootDirectory: parDir,
-    activeProject: parProjectA,
-    tasks: taskList
-  }));
+  const { TaskStore } = require('../services/task-store');
+  const store = new TaskStore(parState, parDir);
+  try { store.write({ rootDirectory: parDir, activeProject: parProjectA, tasks: taskList }); }
+  finally { store.close(); }
 }
 
 const fertig = (id) => ({
@@ -828,4 +827,41 @@ test.after(async () => {
   parServer.kill('SIGKILL');
   fs.rmSync(sandbox, { recursive: true, force: true });
   fs.rmSync(parDir, { recursive: true, force: true });
+});
+
+test('Kontext: Fallback erhält Richtlinien und Bild; Fortsetzung erhält Zwischenstand', async () => {
+  await waitForServer();
+  const contextStub = path.join(binDir, 'stub-context');
+  fs.writeFileSync(contextStub, '#!/bin/sh\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
+  stubHarnesses['stub-context'] = ['codebuddy', 'codebuddy'];
+  fs.writeFileSync(path.join(sandbox, 'AGENTS.md'), 'ROOT_KONTEXT_MARKER');
+  fs.writeFileSync(path.join(projectDir, 'AGENTS.md'), 'PROJEKT_KONTEXT_MARKER');
+  const upload = path.join(stateDir, 'uploads', 'test.png');
+  fs.writeFileSync(upload, 'Testbild');
+  writeConfig([
+    { name: 'Haenger', command: 'stub-hang' },
+    { name: 'Kontext', command: 'stub-context' }
+  ]);
+  const first = await runDispatch({ prompt: 'ZIEL_KONTEXT_MARKER', imagePath: upload });
+  const output = first.filter((event) => event.type === 'output').map((event) => event.raw || '').join('');
+  assert.match(output, /ROOT_KONTEXT_MARKER/);
+  assert.match(output, /PROJEKT_KONTEXT_MARKER/);
+  assert.match(output, /Beigefügtes Bild/);
+  assert.match(output, /ZIEL_KONTEXT_MARKER/);
+  const id = first.find((event) => event.type === 'task_created').task.id;
+  writeConfig([{ name: 'Kontext', command: 'stub-context' }]);
+  const second = await runDispatch({ prompt: 'FORTSETZUNG_MARKER', previousTaskId: id });
+  const resumed = second.filter((event) => event.type === 'output').map((event) => event.raw || '').join('');
+  assert.match(resumed, /Arbeitsstand aus Auftrag/);
+  assert.match(resumed, /ZIEL_KONTEXT_MARKER/);
+  assert.match(resumed, /FORTSETZUNG_MARKER/);
+  assert.match(resumed, /Beigefügtes Bild/);
+});
+
+test('Skills-Inventar erzeugt keine Harness-Verzeichnisse', async () => {
+  await waitForParServer();
+  const target = path.join(parDir, '.codex', 'skills');
+  fs.rmSync(target, { recursive: true, force: true });
+  await httpJson('/api/skills');
+  assert.equal(fs.existsSync(target), false);
 });

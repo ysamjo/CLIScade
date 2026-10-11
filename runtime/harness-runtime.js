@@ -33,7 +33,7 @@ function availableCommand(entry, env) {
 }
 
 async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previousSessionId, signal, env = process.env,
-  idleTimeoutMs = 180000, timeoutMs = 30 * 60 * 1000, onEvent, onSpawn, onIdle } = {}) {
+  execution = {}, idleTimeoutMs = 180000, timeoutMs = 30 * 60 * 1000, onEvent, onSpawn, onIdle } = {}) {
   const entry = HARNESS_REGISTRY[harnessId];
   if (!entry || !entry.dispatchable) return {
     status: 'failed', finalText: '', sessionId: null, model,
@@ -70,7 +70,7 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
       status: 'failed', finalText, sessionId, model,
       error: { kind: 'not_installed', retryability: 'next_harness', message: `${entry.name} ist nicht installiert` }, events, exitCode: null
     };
-    const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env: runEnv });
+    const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env: runEnv, execution });
     const structured = entry.structuredOutput;
     const consume = (line) => {
       if (!line) return;

@@ -3046,3 +3046,14 @@ kbd {
 .btn-text-danger:hover {
   color: var(--danger-hover);
 }
+
+/* Zugang und optionale Aufgabenverknüpfung */
+#access-dialog { color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; max-width: min(420px, calc(100vw - 32px)); }
+#access-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+#access-form { display: grid; gap: 12px; }
+#access-form h2, #access-form p { margin: 0; }
+#access-code { width: 100%; box-sizing: border-box; padding: 10px; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; }
+#access-code[aria-invalid="true"] { border-color: var(--danger); }
+#access-error { color: var(--danger); min-height: 1.5em; }
+.run-pane-beads { max-width: 100%; }
+.run-pane-beads[hidden] { display: none; }

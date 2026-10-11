@@ -100,6 +100,7 @@
                   <option value="consensus">Konsens</option>
                   <!-- Populated dynamically with available harnesses -->
                 </select>
+                <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" title="Optional: vorhandene Beads-Aufgabe verknüpfen" hidden></select>
                 <textarea class="run-pane-input" rows="1" placeholder="Aufgabe für diese Konsole…" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
@@ -124,6 +125,7 @@
                   <option value="consensus">Konsens</option>
                   <!-- Populated dynamically with available harnesses -->
                 </select>
+                <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" title="Optional: vorhandene Beads-Aufgabe verknüpfen" hidden></select>
                 <textarea class="run-pane-input" rows="1" placeholder="Aufgabe für diese Konsole…" title="Enter sendet in dieser Konsole, Umschalt+Enter macht eine neue Zeile"></textarea>
                 <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
               </div>
@@ -295,6 +297,10 @@
               <span class="inline-hint">Aufträge nebeneinander — pro Ordner nur einer.</span>
             </div>
 
+            <div class="settings-inline-row">
+              <label><input type="checkbox" id="codex-unsafe-input"> Codex ohne Sandbox ausführen</label>
+              <span class="inline-hint">Standard: Schreiben im Projektordner. Diese Freigabe gilt für alle Codex-Aufträge.</span>
+            </div>
             <div class="settings-card-footer">
               <button id="save-settings-btn" class="btn btn-primary">Prioritäten & Modelle speichern</button>
               <span id="settings-save-feedback" class="feedback-text"></span>
@@ -804,7 +810,18 @@
     </div>
   </div>
 
+  <dialog id="access-dialog" aria-labelledby="access-title">
+    <form id="access-form">
+      <h2 id="access-title">LAN-Zugang</h2>
+      <p>Zugangscode vom Mac eingeben.</p>
+      <label for="access-code">Zugangscode</label>
+      <input id="access-code" name="code" type="password" autocomplete="current-password" required aria-describedby="access-error" autofocus>
+      <p id="access-error" role="alert"></p>
+      <button class="btn btn-primary" type="submit">Anmelden</button>
+    </form>
+  </dialog>
   <script src="/konsole-schichten.js"></script>
+  <script src="/task-state.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

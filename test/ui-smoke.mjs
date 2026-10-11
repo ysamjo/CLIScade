@@ -53,6 +53,7 @@ const MODEL_TEST_ROUTES = [
 ];
 
 const ANTWORTEN = {
+  "GET /api/access": { authorized: true, local: true },
   "GET /api/status": {
     health: HEALTH,
     clis: [...HEALTH.slice(0, 2), ...MODEL_TEST_ROUTES],
@@ -164,6 +165,7 @@ window.Element.prototype.scrollIntoView = () => {};
 
 window.eval(readFileSync(join(PUBLIC, "icons.js"), "utf8"));
 window.eval(readFileSync(join(PUBLIC, "konsole-schichten.js"), "utf8"));
+window.eval(readFileSync(join(PUBLIC, "task-state.js"), "utf8"));
 window.eval(readFileSync(join(PUBLIC, "app.js"), "utf8"));
 if (document.readyState !== "loading") {
   // Der Zuhörer auf DOMContentLoaded kam je nach jsdom-Timing zu spät.
@@ -728,6 +730,24 @@ pruefe("Klick markiert genau das Feld des Auftrags",
   markiert.length === 1 && markiert[0] === layerSlot, JSON.stringify(markiert));
 pruefe("Klick auf einen liegenden Auftrag holt die Konsole wieder hervor",
   document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
+
+// Abschlussregression: der Exit-Code und der Status bestimmen die Anzeige.
+for (const [id, type, status, code] of [
+  ["review_failure", "error", "failed", 1],
+  ["review_cancel", "cancelled", "cancelled", 130],
+  ["review_partial", "error", "incomplete", 1]
+]) {
+  sag({ type: "task_created", task: auftrag(id, "proj-a", id) });
+  sag({ type: "route_selected", taskId: id, harness: "Cline", model: "Standard" });
+  if (type === "cancelled") {
+    sag({ type: "abbruch_laeuft", taskId: id });
+    pruefe("Abbruch wird sofort quittiert", [...document.querySelectorAll(".run-pane-cancel")].some((b) => b.disabled && b.textContent === "Bricht ab…"));
+  }
+  sag({ type, taskId: id, status, exitCode: code, message: id });
+  const item = document.querySelector(`.task-item[data-task-id="${id}"]`);
+  pruefe(`${status} bekommt keinen grünen Erfolgsstatus`, Boolean(item) && !item.querySelector(".task-badge").textContent.startsWith("●"));
+  pruefe(`${status} gibt das Konsolenfeld frei`, [...document.querySelectorAll(".run-pane")].filter((pane) => pane.querySelector(".run-pane-title").textContent === id).every((pane) => pane.querySelector(".run-pane-cancel").hidden));
+}
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

@@ -8,6 +8,12 @@ const { spawn, execFileSync, execSync, exec } = require('child_process');
 const yaml = require('js-yaml');
 const Convert = require('ansi-to-html');
 const QRCode = require('qrcode');
+const { TaskStore } = require('./services/task-store');
+const { createDispatchService, DEFAULT_MAX_CONCURRENT } = require('./services/dispatch-service');
+const { loadRules, gitState, checkpoint, buildContext } = require('./services/context-service');
+const { BeadsAdapter } = require('./services/beads-adapter');
+const { createAccessControl } = require('./services/access-control');
+const { terminalMessage } = require('./public/task-state');
 const {
   knownBrokenBlocker,
   dispatchSlotDecision,
@@ -38,7 +44,7 @@ function makeChunkRenderer() {
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -66,15 +72,9 @@ if (!fs.existsSync(AGENTS_MD_FILE)) {
 `, 'utf8');
 }
 
-// Initial studio-tasks.json
-if (!fs.existsSync(TASKS_FILE)) {
-  const initial = {
-    rootDirectory: DEFAULT_ROOT_DIR,
-    activeProject: '',
-    tasks: []
-  };
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(initial, null, 2), 'utf8');
-}
+const taskStore = new TaskStore(STATE_DIR, DEFAULT_ROOT_DIR);
+const beads = new BeadsAdapter();
+const access = createAccessControl(STATE_DIR);
 
 const UPLOADS_DIR = path.join(STATE_DIR, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -87,6 +87,7 @@ if (!fs.existsSync(SCHEDULES_FILE)) {
 }
 
 app.use(express.json({ limit: '50mb' }));
+access.install(app, server, wss);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Model presets per harness (defaults + dynamic discovery)
@@ -391,19 +392,9 @@ function clearHarnessHealthMark(command) {
 }
 
 // Helper: load tasks & workspace data
-function loadTasksData() {
-  try {
-    return JSON.parse(fs.readFileSync(TASKS_FILE, 'utf8'));
-  } catch {
-    return { rootDirectory: DEFAULT_ROOT_DIR, activeProject: '', tasks: [] };
-  }
-}
+function loadTasksData() { return taskStore.read(); }
+function saveTasksData(data) { taskStore.write(data); }
 
-function saveTasksData(data) {
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
-// Scan subdirectories of root directory
 function scanProjects(rootDir) {
   if (!fs.existsSync(rootDir)) return [];
   try {
@@ -753,7 +744,7 @@ app.get('/api/status', (req, res) => {
   const health = getHarnessHealth();
   const config = loadConfig();
   // Die Kappe gehört mit zum Status, sonst zeigen die Einstellungen einen alten Wert.
-  res.json({ health, harnesses: Object.values(HARNESS_REGISTRY), clis: config.clis || [], dispatch: config.dispatch || { max_concurrent: DEFAULT_MAX_CONCURRENT } });
+  res.json({ health, harnesses: Object.values(HARNESS_REGISTRY), clis: config.clis || [], dispatch: config.dispatch || { max_concurrent: DEFAULT_MAX_CONCURRENT }, execution: config.execution || { codexUnsafe: false } });
 });
 
 // 1-Click Installer Status API
@@ -966,6 +957,9 @@ app.post('/api/tasks/archive', (req, res) => {
 app.post('/api/tasks/clear', (req, res) => {
   const data = loadTasksData();
   const { projectPath } = req.body;
+  if ([...liveRuns.values(), ...dispatchQueue].some((entry) => !projectPath || entry.workingDir === projectPath)) {
+    return res.status(409).json({ error: 'Laufende und wartende Aufträge erst beenden' });
+  }
   if (projectPath) {
     data.tasks = data.tasks.filter(t => t.projectPath !== projectPath);
   } else {
@@ -977,7 +971,7 @@ app.post('/api/tasks/clear', (req, res) => {
 
 app.get('/api/config', (req, res) => {
   const config = loadConfig();
-  res.json({ clis: config.clis, dispatch: config.dispatch, remote: {
+  res.json({ clis: config.clis, dispatch: config.dispatch, execution: config.execution || { codexUnsafe: false }, remote: {
     telegram: { enabled: Boolean(config.remote?.telegram?.enabled), hasToken: Boolean(config.remote?.telegram?.botToken) }
   } });
 });
@@ -1010,7 +1004,7 @@ app.get('/api/runs', (req, res) => {
 
 app.post('/api/config', (req, res) => {
   try {
-    const { clis, dispatch } = req.body;
+    const { clis, dispatch, execution } = req.body;
     const config = loadConfig();
     config.clis = runtimeRoutes(normalizeRoutes(clis));
     // Die Kappe kommt aus der Oberfläche; alles unterhalb von 1 würde jeden Auftrag
@@ -1018,8 +1012,9 @@ app.post('/api/config', (req, res) => {
     if (dispatch && Number.isInteger(Number(dispatch.max_concurrent))) {
       config.dispatch = { max_concurrent: Math.min(8, Math.max(0, Number(dispatch.max_concurrent))) };
     }
+    if (execution) config.execution = { codexUnsafe: execution.codexUnsafe === true };
     saveConfig(config);
-    res.json({ success: true, config: { clis: config.clis, dispatch: config.dispatch } });
+    res.json({ success: true, config: { clis: config.clis, dispatch: config.dispatch, execution: config.execution || { codexUnsafe: false } } });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -1145,9 +1140,9 @@ function parseSkillMetadata(skillDir) {
   }
 }
 
-function syncAllSkills() {
+function syncAllSkills({ synchronize = true } = {}) {
   const HUB_DIR = path.join(os.homedir(), '.agents', 'skills');
-  if (!fs.existsSync(HUB_DIR)) {
+  if (synchronize && !fs.existsSync(HUB_DIR)) {
     try { fs.mkdirSync(HUB_DIR, { recursive: true }); } catch {}
   }
 
@@ -1208,7 +1203,7 @@ function syncAllSkills() {
 
   // 2. Link each unique skill into every harness directory
   let newlyLinked = 0;
-  for (const h of HARNESS_DIRS) {
+  for (const h of synchronize ? HARNESS_DIRS : []) {
     if (!fs.existsSync(h.path)) {
       try { fs.mkdirSync(h.path, { recursive: true }); } catch {}
     }
@@ -1263,7 +1258,7 @@ function syncAllSkills() {
 
 app.get('/api/skills', (req, res) => {
   try {
-    const syncResult = syncAllSkills();
+    const syncResult = syncAllSkills({ synchronize: false });
     res.json(syncResult);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1426,226 +1421,10 @@ app.post('/api/schedules/:id/run', (req, res) => {
 // Ein Auftrag erhält seine Task-ID beim Einreichen und startet, sobald Kappe, Ordner
 // und Harness frei sind. Bis dahin liegt er in der Warteschlange. Alle Meldungen eines
 // Laufs tragen seine Task-ID, damit zwei gleichzeitige Konsolen trennbar bleiben.
-const liveRuns = new Map();
-const dispatchQueue = [];
-const requestEntries = new Map();
-let runIdSeq = 0;
-const DEFAULT_MAX_CONCURRENT = 0; // 0 = keine Kappe
-
-function maxConcurrentRuns() {
-  const dispatch = loadConfig().dispatch;
-  const n = dispatch && Number(dispatch.max_concurrent);
-  return Number.isInteger(n) && n >= 1 ? n : DEFAULT_MAX_CONCURRENT;
-}
-
-function nextTaskId(kind) {
-  return `${kind}_${Date.now().toString(36)}${(runIdSeq += 1).toString(36)}`;
-}
-
-// Wer gerade arbeitet, blockiert seinen Ordner und die Harnesses, die er wirklich
-// hält. Ein auto-Lauf meldet erst einen Harness an, sobald eine Route gewählt ist.
-function runningForGate() {
-  return [...liveRuns.values()].map((r) => ({
-    taskId: r.taskId,
-    projectPath: r.workingDir,
-    commands: r.commands
-  }));
-}
-
-function gateInputs(payload, clis) {
-  const enabled = clis.filter((c) => c.enabled !== false && c.capabilities.dispatchable);
-  if (payload.harnessOverride === 'consensus') {
-    const first = enabled[0];
-    const second = enabled.find((route) => route.harnessId !== first?.harnessId);
-    return { requires: [first, second].filter(Boolean).map((route) => route.command), candidates: [] };
-  }
-  if (payload.harnessOverride && payload.harnessOverride !== 'auto') {
-    const specific = enabled.find((c) => c.name === payload.harnessOverride);
-    return { requires: specific ? [specific.command] : [], candidates: [] };
-  }
-  return { requires: [], candidates: enabled.map((c) => c.command) };
-}
-
-function queueMessage(decision) {
-  const blocker = decision.blocker;
-  if (decision.reason === 'capacity') {
-    return `Warteschlange: alle ${maxConcurrentRuns()} Plätze belegt`;
-  }
-  if (decision.reason === 'project') {
-    return `Warteschlange: in ${path.basename(blocker.projectPath)} arbeitet bereits ein Auftrag`;
-  }
-  return `Warteschlange: ${blocker.commands.join(' + ')} arbeitet bereits in ${path.basename(blocker.projectPath)}`;
-}
-
-// Der erste eintragbare Auftrag gewinnt; ein blockierter bleibt liegen, weil ein
-// späterer Auftrag einen anderen Ordner oder Harness brauchen kann.
-function pumpRuns() {
-  const max = maxConcurrentRuns();
-  let startedOne = true;
-
-  while (startedOne) {
-    startedOne = false;
-    for (const entry of dispatchQueue) {
-      const decision = dispatchSlotDecision({
-        maxConcurrent: max,
-        running: runningForGate(),
-        incoming: {
-          projectPath: entry.workingDir
-        }
-      });
-      if (decision) {
-        if (!entry.queuedNotified) {
-          entry.queuedNotified = true;
-          const text = queueMessage(decision);
-          sendRunMessage(entry.ws, entry.taskId, {
-            type: 'queued',
-            reason: decision.reason,
-            blockerTaskId: decision.blocker ? decision.blocker.taskId : null,
-            message: text
-          });
-        }
-        continue;
-      }
-      dispatchQueue.splice(dispatchQueue.indexOf(entry), 1);
-      liveRuns.set(entry.taskId, entry);
-      startedOne = true;
-      startRun(entry);
-      break;
-    }
-  }
-}
-
-function startRun(entry) {
-  entry.record.status = 'running';
-  writeTask(entry.record);
-  const isConsensus = entry.payload.harnessOverride === 'consensus';
-  // Der Lauf gibt seine Plätze erst zurück, wenn er wirklich geendet hat — danach
-  // rückt die Warteschlange nach.
-  entry.finish = (err, record) => {
-    liveRuns.delete(entry.taskId);
-    if (entry.onComplete) entry.onComplete(err, record);
-    pumpRuns();
-  };
-  if (isConsensus) runConsensusDispatch(entry);
-  else runDispatch(entry);
-}
-
-function sendRunMessage(ws, taskId, obj) {
-  const msg = { ...obj, taskId: obj.taskId || taskId };
-  const json = JSON.stringify(msg);
-  if (ws && ws.readyState === 1) {
-    try { ws.send(json); } catch {}
-  }
-  broadcastToClients(msg, ws);
-}
-
-// Nur der eigene Eintrag wird zurückgeschrieben: ein Snapshot der ganzen Liste würde
-// die Tasks anderer Läufe mit deren Stand beim Start überschreiben.
-function writeTask(taskRecord) {
-  try {
-    const data = loadTasksData();
-    const idx = data.tasks.findIndex((t) => t.id === taskRecord.id);
-    if (idx === -1) data.tasks.unshift(taskRecord);
-    else data.tasks[idx] = taskRecord;
-    saveTasksData(data);
-  } catch (err) {
-    console.error('Task-Historie nicht geschrieben:', err.message);
-  }
-}
-
-function submitDispatch(payload, ws, onComplete) {
-  const requestId = typeof payload.requestId === 'string' && /^[A-Za-z0-9-]{8,128}$/.test(payload.requestId)
-    ? payload.requestId : null;
-  if (requestId && requestEntries.has(requestId)) {
-    const existing = requestEntries.get(requestId);
-    sendRunMessage(ws, existing.taskId, { type: 'task_created', task: existing.record });
-    if (!['queued', 'running'].includes(existing.record.status)) {
-      sendRunMessage(ws, existing.taskId, { type: 'done', exitCode: existing.record.exitCode ?? 0, message: 'Auftrag bereits abgeschlossen' });
-    }
-    return existing;
-  }
-  const clis = loadConfig().clis || [];
-  const data = loadTasksData();
-  const workingDir = resolveWorkspaceDirectory(payload.projectPath, data.rootDirectory || DEFAULT_ROOT_DIR);
-  const isConsensus = payload.harnessOverride === 'consensus';
-  const gate = gateInputs(payload, clis);
-  const enabledRoutes = clis.filter((c) => c.enabled !== false && c.capabilities.dispatchable);
-  const initialRoute = enabledRoutes[0] || { name: '—', command: '—', model: 'Standard' };
-  const { agentsSources } = buildAgentsContext(workingDir);
-  const consensusRoutes = [enabledRoutes[0], enabledRoutes.find((route) => route.harnessId !== enabledRoutes[0]?.harnessId)].filter(Boolean);
-  const consensusPair = consensusRoutes.map((route) => route.name).join(' ↔ ');
-
-  const entry = {
-    taskId: nextTaskId(isConsensus ? 'consensus' : 'task'),
-    payload: { ...payload, projectPath: workingDir },
-    workingDir,
-    ws,
-    onComplete,
-    requires: gate.requires,
-    candidates: gate.candidates,
-    commands: gate.requires.slice(),
-    controllers: new Set(),
-    queuedNotified: false,
-    record: null
-  };
-
-  entry.record = {
-    id: entry.taskId,
-    projectPath: workingDir,
-    projectName: path.basename(workingDir),
-    prompt: payload.prompt,
-    imagePath: payload.imagePath || null,
-    harness: isConsensus ? `Konsens (${consensusPair})` : initialRoute.name,
-    command: isConsensus ? 'consensus' : initialRoute.command,
-    model: isConsensus
-      ? consensusRoutes.map((route) => route.model || 'Standard').join(' ↔ ')
-      : ((payload.modelOverride && payload.modelOverride !== 'Standard') ? payload.modelOverride : (initialRoute.model || 'Standard')),
-    agentsInfo: agentsSources.length > 0 ? agentsSources.join(' + ') : 'Keine',
-    timestamp: new Date().toISOString(),
-    status: 'queued',
-    outputHtml: ''
-  };
-
-  writeTask(entry.record);
-  if (requestId) {
-    requestEntries.set(requestId, entry);
-    const expiry = setTimeout(() => requestEntries.delete(requestId), 24 * 60 * 60 * 1000);
-    expiry.unref?.();
-  }
-  dispatchQueue.push(entry);
-  sendRunMessage(ws, entry.taskId, { type: 'task_created', task: entry.record });
-  pumpRuns();
-  return entry;
-}
-
-// Abbrechen gilt immer genau einen Auftrag: der eigene kind-Prozess, oder bei einem
-// Auftrag in der Warteschlange dessen Platz dort.
-function cancelDispatch(taskId, ws) {
-  const queuedIdx = dispatchQueue.findIndex((e) => e.taskId === taskId);
-  if (queuedIdx !== -1) {
-    const [entry] = dispatchQueue.splice(queuedIdx, 1);
-    entry.record.status = 'cancelled';
-    entry.record.exitCode = 130;
-    writeTask(entry.record);
-    sendRunMessage(ws || entry.ws, taskId, {
-      type: 'done',
-      exitCode: 130,
-      message: 'Auftrag aus der Warteschlange genommen'
-    });
-    entry.onComplete?.(new Error('Auftrag aus der Warteschlange genommen'), entry.record);
-    pumpRuns();
-    return;
-  }
-
-  const run = liveRuns.get(taskId);
-  if (!run) return;
-  run.cancelled = true;
-  run.controllers.forEach((controller) => controller.abort());
-  sendRunMessage(ws || run.ws, taskId, {
-    type: 'output',
-    html: '<span style="color:var(--danger)">\n[Abgebrochen durch Benutzer]</span>\n'
-  });
-}
+const { liveRuns, dispatchQueue, maxConcurrentRuns, submitDispatch, cancelDispatch, writeTask, sendRunMessage } = createDispatchService({
+  loadConfig, loadTasksData, taskStore, DEFAULT_ROOT_DIR, buildAgentsContext, broadcastToClients,
+  prepareAttachment, prepareBead, saveCheckpoint, runConsensusDispatch, runDispatch
+});
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -1774,35 +1553,55 @@ function harnessEnv(overrides = {}) {
 
 // Hierarchical AGENTS.md: developer root, then the project, global only as a fallback.
 function buildAgentsContext(workingDir) {
-  let agentsContext = '';
-  const agentsSources = [];
-
-  const tasksData = loadTasksData();
-  const rootDir = tasksData.rootDirectory || DEFAULT_ROOT_DIR;
-  let rootAgentsFile = null;
-  let projectAgentsFile = null;
-  try { rootAgentsFile = resolveAgentFile('rootDev', null, rootDir); } catch {}
-  try { projectAgentsFile = resolveAgentFile('project', workingDir, rootDir); } catch {}
-  if (rootAgentsFile && fs.existsSync(rootAgentsFile)) {
-    const content = fs.readFileSync(rootAgentsFile, 'utf8').trim();
-    agentsContext += `[Entwickler-Richtlinien aus ${rootAgentsFile}]\n` + content + '\n\n';
-    agentsSources.push(`Developer/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
-  }
-
-  if (projectAgentsFile && fs.existsSync(projectAgentsFile) && projectAgentsFile !== rootAgentsFile) {
-    const content = fs.readFileSync(projectAgentsFile, 'utf8').trim();
-    agentsContext += `[Projekt-Richtlinien aus ${projectAgentsFile}]\n` + content + '\n\n';
-    agentsSources.push(`${path.basename(workingDir)}/AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
-  }
-
-  if (fs.existsSync(AGENTS_MD_FILE) && agentsSources.length === 0) {
-    const content = fs.readFileSync(AGENTS_MD_FILE, 'utf8').trim();
-    agentsContext += `[Globale Richtlinien]\n` + content + '\n\n';
-    agentsSources.push(`Global AGENTS.md (${Math.round(content.length / 1024 * 10) / 10} KB)`);
-  }
-
-  return { agentsContext, agentsSources };
+  const { rules, sources } = loadRules(workingDir, loadTasksData().rootDirectory || DEFAULT_ROOT_DIR, AGENTS_MD_FILE);
+  return { agentsContext: rules, agentsSources: sources.map((source) => `${path.basename(path.dirname(source.path))}/AGENTS.md (${source.bytes} Bytes)`) };
 }
+
+function taskContext(entry, extra = {}) {
+  const { agentsContext } = buildAgentsContext(entry.workingDir);
+  const state = gitState(entry.workingDir);
+  const previous = taskStore.get(entry.payload.previousTaskId || '');
+  const prior = previous?.projectPath === entry.workingDir
+    ? (previous.checkpoint || checkpoint(previous, null, 'Stand des früheren Laufs unbekannt')) : null;
+  return buildContext({ rules: agentsContext, prompt: entry.payload.prompt, image: entry.record.image,
+    previous: extra.relay ? entry.record.checkpoint : prior, git: `${state.revision || 'unbekannt'}\n${state.changes}`, bead: entry.bead, ...extra });
+}
+
+function prepareAttachment(entry) {
+  const imagePath = entry.payload.imagePath;
+  if (!imagePath) {
+    const previous = taskStore.get(entry.payload.previousTaskId || '');
+    if (previous?.projectPath === entry.workingDir && previous.image && fs.existsSync(path.join(entry.workingDir, path.basename(previous.image)))) entry.record.image = path.basename(previous.image);
+    return;
+  }
+  const actual = fs.realpathSync(imagePath);
+  if (!actual.startsWith(`${fs.realpathSync(UPLOADS_DIR)}${path.sep}`)) throw new Error('Bildpfad liegt außerhalb des Upload-Verzeichnisses');
+  const image = `.harness-task-image-${entry.taskId}${path.extname(actual) || '.png'}`;
+  fs.copyFileSync(actual, path.join(entry.workingDir, image));
+  entry.record.image = image;
+}
+
+function saveCheckpoint(record, resultText) {
+  if (resultText) record.resultText = resultText.slice(-12000);
+  const state = gitState(record.projectPath);
+  record.checkpoint = checkpoint(record, state.revision, state.changes);
+}
+
+async function prepareBead(entry) {
+  if (entry.payload.beadId) {
+    entry.bead = await beads.show(entry.workingDir, entry.payload.beadId);
+    entry.record.bead = entry.bead;
+  }
+}
+
+app.get('/api/beads', async (req, res) => {
+  try {
+    const directory = resolveWorkspaceDirectory(req.query.projectPath, loadTasksData().rootDirectory);
+    res.json({ enabled: beads.enabled(directory), tasks: await beads.ready(directory) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.get('/api/tasks/:id/attempts', (req, res) => res.json({ attempts: taskStore.attempts(req.params.id) }));
 
 // Consensus Mode Dispatch (Dual-Agent Collaboration & Synthesis)
 function runConsensusDispatch(entry) {
@@ -1820,7 +1619,7 @@ function runConsensusDispatch(entry) {
   if (!routeB) {
     entry.record.status = 'failed';
     writeTask(entry.record);
-    notify({ type: 'done', exitCode: 1, message: 'Konsens benötigt mindestens zwei aktive Headless-Harnesses.' });
+    notify(terminalMessage(entry.record, 'Konsens benötigt mindestens zwei aktive Headless-Harnesses.'));
     onComplete(new Error('Zu wenige Harnesses für Konsens-Modus'), entry.record);
     return;
   }
@@ -1829,7 +1628,7 @@ function runConsensusDispatch(entry) {
 
   const { agentsContext } = buildAgentsContext(workingDir);
   const agentsInfo = entry.record.agentsInfo;
-  const guidelinePrompt = agentsContext.trim() ? `${agentsContext.trim()}\n\n[Aufgabe]\n${prompt}` : prompt;
+  const guidelinePrompt = taskContext(entry);
 
   const taskRecord = entry.record;
   entry.commands = [routeA.command, routeB.command];
@@ -1857,21 +1656,8 @@ function runConsensusDispatch(entry) {
   taskRecord.outputHtml += banner;
   notify({ type: 'output', html: banner });
 
-  // Handle image attachment
-  let promptA = guidelinePrompt;
-  let promptB = guidelinePrompt;
-  if (imagePath && fs.existsSync(imagePath)) {
-    try {
-      const actual = fs.realpathSync(imagePath);
-      if (!actual.startsWith(`${fs.realpathSync(UPLOADS_DIR)}${path.sep}`)) throw new Error('Bildpfad außerhalb der Uploads');
-      const ext = path.extname(actual) || '.png';
-      const targetLocal = path.join(workingDir, `.harness-task-image${ext}`);
-      fs.copyFileSync(actual, targetLocal);
-      const imgNotice = `\n[Beigefügtes Bild: ${path.basename(targetLocal)}]\nBitte analysiere dieses Bild und beachte es bei der Umsetzung.\n`;
-      promptA += imgNotice;
-      promptB += imgNotice;
-    } catch {}
-  }
+  const promptA = guidelinePrompt;
+  const promptB = guidelinePrompt;
 
   const phaseFailures = [];
   const lastOutputLine = (text) => (text || '')
@@ -1895,7 +1681,7 @@ function runConsensusDispatch(entry) {
   notify({ type: 'output', html: p1Header });
 
   executeSingleRun(routeA, `[Phase 1 Entwurf] ${promptA}`, workingDir, notify, taskRecord, (errA, outputA, codeA) => {
-    if (entry.cancelled) { taskRecord.status = 'cancelled'; writeTask(taskRecord); notify({ type: 'done', exitCode: 130, message: 'Abgebrochen durch Benutzer' }); onComplete(new Error('Abgebrochen'), taskRecord); return; }
+    if (entry.cancelled) { taskRecord.status = 'cancelled'; taskRecord.exitCode = 130; saveCheckpoint(taskRecord); writeTask(taskRecord); notify(terminalMessage(taskRecord, 'Abgebrochen durch Benutzer')); onComplete(new Error('Abgebrochen'), taskRecord); return; }
     if (errA || codeA !== 0 || !(outputA || '').trim()) reportPhaseFailure(routeA, errA, codeA, outputA);
 
     // Phase 2: Route B
@@ -1904,7 +1690,7 @@ function runConsensusDispatch(entry) {
     notify({ type: 'output', html: p2Header });
 
     executeSingleRun(routeB, `[Phase 2 Alternativ-Entwurf] ${promptB}`, workingDir, notify, taskRecord, (errB, outputB, codeB) => {
-      if (entry.cancelled) { taskRecord.status = 'cancelled'; writeTask(taskRecord); notify({ type: 'done', exitCode: 130, message: 'Abgebrochen durch Benutzer' }); onComplete(new Error('Abgebrochen'), taskRecord); return; }
+      if (entry.cancelled) { taskRecord.status = 'cancelled'; taskRecord.exitCode = 130; saveCheckpoint(taskRecord); writeTask(taskRecord); notify(terminalMessage(taskRecord, 'Abgebrochen durch Benutzer')); onComplete(new Error('Abgebrochen'), taskRecord); return; }
       if (errB || codeB !== 0 || !(outputB || '').trim()) reportPhaseFailure(routeB, errB, codeB, outputB);
 
       // Phase 3: Synthesis & Implementation
@@ -1931,8 +1717,8 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
 2. Führe die finale, perfekte und vollständige Lösung im Codebase-Projekt aus.
 3. Fasse in 2-3 Sätzen zusammen, welche Vorteile der tatsächlich vorliegenden Ansätze eingeflossen sind. Fehlt ein Ansatz, sage das ausdrücklich.`;
 
-      executeSingleRun(routeA, synthesisPrompt, workingDir, notify, taskRecord, (errFinal, outputFinal, codeFinal) => {
-        if (entry.cancelled) { taskRecord.status = 'cancelled'; writeTask(taskRecord); notify({ type: 'done', exitCode: 130, message: 'Abgebrochen durch Benutzer' }); onComplete(new Error('Abgebrochen'), taskRecord); return; }
+      executeSingleRun(routeA, taskContext(entry, { prompt: synthesisPrompt }), workingDir, notify, taskRecord, (errFinal, outputFinal, codeFinal) => {
+        if (entry.cancelled) { taskRecord.status = 'cancelled'; taskRecord.exitCode = 130; saveCheckpoint(taskRecord); writeTask(taskRecord); notify(terminalMessage(taskRecord, 'Abgebrochen durch Benutzer')); onComplete(new Error('Abgebrochen'), taskRecord); return; }
         if (errFinal || codeFinal !== 0 || !(outputFinal || '').trim()) reportPhaseFailure(routeA, errFinal, codeFinal, outputFinal);
 
         const complete = phaseFailures.length === 0;
@@ -1943,13 +1729,10 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
         taskRecord.outputHtml += finishBanner;
         notify({ type: 'output', html: finishBanner });
 
+        taskRecord.exitCode = complete ? 0 : 1;
+        saveCheckpoint(taskRecord, outputFinal);
         writeTask(taskRecord);
-        notify({
-          type: 'done',
-          taskId: taskId,
-          exitCode: complete ? 0 : 1,
-          message: complete ? 'Konsens erfolgreich abgeschlossen' : `Konsens mit Ausfall abgeschlossen — ${phaseFailures.join(' · ')}`
-        });
+        notify(terminalMessage(taskRecord, complete ? 'Konsens erfolgreich abgeschlossen' : `Konsens mit Ausfall abgeschlossen — ${phaseFailures.join(' · ')}`));
 
         onComplete(complete ? null : new Error(phaseFailures.join(' · ')), taskRecord);
       });
@@ -1981,10 +1764,11 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     entry.controllers.add(controller);
   }
   const renderChunk = makeChunkRenderer();
+  const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: selectedRoute.harnessId, model: selectedRoute.model });
   runHarness({
     harnessId: selectedRoute.harnessId,
     model: selectedRoute.model || 'Standard', prompt: fullPrompt, cwd: workingDir,
-    env: harnessEnv({ PWD: workingDir }), signal: controller.signal,
+    env: harnessEnv({ PWD: workingDir }), signal: controller.signal, execution: loadConfig().execution,
     idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
     onIdle: (idleMs) => {
       const html = `\n<div class="route-fallback-banner">⏱ <strong>Keine Ausgabe seit ${Math.round(idleMs / 1000)} s</strong> — ${escapeHtml(selectedRoute.name)} wird abgebrochen.</div>\n`;
@@ -1992,12 +1776,15 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
       notify({ type: 'output', html });
     },
     onEvent: (event) => {
+      taskStore.addEvent(attemptId, event);
       const output = renderRuntimeEvent(event, renderChunk);
       if (!output) return;
       taskRecord.outputHtml += output.html;
       notify({ type: 'output', ...output });
     }
   }).then((result) => {
+    taskStore.finishAttempt(attemptId, { status: result.status, exitCode: result.exitCode, error: result.error, sessionId: result.sessionId });
+    taskRecord.resultText = result.finalText.slice(-12000);
     if (result.sessionId) taskRecord.sessionId = result.sessionId;
     callback(result.status === 'completed' ? null : new Error(result.error?.message || result.status), result.finalText, result.exitCode, result);
   }).catch((err) => callback(err, '', null, { status: 'failed', error: { kind: 'harness_failure', message: err.message } }))
@@ -2016,28 +1803,16 @@ function runDispatch(entry) {
     ? configured.filter((route) => route.name === harnessOverride)
     : configured;
   const taskRecord = entry.record;
-  const { agentsContext } = buildAgentsContext(workingDir);
-  let fullPrompt = agentsContext.trim() ? `${agentsContext.trim()}\n\n[Aufgabe]\n${prompt}` : prompt;
-
-  if (imagePath && fs.existsSync(imagePath)) {
-    try {
-      const actual = fs.realpathSync(imagePath);
-      if (!actual.startsWith(`${fs.realpathSync(UPLOADS_DIR)}${path.sep}`)) throw new Error('Bildpfad liegt außerhalb des Upload-Verzeichnisses');
-      const target = path.join(workingDir, `.harness-task-image${path.extname(actual) || '.png'}`);
-      fs.copyFileSync(actual, target);
-      fullPrompt += `\n\n[Beigefügtes Bild / Screenshot: ${path.basename(target)}]\nBitte analysiere dieses Bild und beachte es bei der Umsetzung.`;
-    } catch (err) {
-      notify({ type: 'output', html: `<span style="color:var(--warning)">${escapeHtml(err.message)}</span>` });
-    }
-  }
+  const fullPrompt = taskContext(entry);
 
   const finish = (status, result, message) => {
     taskRecord.status = status;
-    taskRecord.exitCode = result?.exitCode ?? (status === 'completed' ? 0 : 1);
+    taskRecord.exitCode = status === 'cancelled' ? 130 : status === 'completed' ? 0 : (result?.exitCode || 1);
     if (result?.error) taskRecord.error = result.error;
     if (result?.sessionId) taskRecord.sessionId = result.sessionId;
+    saveCheckpoint(taskRecord, result?.finalText);
     writeTask(taskRecord);
-    notify({ type: 'done', exitCode: taskRecord.exitCode, message });
+    notify(terminalMessage(taskRecord, message));
     entry.finish(status === 'completed' ? null : new Error(message), taskRecord);
   };
 
@@ -2083,22 +1858,19 @@ function runDispatch(entry) {
       taskRecord.outputHtml += header;
       notify({ type: 'output', html: header });
 
-      const effectivePrompt = relayContext
-        ? `[AUTOMATISCHE KONTEXT-ÜBERGABE]\nUrsprünglicher Auftrag:\n${prompt}\n\n` +
-          `Vorheriges Harness: ${relayContext.prevHarness}; Grund: ${relayContext.reason}\n\n` +
-          `Projektänderungen:\n${relayContext.workspaceDiff}\n\n` +
-          `Letzter Zwischenstand:\n${relayContext.lastOutput}\n\n` +
-          `Analysiere den Projektstand und schließe die Aufgabe vollständig ab.`
-        : fullPrompt;
+      const effectivePrompt = taskContext(entry, { relay: relayContext });
       const previousSessionId = !relayContext && previousTask?.projectPath === workingDir &&
         previousTask?.harnessId === route.harnessId ? previousTask.sessionId : null;
       const controller = new AbortController();
       if (!entry.controllers) entry.controllers = new Set();
       entry.controllers.add(controller);
       let result;
+      const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: route.harnessId, model });
+      taskRecord.activeAttemptId = attemptId;
+      writeTask(taskRecord);
       try {
         result = await runHarness({ harnessId: route.harnessId, model, prompt: effectivePrompt,
-          cwd: workingDir, previousSessionId, signal: controller.signal,
+          cwd: workingDir, previousSessionId, signal: controller.signal, execution: loadConfig().execution,
           env: harnessEnv({ PWD: workingDir }), idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
           onIdle: (idleMs) => {
             const html = `<div class="route-fallback-banner">⏱ <strong>${escapeHtml(route.name)}</strong> schreibt seit ${Math.round(idleMs / 1000)} s nichts mehr — Abbruch und Übergabe.</div>\n`;
@@ -2106,6 +1878,7 @@ function runDispatch(entry) {
             notify({ type: 'output', html });
           },
           onEvent: (event) => {
+            taskStore.addEvent(attemptId, event);
             const output = renderRuntimeEvent(event, renderChunk);
             if (!output) return;
             taskRecord.outputHtml += output.html;
@@ -2115,6 +1888,9 @@ function runDispatch(entry) {
       } finally {
         entry.controllers.delete(controller);
       }
+      taskStore.finishAttempt(attemptId, { status: result.status, exitCode: result.exitCode, error: result.error, sessionId: result.sessionId });
+      saveCheckpoint(taskRecord, result.finalText);
+      writeTask(taskRecord);
       if (result.status === 'cancelled') {
         finish('cancelled', result, 'Abgebrochen durch Benutzer');
         return;
@@ -2789,23 +2565,7 @@ if (process.argv.includes('sync-skills')) {
 
 // A restart kills every child process, so tasks that were mid-run would otherwise
 // stay "running" in the history forever.
-function reconcileOrphanedTasks() {
-  try {
-    const data = loadTasksData();
-    // queued zählt mit: ein Auftrag in der Warteschlange hat nie gearbeitet, aber
-    // der Client sieht ihn als offen und wartet auf ein done.
-    const orphans = (data.tasks || []).filter(t => t.status === 'running' || t.status === 'queued');
-    if (orphans.length === 0) return;
-    orphans.forEach(t => {
-      t.status = 'incomplete';
-      t.outputHtml += `\n<span style="color:var(--danger);">[Unterbrochen: Der Server wurde neu gestartet, bevor dieser Task endete.]</span>\n`;
-    });
-    saveTasksData(data);
-    console.log(`⚠ ${orphans.length} Task(s) als unterbrochen markiert.`);
-  } catch (err) {
-    console.error('Konnte Task-Historie nicht bereinigen:', err.message);
-  }
-}
+function reconcileOrphanedTasks() { taskStore.reconcile(); }
 
 server.listen(PORT, HOST, () => {
   const lanHint = HOST === '0.0.0.0' ? ` (LAN: http://${getLanIp()}:${PORT})` : '';
@@ -2813,4 +2573,21 @@ server.listen(PORT, HOST, () => {
   reconcileOrphanedTasks();
   gatewayEnv();
   startTelegramBot().catch(err => console.error("Telegram Bot Start:", err));
+});
+
+let shuttingDown = false;
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  for (const entry of liveRuns.values()) {
+    entry.cancelled = true;
+    for (const controller of entry.controllers) controller.abort();
+  }
+  const deadline = Date.now() + 7000;
+  const timer = setInterval(() => {
+    if (liveRuns.size && Date.now() < deadline) return;
+    clearInterval(timer);
+    taskStore.reconcile(); taskStore.close();
+    process.exit(0);
+  }, 100);
 });

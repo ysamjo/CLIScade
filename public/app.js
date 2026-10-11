@@ -67,6 +67,7 @@ const dom = {
       cancel: root.querySelector('.run-pane-cancel'),
       target: root.querySelector('.run-pane-target'),
       routing: root.querySelector('.run-pane-routing'),
+      beads: root.querySelector('.run-pane-beads'),
       input: root.querySelector('.run-pane-input'),
       send: root.querySelector('.run-pane-send')
     };
@@ -219,6 +220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   iconObserver.observe(document.body, { childList: true, subtree: true });
+  if (!await ensureAccess()) return;
   setupWebSocket();
   setupEventListeners();
 
@@ -233,6 +235,44 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSchedules();
   loadInstallerStatus();
 });
+
+// LAN-Anmeldung vor dem ersten Zugriff auf geschützte Daten.
+async function ensureAccess() {
+  const dialog = document.getElementById('access-dialog');
+  try {
+    const response = await fetch('/api/access');
+    const data = await response.json();
+    if (response.ok && data.authorized) return true;
+  } catch {
+    document.getElementById('access-error').textContent = 'Server nicht erreichbar. Seite nach dem Serverstart neu laden.';
+  }
+  if (dialog && !dialog.open) dialog.showModal();
+  return false;
+}
+const accessForm = document.getElementById('access-form');
+accessForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const input = document.getElementById('access-code');
+  const error = document.getElementById('access-error');
+  const button = accessForm.querySelector('button');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/access/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.value }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    input.value = '';
+    window.location.reload();
+  } catch (err) {
+    error.textContent = err.message;
+    input.setAttribute('aria-invalid', 'true');
+    input.focus();
+  } finally { button.disabled = false; }
+});
+document.getElementById('access-code')?.addEventListener('input', (event) => {
+  event.target.removeAttribute('aria-invalid');
+  document.getElementById('access-error').textContent = '';
+});
+document.getElementById('access-dialog')?.addEventListener('cancel', (event) => event.preventDefault());
 
 // --- SETTINGS MODAL CONTROLS ---
 function openSettingsModal(section = 'workspace') {
@@ -333,7 +373,7 @@ function setupWebSocket() {
   };
 
   state.ws.onclose = () => {
-    setTimeout(setupWebSocket, 2000);
+    setTimeout(async () => { if (await ensureAccess()) setupWebSocket(); }, 2000);
   };
 
   state.ws.onmessage = (event) => {
@@ -414,23 +454,35 @@ function setupWebSocket() {
       if (task) {
         task.outputHtml = (task.outputHtml || '') + (data.html || data.raw);
       }
-    } else if (data.type === 'done' || data.type === 'error') {
+    } else if (data.type === 'abbruch_laeuft') {
+      const stream = state.streams.get(data.taskId);
+      if (stream) { stream.cancelling = true; renderRunPane(stream.slot); }
+    } else if (['done', 'error', 'cancelled'].includes(data.type)) {
+      const status = TaskState.fromMessage(data);
+      const feld = state.wartendIn[data.taskId];
+      if (feld !== undefined) {
+        delete state.wartendIn[data.taskId];
+        const owner = streamAtSlot(feld);
+        if (owner) {
+          owner.wartende = (owner.wartende || []).filter((task) => task.taskId !== data.taskId);
+          renderRunPane(feld);
+        }
+      }
       const stream = state.streams.get(data.taskId);
       if (stream) {
-        stream.status = data.type === 'done' ? 'done' : 'error';
+        stream.status = status === 'completed' ? 'done' : status;
+        stream.cancelling = false;
         if (data.message) {
-          const color = data.type === 'error' ? 'var(--danger)' : 'var(--success)';
+          const color = status === 'completed' ? 'var(--success)' : status === 'cancelled' ? 'var(--warning)' : 'var(--danger)';
           stream.buffer += `\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`;
         }
         renderRunPane(stream.slot);
       }
-
       const task = state.tasks.find(t => t.id === data.taskId);
       if (task) {
-        task.status = data.type === 'done' ? 'completed' : 'error';
-        if (data.usage) {
-          task.usage = data.usage;
-        }
+        task.status = status;
+        task.exitCode = data.exitCode;
+        if (data.usage) task.usage = data.usage;
       }
       renderProjectTree();
       loadUsage();
@@ -502,7 +554,10 @@ const RUN_LEERTEXT = {
   queued: 'Wartet auf einen freien Platz…',
   running: 'Startet…',
   done: 'Keine Ausgabe für diesen Auftrag.',
-  error: 'Keine Ausgabe für diesen Auftrag.'
+  error: 'Keine Ausgabe für diesen Auftrag.',
+  failed: 'Auftrag fehlgeschlagen.',
+  incomplete: 'Auftrag unterbrochen.',
+  cancelled: 'Auftrag abgebrochen.'
 };
 
 // Die Naht zwischen dem übernommenen Protokoll und dem neuen Lauf.
@@ -516,7 +571,7 @@ function streamAtSlot(slot) {
 
 function isBeendet(taskId) {
   const stream = state.streams.get(taskId);
-  return !stream || stream.status === 'done' || stream.status === 'error';
+  return !stream || TaskState.terminal(stream.status);
 }
 
 // Das Feld für einen neuen Auftrag. Die Reihenfolge ist Absicht:
@@ -546,7 +601,7 @@ function slotFuerOrdner(path) {
   if (!path) return undefined;
   return [0, 1].find((i) => {
     const s = streamAtSlot(i);
-    return s && s.path === path && s.status !== 'done' && s.status !== 'error';
+    return s && s.path === path && !TaskState.terminal(s.status);
   });
 }
 
@@ -612,7 +667,9 @@ function renderRunPane(slot) {
     : (stream.title || 'Auftrag');
   pane.harness.textContent = stream.title || '';
   pane.folder.textContent = stream.folder || '';
-  pane.cancel.hidden = stream.status === 'done' || stream.status === 'error';
+  pane.cancel.hidden = TaskState.terminal(stream.status);
+  pane.cancel.disabled = Boolean(stream.cancelling);
+  pane.cancel.textContent = stream.cancelling ? 'Bricht ab…' : 'Abbrechen';
   const grund = konsoleHtml(stream)
     || `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
   pane.body.innerHTML = grund + wartendeHtml(stream);
@@ -683,6 +740,7 @@ function setupRunPanes() {
     });
     pane.target.addEventListener('change', () => {
       state.paneTarget[slot] = pane.target.value;
+      loadBeads(pane);
     });
     pane.routing.addEventListener('change', () => {
       state.paneRouting[slot] = pane.routing.value;
@@ -707,6 +765,7 @@ function syncPaneTargets() {
     const gewaehlt = bekannt.includes(state.paneTarget[slot]) ? state.paneTarget[slot] : fallback;
     state.paneTarget[slot] = gewaehlt || null;
     if (gewaehlt) pane.target.value = gewaehlt;
+    loadBeads(pane);
   });
 }
 
@@ -722,7 +781,7 @@ function zeigeKonsole(slot) {
 
 function showTaskInPane(task) {
   if (state.panes.includes(task.id)) return;
-  const status = task.status === 'running' ? 'running' : (task.status === 'queued' ? 'queued' : 'done');
+  const status = task.status === 'running' ? 'running' : (task.status === 'queued' ? 'queued' : task.status === 'completed' ? 'done' : task.status);
   const stream = openRunPane(task.id, {
     prompt: task.prompt,
     folder: task.projectName || (task.projectPath ? task.projectPath.split('/').pop() : ''),
@@ -734,7 +793,7 @@ function showTaskInPane(task) {
   });
   const pane = dom.runPanes[stream.slot];
   if (task.projectPath && task.harness) {
-    stream.folge = { projectPath: task.projectPath, harness: task.harness, model: task.model || null, previousTaskId: task.id };
+    stream.folge = { projectPath: task.projectPath, harness: task.harness, model: task.model || null, previousTaskId: task.id, beadId: task.beadId };
     state.paneTarget[stream.slot] = task.projectPath;
     if (pane && [...pane.target.options].some((o) => o.value === task.projectPath)) {
       pane.target.value = task.projectPath;
@@ -876,6 +935,7 @@ async function loadStatus() {
     state.health = data.health || [];
     state.harnessRegistry = Object.fromEntries((data.harnesses || []).map((entry) => [entry.id, entry]));
     state.clis = data.clis || [];
+    document.getElementById('codex-unsafe-input').checked = data.execution?.codexUnsafe === true;
     state.dispatch = data.dispatch || state.dispatch;
     // Das Feld soll zeigen, was gespeichert ist — nicht, was zuletzt geklickt wurde.
     if (dom.maxConcurrentInput) {
@@ -2042,7 +2102,7 @@ function setupEventListeners() {
         dom.settingsSaveFeedback.textContent = 'Speichere...';
         // Die Kappe speichert mit: ohne sie würde der Server den alten Wert behalten.
         const kappe = Number(dom.maxConcurrentInput?.value);
-        const body = { clis: state.clis };
+        const body = { clis: state.clis, execution: { codexUnsafe: document.getElementById('codex-unsafe-input').checked } };
         if (Number.isFinite(kappe)) {
           body.dispatch = { max_concurrent: Math.min(8, Math.max(0, Math.round(kappe || 0))) };
         }
@@ -2214,6 +2274,20 @@ function updateNewRouteModelOptions() {
   dom.newRouteName.placeholder = `${harnessKey}_${modelSlug}`;
 }
 
+async function loadBeads(pane) {
+  if (!pane.beads) return;
+  const project = pane.target.value;
+  pane.beads.hidden = true;
+  pane.beads.replaceChildren(new Option('Ohne Beads-Aufgabe', ''));
+  try {
+    const response = await fetch(`/api/beads?projectPath=${encodeURIComponent(project)}`);
+    const data = await response.json();
+    if (pane.target.value !== project || !response.ok || !data.enabled) return;
+    for (const task of data.tasks || []) pane.beads.add(new Option(`${task.id}: ${task.title}`, task.id));
+    pane.beads.hidden = false;
+  } catch { /* Normale Aufträge bleiben ohne Beads verfügbar. */ }
+}
+
 // --- DISPATCH TASK ---
 // Die Composer sperren nicht: mehrere Aufträge schnell nacheinander einreichen ist der
 // Weg, den Pool zu füllen. Die Kappe nimmt der Server, nicht das Fenster.
@@ -2237,6 +2311,7 @@ function sendPrompt(slot = 0) {
   };
   if (folge?.model) payload.modelOverride = folge.model;
   if (folge?.previousTaskId) payload.previousTaskId = folge.previousTaskId;
+  if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));

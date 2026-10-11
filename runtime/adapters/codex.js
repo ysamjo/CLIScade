@@ -1,8 +1,10 @@
 module.exports = {
-  build({ prompt, model, sessionId }) {
+  build({ prompt, model, sessionId, execution = {} }) {
     const args = ['exec'];
     if (sessionId) args.push('resume', sessionId);
-    args.push('--json', '--dangerously-bypass-approvals-and-sandbox');
+    args.push('--json');
+    if (execution.codexUnsafe === true) args.push('--dangerously-bypass-approvals-and-sandbox');
+    else args.push('-c', 'sandbox_mode="workspace-write"', '-c', 'approval_policy="never"');
     if (model && model !== 'Standard') args.push('--model', model);
     args.push(prompt);
     return args;

@@ -3,6 +3,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+test('Codex nutzt Sandbox als Standard und braucht ausdrückliche Freigabe', () => {
+  const adapter = require('../../runtime/adapters/codex');
+  const safe = adapter.build({ prompt: 'Aufgabe' });
+  assert.ok(safe.includes('sandbox_mode="workspace-write"'));
+  assert.ok(!safe.includes('--dangerously-bypass-approvals-and-sandbox'));
+  assert.ok(adapter.build({ prompt: 'Aufgabe', execution: { codexUnsafe: true } }).includes('--dangerously-bypass-approvals-and-sandbox'));
+});
+
 for (const id of ['claude', 'codex', 'cline', 'opencode']) {
   test(`${id} normalisiert strukturierte Text-, Tool- und Session-Ereignisse`, () => {
     const adapter = require(`../../runtime/adapters/${id}`);

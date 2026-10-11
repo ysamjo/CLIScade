@@ -29,6 +29,7 @@ const CLIS = [
 ];
 
 const ANTWORTEN = {
+  'GET /api/access': { authorized: true, local: true },
   'GET /api/status': { health: CLIS, clis: CLIS, dispatch: { max_concurrent: 0 } },
   'GET /api/workspace': {
     projects: [
@@ -85,6 +86,7 @@ async function oberflaeche() {
 
   window.eval(fs.readFileSync(path.join(PUBLIC, 'icons.js'), 'utf8'));
   window.eval(fs.readFileSync(path.join(PUBLIC, 'konsole-schichten.js'), 'utf8'));
+  window.eval(fs.readFileSync(path.join(PUBLIC, 'task-state.js'), 'utf8'));
   window.eval(fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8'));
   if (document.readyState !== 'loading') document.dispatchEvent(new window.Event('DOMContentLoaded'));
   await ruhen(12);

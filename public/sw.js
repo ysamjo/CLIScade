@@ -3,12 +3,13 @@
 // activate-Handler loescht dann jeden aelteren Cache, statt ihn als Rueckfall
 // weiterzureichen. Ohne den Sprung kann bei totem Server die Fassung von gestern
 // erscheinen — die Seite sieht dann heil aus, spricht aber mit einem toten Backend.
-const CACHE_NAME = 'harness-studio-v4';
+const CACHE_NAME = 'harness-studio-v9';
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
+  '/task-state.js',
   '/icons.js',
   '/konsole-schichten.js',
   '/icon.svg',

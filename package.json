@@ -1,7 +1,7 @@
 {
   "name": "harness-router-gui",
   "version": "1.0.0",
-  "description": "Web-Oberfläche und Orchestrator für acht KI-Coding-Harnesses",
+  "description": "Web-Oberfl\u00e4che und Orchestrator f\u00fcr acht KI-Coding-Harnesses",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -25,5 +25,8 @@
     "js-yaml": "^5.4.2",
     "qrcode": "^1.5.4",
     "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

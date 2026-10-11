@@ -6,6 +6,7 @@ Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, c
 
 | Modul | Pfad | Beschreibung |
 | :--- | :--- | :--- |
+| **Services** | `services/` | Dispatch, transaktionaler TaskStore, ContextService, LAN-Zugang und optionaler Beads-Adapter |
 | **Server** | `server.js` | Express 5 + `ws`: `/api/*`, Run-Pool, Dispatch-Queue, Scheduler, Telegram, Einstellungen, Task-Historie |
 | **Entscheidung** | `routing.js` | Reine Logik ohne IO: `dispatchSlotDecision`, `knownBrokenBlocker`, `armIdleWatchdog`, `startupRefusal`, `gatewayEnvFromShell` |
 | **Runtime** | `runtime/` | Feste Harness-Registry, gemeinsamer Process Runner, `runHarness()`, Ereignisse, Fehlerklassen, Sessions und CLI-Adapter |
@@ -14,7 +15,7 @@ Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, c
 
 **Laufzeitumgebung**: Node-Prozess auf Port `3000`, bindet `0.0.0.0` (im LAN sichtbar).
 Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.yaml`
-(Prioritätskette, Modelle, Kappe), `studio-tasks.json` (Auftragshistorie inkl. `archived`),
+(Prioritätskette, Modelle, Kappe), `studio.sqlite` (Aufträge, Request-IDs, Versuche und Ereignisse inkl. `archived`; einmalige Migration von `studio-tasks.json`),
 `AGENTS.md` (globaler Richtlinientext), `studio.log`.
 
 ## Konventionen
@@ -92,3 +93,15 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
   prüfen, was mitgeht (`git status --short`), und keine Schlüssel aus dem Laufzeitverzeichnis.
 - Das GUI dispatchet auch in dieses Repo: vor `git checkout`/`reset`/Neustart prüfen, ob ein zweiter
   Agent gerade am Arbeitsbaum schreibt.
+
+## Architekturvertrag seit 11. Oktober 2026
+
+- Node.js mindestens 22.13 für `node:sqlite`. Keine neue Datenbankbibliothek und kein Bundler.
+- SQLite ist die Quelle für Aufträge; die alte JSON-Datei wird einmalig gesichert und importiert. Beschädigte Daten nicht als leere Historie behandeln. Request-ID-Deduplizierung gilt auch nach Neustart.
+- `public/task-state.js` definiert Abschlussmeldungen für Server und UI: `done` nur für `completed`, `error` für `failed`/`incomplete`, `cancelled` für Abbruch mit 130. `abbruch_laeuft` quittiert den Abbruch sofort.
+- Jeder Start und jede Konsensphase verwendet den ContextService. Regeln und Bildhinweise bleiben bei Fallback erhalten; Agentenaussagen sind unbestätigter Arbeitsstand. Keine automatische Änderung von AGENTS-Regeln.
+- LAN-Zugang ist angemeldet, lokaler Zugriff mit gültigem Host/Origin bleibt möglich. `lan-access-code` niemals ausgeben oder committen. API-Antworten nicht cachen. Keine lokale Identität aus Forwarded-Headern ableiten.
+- Codex-Sandbox ist standardmäßig `workspace-write`; nur `execution.codexUnsafe === true` erlaubt den bestehenden Bypass. Die anderen Adapter behalten ihre bestehenden Berechtigungen.
+- Beads ist optional und liest vorhandene Aufgaben über feste `bd`-Argumente. Keine automatische Initialisierung, Übernahme oder Schließung; ein erfolgreicher Lauf ist kein fachlicher Prüfbeleg.
+- Skills-Inventar bleibt lesend; nur ausdrückliche Synchronisierung/Installation erzeugt Links.
+- Vor einem Restart aktive Prozesse und `/api/runs` prüfen. Unterbrochene Aufgaben benötigen ausdrückliche Fortsetzung; niemals automatisch erneut dispatchen.
