@@ -1043,7 +1043,7 @@ function renderHarnessConfigList() {
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
-      <div><code>${escapeHtml(item.command || item.harness || 'cli')}</code></div>
+      <div><code title="${escapeHtml(item.capabilities?.limitations || '')}">${escapeHtml(item.command || item.harness || 'cli')}</code></div>
       <div>
         <div class="model-select-wrapper">
           <select class="model-dropdown" data-idx="${index}">
@@ -1150,6 +1150,7 @@ const MODEL_TEST_LABELS = {
   service: 'Dienstfehler',
   timeout: 'Timeout',
   not_installed: 'nicht installiert',
+  permission: 'Freigabe fehlt',
   tui_only: 'nur TUI',
   unknown: 'Fehler'
 };
@@ -2832,7 +2833,8 @@ const CLI_ICON_KEYS = {
   codebuddy_cli: 'codebuddy_cli',
   codebuddy: 'codebuddy_cli',
   cursor_cli: 'cursor_cli',
-  cursor: 'cursor_cli'
+  cursor: 'cursor_cli',
+  junie: 'junie_cli', kilo: 'kilo_cli', copilot: 'copilot_cli', kiro: 'kiro_cli', vibe: 'vibe_cli'
 };
 
 async function openInstallerModal(focusToolId = null) {
@@ -2885,7 +2887,7 @@ async function loadInstallerStatus(forceRefresh = false) {
     if (dom.installAllMissingBtn) {
       if (data.missing === 0) {
         dom.installAllMissingBtn.disabled = true;
-        dom.installAllMissingBtn.innerHTML = '<span>Alle 9 CLIs bereit</span>';
+        dom.installAllMissingBtn.innerHTML = `<span>Alle ${data.total} CLIs installiert</span>`;
       } else {
         dom.installAllMissingBtn.disabled = state.isInstallingAll;
         dom.installAllMissingBtn.innerHTML = `<span>Alle ${data.missing} fehlenden CLIs installieren</span>`;
@@ -2924,7 +2926,7 @@ function renderInstallerCards(tools) {
     if (isInstalling) {
       statusBadge = '<span class="installer-card-badge status-busy">Installiert…</span>';
     } else if (isReady) {
-      statusBadge = '<span class="installer-card-badge status-ok">Bereit</span>';
+      statusBadge = `<span class="installer-card-badge status-ok">${tool.limitations ? 'Installiert' : 'Bereit'}</span>`;
     } else {
       statusBadge = '<span class="installer-card-badge status-missing">Fehlt</span>';
     }
@@ -2966,7 +2968,8 @@ function renderInstallerCards(tools) {
         ${statusBadge}
       </div>
 
-      <p class="installer-card-desc">${escapeHtml(tool.desc || '')}</p>
+      <p class="installer-card-desc">${escapeHtml(tool.description || tool.desc || '')}</p>
+      ${tool.limitations ? `<p class="installer-card-desc">${escapeHtml(tool.limitations)}</p>` : ''}
 
       <div class="installer-card-detail">
         <div class="installer-detail-row">
@@ -3029,7 +3032,7 @@ async function installCli(toolId) {
 async function installAllMissing() {
   const missing = state.installerTools.filter(t => !t.available);
   if (missing.length === 0) {
-    alert('Alle 9 CLIs sind bereits installiert und einsatzbereit!');
+    alert('Alle registrierten CLIs sind bereits installiert.');
     return;
   }
 

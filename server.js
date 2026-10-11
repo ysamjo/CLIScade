@@ -156,7 +156,12 @@ const DEFAULT_MODEL_PRESETS = {
   cursor: [
     { id: 'Standard', label: 'Standard (Cursor entscheidet)' },
     { id: 'auto', label: 'Auto' }
-  ]
+  ],
+  junie: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  kilo: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  copilot: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  kiro: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  vibe: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }]
 };
 
 let cachedModelPresets = null;
@@ -827,7 +832,7 @@ app.post('/api/installer/install', (req, res) => {
     const current = getHarnessHealth(true);
     const missing = current.filter(t => !t.available);
     if (missing.length === 0) {
-      return res.json({ success: true, message: 'Alle 9 CLIs sind bereits vollständig installiert und einsatzbereit!' });
+      return res.json({ success: true, message: 'Alle registrierten CLIs sind bereits installiert. Anmeldung und Modelle separat testen.' });
     }
 
     res.json({ success: true, message: `Installiere ${missing.length} fehlende CLIs im Hintergrund...` });

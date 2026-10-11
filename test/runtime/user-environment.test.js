@@ -17,3 +17,12 @@ test('Startumgebung hat Vorrang und Ladefehler behalten den letzten Stand',()=>{
  assert.equal(service.environment().ANTHROPIC_MODEL,'explicit');fail=true;
  assert.throws(()=>service.reload(),/Shell-Konfiguration/);assert.equal(service.environment().ANTHROPIC_MODEL,'explicit');
 });
+
+test('Neue CLI-Anmeldedaten laden nur freigegebene Namen und Status enthält keine Werte',()=>{
+ const names=['JUNIE_API_KEY','KIRO_API_KEY','COPILOT_GITHUB_TOKEN','GH_TOKEN','GITHUB_TOKEN','MISTRAL_API_KEY'];
+ const service=new UserEnvironment({env:{HOME:'/tmp/test',PATH:'/usr/bin'},read:()=>names.map(n=>`${n}=secret-test`).join('\n')+'\nKIRO_UNSAFE=1\nVIBE_AUTO_APPROVE=1'});
+ const environment=service.environment();
+ for(const name of names)assert.equal(environment[name],'secret-test');
+ assert.equal(environment.KIRO_UNSAFE,undefined);assert.equal(environment.VIBE_AUTO_APPROVE,undefined);
+ assert.ok(!JSON.stringify(service.status()).includes('secret-test'));
+});

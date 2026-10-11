@@ -23,6 +23,31 @@ HOST=127.0.0.1 npm start
 - Optionales Beads-Projektgedächtnis mit relevanten Erkenntnissen, Prüfbelegen und geprüften Sicherungen.
 - Browser-Oberfläche, abgesicherter LAN-Zugang, Zeitpläne und Telegram-Steuerung.
 
+
+## Weitere Coding-CLIs
+
+Die feste Registry umfasst weiterhin die acht bisherigen Harnesses und zusätzlich `junie`, `kilo`, `copilot`, `kiro` und `vibe`. Sie stehen in Routen-Auswahl, Installation/Erkennung, Modelltest, Fallback-Kaskade, Konsens, Scheduler und Telegram zur Verfügung. Bestehende Konfigurationen werden nicht um neue aktive Routen ergänzt. Unter **Einstellungen → Harnesses** eine Route hinzufügen, bei Bedarf die vom CLI unterstützte Modell-ID eingeben und **Test** ausführen.
+
+| Harness / Executable | Offizieller Einmalmodus | Installation im Server-Benutzerkonto |
+| --- | --- | --- |
+| Junie / `junie` | `--task <Auftrag> --output-format text --project <Ordner>` | `curl -fsSL https://junie.jetbrains.com/install.sh | bash` |
+| Kilo / `kilo` | `run --format json --thinking -- <Auftrag>` | `npm install -g @kilocode/cli` |
+| Copilot / `copilot` | `-p <Auftrag> --no-ask-user --output-format json` | `npm install -g @github/copilot` |
+| Kiro / `kiro-cli` | `chat --agent-engine v3 --no-interactive --output-format stream-json -- <Auftrag>` | `curl -fsSL https://cli.kiro.dev/install | bash` |
+| Vibe / `vibe` | `--prompt <Auftrag> --output streaming` | `uv tool install mistral-vibe` (Python ≥3.12) |
+
+Anmeldung erfolgt im jeweiligen CLI bzw. über dessen offizielle Umgebungsvariablen. Der Server lädt zusätzlich `JUNIE_API_KEY`, `KIRO_API_KEY`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`, `MISTRAL_API_KEY` und `VIBE_HOME` aus der Login-Shell; der Status nennt ausschließlich Variablennamen. Schlüssel werden nicht als CLI-Argumente übergeben. **Gefunden/installiert bedeutet nicht angemeldet oder kontingentberechtigt**; der Modelltest startet einen echten Modellaufruf in einem temporären Ordner und kann Kontingent verbrauchen.
+
+`Standard` übernimmt die CLI-Modellauswahl. Junie, Kilo, Copilot und Kiro erhalten benutzerdefinierte Modelle über `--model`; Vibe über die nur für den Kindprozess gesetzte offizielle Variable `VIBE_ACTIVE_MODEL` (konfigurierter Vibe-Modellalias, kein erfundenes `--model`). Es werden keine freien Modellnamen oder Quoten aus Vermutungen vorbelegt.
+
+**Berechtigungen:** Die neuen Adapter setzen weder `--auto`, `--allow-all*`, `--trust-all-tools`, `--auto-approve`, `--yolo`, `--trust` noch `--brave`. Werkzeugrechte müssen im jeweiligen CLI eingerichtet sein (Kilo-Berechtigungskonfiguration, Copilot-Werkzeug-/Pfadfreigaben, Kiro-V3-`permissions.yaml`, Vibe-Agentenregeln). Nicht genehmigte Werkzeuge können abgewiesen werden; erfasste Freigabefehler lösen Fallback aus, keine Eskalation. Die CLI-eigenen gespeicherten Regeln gelten weiterhin. **Junie vertraut nichtinteraktiven Projekten laut Hersteller automatisch**, einschließlich Projekt-MCP, Hooks und Skills; CLIScade meldet diese Grenze vor jedem Lauf und bietet hier keine zusätzliche Sandbox.
+
+**Junie Lite:** Nach JetBrains-Anmeldung in `junie` über `/model` auswählen; CLIScade verwendet mit `Standard` die dort konfigurierte Auswahl. Die offizielle Referenz veröffentlicht keinen festen Lite-Headless-Alias, deshalb wird keiner erfunden. Junie Lite ist kein separates Executable; `Standard` garantiert allein keine kostenlose Modellauswahl. Der Anbieter veröffentlicht keine feste Lite-Quote. Die übrigen Freikontingente sind tarif-/accountabhängig; CLIScade garantiert keine kostenfreie Ausführung und berechnet keine fiktiven Restbudgets.
+
+**Ausgabe und Fortsetzung:** Kilo-JSONL, Copilot-Session-Ereignisse, Kiro-ACP-Headless-Envelope und Vibe-Streaming-History werden normalisiert. Nur Kilo liefert hier dokumentierte Shell-Exit-Codes für gepaarte Werkzeugbelege; fehlende Codes bleiben `null`. Junie unterstützt zwar `json-stream`, aber die geprüfte offizielle Dokumentation enthält kein belastbares Ereignisschema: der Adapter nutzt Text, ohne native Session-ID oder Werkzeugbelege zu erfinden. Alle fünf beginnen bei Fortsetzung einen neuen CLI-Aufruf mit dem vorhandenen CLIScade-Auftrags-/Regel-/Fallback-Kontext; native Resume-Flags der Hersteller sind noch nicht an den SessionStore angebunden (`resumable: false`). Leere Antworten oder unbekannte strukturierte Ausgabe werden nicht als Erfolg gewertet. Anmeldung, Kontingent, Rate-Limit, Kontextlimit und fehlende Freigaben werden anhand erfasster Fehler klassifiziert; CLI-Versionen mit abweichendem Schema können einen sichtbaren Fehler liefern.
+
+Dokumentationsstand: 11.10.2026. Grundlagen: [Junie Headless](https://junie.jetbrains.com/docs/junie-headless.html), [Junie Parameter](https://junie.jetbrains.com/docs/parameters.html), [Junie Lite](https://junie.jetbrains.com/docs/junie-lite.html), [Kilo CLI](https://kilo.ai/docs/code-with-ai/platforms/cli-reference), [Copilot programmatisch](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference), [Copilot Ereignisse](https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/streaming-events), [Kiro Headless](https://kiro.dev/docs/cli/headless/), [Vibe Quellcode](https://github.com/mistralai/mistral-vibe). Kiro-Envelope mit installierter CLI 2.28.0 und einem echten werkzeugfreien `OK`-Modelltest bestätigt; Kilo-Parser gegen Run-Quellcode `6f08110`, Vibe-Parser gegen CLI-/History-Quellcode `4ae5c59` geprüft. Für Junie, Kilo, Copilot und Vibe sind die Server-/Kindprozessprüfungen Stub-Tests, keine authentifizierten Live-Modellläufe.
+
 ## Ausführung
 
 - **Claude Code, Codex, Cline, OpenCode, Qoder, Antigravity, CodeBuddy und Cursor** laufen headless über `runHarness()` und einen gemeinsamen Process Runner. Die vier erstgenannten Harnesses liefern strukturierte Ereignisse; die anderen Adapter verarbeiten ihre Textausgabe.
@@ -52,6 +77,8 @@ npm test                         # Hermetische Laufzeit-, Routing-, API- und UI-
 npm run test:routing             # Node-Testdateien einschließlich runtime/
 node test/ui-smoke.mjs           # Oberfläche in jsdom
 ```
+
+Die neuen CLI-Vertragstests (`test/runtime/new-clis.test.js`) prüfen Argumente, Ereignisse und Fehler mit echten Stub-Kindprozessen. `test/new_clis_server.test.js` prüft die fünf Modell-Endpunkte, Erkennung, Konfigurationspersistenz und die vollständige Quota-Kaskade einschließlich Regel-/Auftragskontext; sein Server verwendet einen freien Port.
 
 Die Kettentests starten eigene Server auf 3911 und 3912 mit Wegwerf-`HOME` und Stub-CLIs. Sie berühren den Nutzer-Server auf Port 3000 nicht. Für eine manuelle Browser-Prüfung einen eigenen Server auf einem anderen Port und mit eigenem `HOME` starten. Änderungen an `server.js` oder `runtime/` werden erst nach dessen Neustart wirksam; Änderungen in `public/` nach einem Reload.
 

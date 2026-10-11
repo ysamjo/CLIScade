@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { HARNESS_REGISTRY, resolveHarness, normalizeRoutes } = require('../../runtime/registry');
 
 test('Registry enthält genau die bekannten Harnesses, alle dispatchbar', () => {
-  assert.equal(Object.keys(HARNESS_REGISTRY).length, 8);
+  assert.equal(Object.keys(HARNESS_REGISTRY).length, 13);
   assert.ok(Object.values(HARNESS_REGISTRY).every((entry) => entry.transport === 'headless'));
   assert.ok(Object.values(HARNESS_REGISTRY).every((entry) => entry.dispatchable && entry.modelTest));
 });

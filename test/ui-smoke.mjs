@@ -232,9 +232,9 @@ pruefe("OpenCode-Modellliste erscheint auch bei verspätetem Preset-Laden",
   [...document.querySelectorAll(".model-dropdown option")].some((option) => option.value === "opencode/fledge-alpha-free"));
 pruefe("keine CLI-Auswahl des Terminals mehr",
   document.querySelector("#interactive-cli-select") === null);
-pruefe("die Routen-Auswahl kennt genau die acht Registry-Harnesses",
+pruefe("die Routen-Auswahl kennt genau die dreizehn Registry-Harnesses",
   [...document.querySelectorAll("#new-route-harness option")].map((o) => o.value).join(",")
-    === "claude_code,codex,cline,opencode,antigravity_cli,qoder,codebuddy,cursor",
+    === "claude_code,codex,cline,opencode,antigravity_cli,qoder,codebuddy,cursor,junie,kilo,copilot,kiro,vibe",
   [...document.querySelectorAll("#new-route-harness option")].map((o) => o.value).join(","));
 pruefe("Dispatch-Konsolen haben je ein Routing-Feld",
   document.querySelectorAll("#run-split .run-pane-routing").length === 2);

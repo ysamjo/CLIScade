@@ -9,7 +9,9 @@ const ADAPTERS = Object.freeze({
   claude: require('./adapters/claude'), codex: require('./adapters/codex'),
   cline: require('./adapters/cline'), opencode: require('./adapters/opencode'),
   qoder: require('./adapters/qoder'), antigravity: require('./adapters/antigravity'),
-  codebuddy: require('./adapters/codebuddy'), cursor: require('./adapters/cursor')
+  codebuddy: require('./adapters/codebuddy'), cursor: require('./adapters/cursor'),
+  junie: require('./adapters/junie'), kilo: require('./adapters/kilo'),
+  copilot: require('./adapters/copilot'), kiro: require('./adapters/kiro'), vibe: require('./adapters/vibe')
 });
 
 // Gerüst der aufrufenden App, das in keinen Lauf gehört: SERVER__PORT/SERVER__HOST
@@ -70,19 +72,24 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
       status: 'failed', finalText, sessionId, model,
       error: { kind: 'not_installed', retryability: 'next_harness', message: `${entry.name} ist nicht installiert` }, events, exitCode: null
     };
+    if (entry.limitations) emit({ type: 'warning', text: `${entry.limitations}\n` });
     const args = adapter.build({ prompt, model, sessionId: resume ? previousSessionId : null, cwd, env: runEnv, execution });
     const structured = entry.structuredOutput;
     const consume = (line) => {
       if (!line) return;
       let parsed;
       try { parsed = JSON.parse(line); } catch {
-        emit({ type: 'text', text: `${line}\n` });
+        emit(entry.strictOutput ? { type: 'warning', text: `${line}\n` } : { type: 'text', text: `${line}\n` });
         return;
       }
-      for (const event of adapter.normalize(parsed)) emit(event);
+      try {
+        for (const event of adapter.normalize(parsed)) emit(event);
+      } catch {
+        emit({ type: 'error', message: 'CLI-Ereignis konnte nicht verarbeitet werden' });
+      }
     };
     const processResult = await runProcess({
-      command, args, cwd, env: { ...runEnv, PWD: cwd }, signal, idleTimeoutMs, timeoutMs, onIdle, onSpawn,
+      command, args, cwd, env: { ...runEnv, ...adapter.environment?.({ model }), PWD: cwd }, signal, idleTimeoutMs, timeoutMs, onIdle, onSpawn,
       onChunk: ({ stream, text }) => {
         if (stream === 'stderr') { emit({ type: 'warning', text }); return; }
         if (!structured) { emit({ type: 'text', text }); return; }
@@ -100,9 +107,11 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
     });
     if (structured && stdoutBuffer.trim()) consume(stdoutBuffer.trim());
     const raw = `${processResult.stdoutTail}\n${processResult.stderrTail}`;
-    const error = classifyError({ explicit: explicitError || processResult.error?.message, raw,
+    const error = classifyError({ explicit: explicitError || processResult.error?.message || adapter.detectFailure?.(raw), raw,
       stderr: events.some((event) => event.type === 'result') ? '' : processResult.stderrTail,
       exitCode: processResult.exitCode, reason: processResult.reason })
+      || (entry.requiresText && !finalText.trim()
+        ? { kind: 'harness_failure', retryability: 'next_harness', message: 'CLI endete ohne lesbare Antwort; Ausgabeformat oder Freigaben prüfen' } : null)
       || (!events.some((event) => ['text', 'result', 'tool_start', 'tool_result'].includes(event.type))
         ? { kind: 'harness_failure', retryability: 'next_harness', message: 'Harness endete ohne Ergebnis' } : null);
     return {

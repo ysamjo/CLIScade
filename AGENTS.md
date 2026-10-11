@@ -116,3 +116,12 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Nutzerkonfiguration: `runtime/user-environment.js` liest ausschließlich freigegebene Provider-/Nutzer-Variablen der Login-Shell, filtert Shim-Pfade und erhält Startumgebungs-Vorrang. `POST /api/user-environment/reload` aktualisiert nur zukünftige Läufe und gibt keine Werte aus. Bei Fehler bleibt die letzte erfolgreiche Konfiguration erhalten.
 - Portable Laufzeit: Launcher erkennt Node >=22.13 über PATH/nvm oder `HARNESS_NODE`; Mac-App erkennt Python über Nutzer-PATH/Standardpfade oder `CLISCADE_PYTHON`. Keine persönlichen Entwicklerpfade voraussetzen.
 - `POST /api/context/preview` bleibt lesend und verwendet `buildContext` wie die Ausführung; Workspace-Grenzen, Beads-Ausnahme, Quellen und Budget gelten auch für die Vorschau. Mobile Dateiauswahl verwendet denselben Bildpfad wie Paste.
+
+## Weitere Harnesses seit 11. Oktober 2026
+
+- Registry enthält 13 Harnesses: bestehende acht plus `junie`, `kilo`, `copilot`, `kiro`, `vibe`. Keine neuen Routen automatisch aktivieren. CLI-Argumente bleiben ausschließlich in den Adaptern.
+- Neue Adapter verwenden keine pauschalen Freigabe-/Trust-Flags; gespeicherte CLI-Policies gelten. Junie vertraut Einmalauftragsprojekten nativ: Grenze in Registry, Installer und Laufwarnung anzeigen.
+- Vibe-Modellwahl über Kindprozess-`VIBE_ACTIVE_MODEL`; kein `--model`. Junie Lite über native Modellauswahl, keinen unbelegten Alias vorgeben. Keine festen Freiquoten erfinden.
+- Kiro V3/stream-json: bestätigtes Headless-Envelope `sessionUpdate.data` und `runFinished.data` (CLI 2.28.0). Junie bewusst Textmodus ohne belegtes JSON-Schema; neue strukturierte Adapter dürfen unbekannte/malformed Ausgabe nicht als Antwort werten.
+- Alle fünf derzeit `resumable: false`: Fortsetzung über ContextService, keine globale/zuletzt aktive Hersteller-Session erraten. Fehlende Werkzeug-Exit-Codes bleiben `null`.
+- Zusätzliche Prüfungen: `node --test test/runtime/new-clis.test.js test/new_clis_server.test.js`; letzterer startet isolierten Server auf freiem Port und ausschließlich Stub-CLIs. Echte Modelltests verbrauchen ggf. Kontingent.

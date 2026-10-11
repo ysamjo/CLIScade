@@ -6,11 +6,12 @@ function classifyError({ explicit, raw = '', stderr = '', exitCode, reason } = {
   if (!explicit && exitCode === 0 && !successfulStartupRefusal && !stderr) return null;
   const text = String(explicit || (exitCode === 0 ? (stderr || raw) : raw) || '').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
   let kind = 'unknown';
-  if (/unauthorized|authentication|not authenticated|please.{0,20}login|invalid.{0,10}(api.?key|token)/i.test(text)) kind = 'auth';
-  else if (/quota|insufficient.{0,20}(credit|balance)|out of credits/i.test(text)) kind = 'quota';
+  if (/unauthorized|authentication|not authenticated|please.{0,20}login|invalid.{0,10}(api.?key|token)|missing.{0,15}api.?key|not logged in|login required|not signed in/i.test(text)) kind = 'auth';
+  else if (/quota|insufficient.{0,20}(credit|balance)|out of credits|credits? (?:exhausted|depleted)|usage.limit.{0,20}(?:exceeded|reached)|premium requests?.{0,20}(?:exceeded|exhausted)/i.test(text)) kind = 'quota';
   else if (/429|rate.?limit|too many requests/i.test(text)) kind = 'rate_limit';
-  else if (/context.{0,20}(length|window|limit|exceeded|too long)/i.test(text)) kind = 'context_limit';
+  else if (/context[ _].{0,20}(length|window|limit|exceeded|too[ _]long)/i.test(text)) kind = 'context_limit';
   else if (/model.{0,20}(not.{0,10}found|invalid|unknown|unavailable|unsupported)/i.test(text)) kind = 'model_unavailable';
+  else if (/permission.{0,30}(denied|rejected|required)|auto.reject|not allowed|approval.{0,20}(denied|required)|freigabe verweigert/i.test(text)) kind = 'permission';
   else if (/service unavailable|bad gateway|fetch failed|ENOTFOUND|ECONNREFUSED|\b5\d\d\b/i.test(text)) kind = 'service';
   else if (/configuration is invalid at|invalid configuration file|unknown (option|command)|unknown flag|unrecognized command line option/i.test(text)) kind = 'harness_failure';
   else if (exitCode !== 0) kind = 'harness_failure';

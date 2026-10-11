@@ -89,6 +89,41 @@ const CLI_INSTALL_REGISTRY = {
     category: 'Frontier Agent',
     iconKey: 'cursor_cli',
     docsUrl: 'https://cursor.com/docs/cli/overview'
+  },
+  junie_cli: {
+    id: 'junie_cli', name: 'Junie CLI', cmd: 'junie',
+    package: 'Junie CLI', installCmd: 'curl -fsSL https://junie.jetbrains.com/install.sh | bash',
+    description: 'Junie CLI für nichtinteraktive Coding-Aufträge',
+    category: 'Coding Agent', iconKey: 'junie_cli',
+    docsUrl: 'https://junie.jetbrains.com/docs/junie-headless.html', limitations: 'Junie Lite im CLI auswählen; Standard übernimmt die CLI-Auswahl. Nichtinteraktive Projekte gelten bei Junie automatisch als vertrauenswürdig. Textausgabe; kein normalisierter JSON-Toolnachweis.'
+  },
+  kilo_cli: {
+    id: 'kilo_cli', name: 'Kilo Code CLI', cmd: 'kilo',
+    package: '@kilocode/cli', installCmd: 'npm install -g @kilocode/cli',
+    description: 'Kilo Code CLI für nichtinteraktive Coding-Aufträge',
+    category: 'Coding Agent', iconKey: 'kilo_cli',
+    docsUrl: 'https://kilo.ai/docs/code-with-ai/platforms/cli-reference', limitations: 'Benötigt Anmeldung/Provider und konfigurierte Werkzeugrechte. Nicht erlaubte Aufrufe werden ohne --auto abgelehnt.'
+  },
+  copilot_cli: {
+    id: 'copilot_cli', name: 'GitHub Copilot CLI', cmd: 'copilot',
+    package: '@github/copilot', installCmd: 'npm install -g @github/copilot',
+    description: 'GitHub Copilot CLI für nichtinteraktive Coding-Aufträge',
+    category: 'Coding Agent', iconKey: 'copilot_cli',
+    docsUrl: 'https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference', limitations: 'Benötigt GitHub-Anmeldung und erlaubte Werkzeuge/Pfade. Keine automatische Vollfreigabe; Tarif und Kontingent accountabhängig.'
+  },
+  kiro_cli: {
+    id: 'kiro_cli', name: 'Kiro CLI', cmd: 'kiro-cli',
+    package: 'Kiro CLI', installCmd: 'curl -fsSL https://cli.kiro.dev/install | bash',
+    description: 'Kiro CLI für nichtinteraktive Coding-Aufträge',
+    category: 'Coding Agent', iconKey: 'kiro_cli',
+    docsUrl: 'https://kiro.dev/docs/cli/headless/', limitations: 'Benötigt aktuelle CLI mit V3/stream-json und Headless-Authentifizierung. Werkzeugrechte über permissions.yaml konfigurieren; keine pauschale Freigabe.'
+  },
+  vibe_cli: {
+    id: 'vibe_cli', name: 'Mistral Vibe CLI', cmd: 'vibe',
+    package: 'mistral-vibe', installCmd: 'uv tool install mistral-vibe',
+    description: 'Mistral Vibe CLI für nichtinteraktive Coding-Aufträge',
+    category: 'Coding Agent', iconKey: 'vibe_cli',
+    docsUrl: 'https://github.com/mistralai/mistral-vibe', limitations: 'Benötigt uv/Python ab 3.12 und Mistral-Anmeldung/API-Schlüssel. Modellalias aus Vibe-Konfiguration; Werkzeugrechte aus dem gewählten Agenten.'
   }
 };
 
@@ -100,7 +135,12 @@ const HARNESS_DEFINITIONS = {
   antigravity: { installId: 'antigravity_cli', aliases: ['antigravity_cli'], transport: 'headless', resumable: false, structuredOutput: false },
   qoder: { installId: 'qoder_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
   codebuddy: { installId: 'codebuddy_cli', aliases: ['cbc'], transport: 'headless', resumable: false, structuredOutput: false },
-  cursor: { installId: 'cursor_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false }
+  cursor: { installId: 'cursor_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
+  junie: { installId: 'junie_cli', aliases: ['junie_cli'], transport: 'headless', resumable: false, structuredOutput: false, strictOutput: true, requiresText: true },
+  kilo: { installId: 'kilo_cli', aliases: ['kilo_cli'], transport: 'headless', resumable: false, structuredOutput: true, strictOutput: true, requiresText: true },
+  copilot: { installId: 'copilot_cli', aliases: ['copilot_cli'], transport: 'headless', resumable: false, structuredOutput: true, strictOutput: true, requiresText: true },
+  kiro: { installId: 'kiro_cli', aliases: ['kiro_cli'], transport: 'headless', resumable: false, structuredOutput: true, strictOutput: true, requiresText: true },
+  vibe: { installId: 'vibe_cli', aliases: ['vibe_cli'], transport: 'headless', resumable: false, structuredOutput: true, strictOutput: true, requiresText: true }
 };
 
 const HARNESS_REGISTRY = Object.freeze(Object.fromEntries(
@@ -112,7 +152,9 @@ const HARNESS_REGISTRY = Object.freeze(Object.fromEntries(
       installId: definition.installId, aliases: definition.aliases,
       transport: definition.transport, dispatchable: headless, consensus: headless,
       scheduler: headless, telegramDispatch: headless, modelTest: headless,
-      resumable: definition.resumable, structuredOutput: definition.structuredOutput
+      resumable: definition.resumable, structuredOutput: definition.structuredOutput,
+      strictOutput: definition.strictOutput === true, requiresText: definition.requiresText === true,
+      ...(install.limitations ? { limitations: install.limitations } : {})
     })];
   })
 ));
