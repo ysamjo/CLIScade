@@ -727,7 +727,12 @@ function renderRunPane(slot) {
     ? stream.prompt.replace(/\s+/g, ' ').trim()
     : (stream.title || 'Auftrag');
   pane.title.hidden = false;
-  pane.harness.textContent = stream.title || '';
+  const task = state.tasks.find(item => item.id === stream.taskId);
+  const model = task?.model || (stream.title ? stream.title.split(' · ').slice(1).join(' · ') || 'Standard' : '');
+  pane.harness.innerHTML = stream.title
+    ? `${taskHarnessIcon(task || { harness: stream.title.split(' · ')[0] })}<span class="run-pane-model" title="${escapeHtml(model)}">${escapeHtml(model)}</span>`
+    : '';
+  pane.harness.title = stream.title || '';
   pane.folder.textContent = stream.folder || '';
   pane.cancel.hidden = TaskState.terminal(stream.status);
   pane.cancel.disabled = Boolean(stream.cancelling);
@@ -1420,7 +1425,7 @@ function renderProjectTree() {
       let usageMeta = '';
       if (task.usage && task.usage.totalTokens) {
         const tokK = Math.round(task.usage.totalTokens / 100) / 10;
-        usageMeta = ` · <span style="color:var(--text-main);">${tokK}k Tok</span>`;
+        usageMeta = `<span style="color:var(--text-main);">${tokK}k Tok</span>`;
         if (task.usage.remainingPercent !== undefined) {
           usageMeta += ` <span style="color:var(--text-dim); font-size:10px;">(${task.usage.remainingPercent}% frei)</span>`;
         }
@@ -1438,7 +1443,7 @@ function renderProjectTree() {
         <span class="task-icon">↳</span>
         <div class="task-meta">
           <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
-          <span class="task-badge">${statusIcon} ${taskHarnessIcon(task)} ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
+          <span class="task-badge"><span class="task-status">${statusIcon}</span>${taskHarnessIcon(task)}<span class="task-model" title="${escapeHtml(task.model || 'Standard')}">${escapeHtml(task.model || 'Standard')}</span><span class="task-time">${timeStr}</span>${usageMeta ? `<span class="task-usage">${usageMeta}</span>` : ''}</span>
           ${isTaskActive ? `<span class="task-konsole">Konsole ${konsole + 1}</span>` : ''}
         </div>
         ${aktion}

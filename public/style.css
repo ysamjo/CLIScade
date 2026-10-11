@@ -3188,15 +3188,22 @@ body, .app-layout { height:100dvh; }
 /* Eine Konsole zu Beginn; der Ordner ist die Auswahl im Kopf des Felds. */
 .run-pane[hidden], .memory-pane[hidden] { display:none; }
 .run-pane-heading { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
-.run-pane-head { height:auto; min-height:54px; flex:0 0 auto; padding:8px 12px; }
+.run-pane-head { display:grid; grid-template-columns:minmax(0,1fr); gap:4px; height:auto; min-height:54px; flex:0 0 auto; padding:8px 12px; }
+.run-pane-head .run-pane-harness { display:flex; align-items:center; gap:6px; width:fit-content; max-width:100%; min-width:0; padding:3px 5px; }
+.run-pane-head .run-pane-harness:empty { display:none; }
+.run-pane-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .run-pane-head .run-pane-target { width:100%; max-width:none; min-width:0; height:30px; flex:none; padding:3px 4px; border:1px solid transparent; background:transparent; font-size:14px; font-weight:600; color:var(--text-main); }
 .run-pane-head .run-pane-target:hover { background:var(--bg-card); }
-.run-pane-heading .run-pane-title { padding-inline:4px; font-size:11px; font-weight:400; color:var(--text-muted); }
+.run-pane-heading .run-pane-title { min-width:0; padding-inline:4px; font-size:11px; font-weight:400; color:var(--text-muted); }
 .run-pane-targets .run-pane-routing { flex:0 1 180px; width:100%; }
 @media (max-width:768px) { .run-pane-head .run-pane-target { font-size:13px; } }
 
 /* CLI-Zeichen statt wiederholtem Namen in der Aufgabenzeile. */
-.task-badge { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.task-meta { min-width:0; }
+.task-badge { display:grid; grid-template-columns:auto 16px minmax(0,1fr) auto; align-items:center; gap:4px; min-width:0; }
+.task-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task-time { white-space:nowrap; }
+.task-usage { grid-column:1 / -1; }
 .task-harness-icon { width:16px; height:16px; flex:0 0 16px; object-fit:contain; border-radius:3px; background:#f3f3f3; }
 .task-harness-fallback { display:inline-flex; width:16px; height:16px; flex:0 0 16px; }
 .task-harness-fallback .svg-icon { width:16px; height:16px; }

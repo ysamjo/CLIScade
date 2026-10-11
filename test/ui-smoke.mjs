@@ -330,7 +330,7 @@ pruefe("Auftrag B bekommt das zweite Feld", (konsole(1)?.textContent || "").incl
 pruefe("B schreibt nicht in A's Feld", !(konsole(0)?.textContent || "").includes("AUSGABE-B"));
 pruefe("A's Ausgabe bleibt stehen", (konsole(0)?.textContent || "").includes("AUSGABE-A"));
 pruefe("jedes Feld nennt seinen Harness",
-  /Cline/.test(konsole(0)?.textContent || "") && /Qoder/.test(konsole(1)?.textContent || ""));
+  /Cline/.test(konsole(0)?.querySelector(".run-pane-harness")?.title || "") && /Qoder/.test(konsole(1)?.querySelector(".run-pane-harness")?.title || ""));
 // Die Seitenleiste weiß es vorher (erste Route der Kette) — route_selected bessert nach.
 pruefe("die Seitenleiste zeigt den gewählten Harness",
   document.querySelector('.task-item[data-task-id="task_b"] .task-harness-icon')?.getAttribute('src') === '/harness-icons/qoder.svg',
@@ -522,7 +522,7 @@ pruefe("das Feld nennt den alten Auftrag",
 // Harness und Modell sind die Art des Laufs — sie stehen als Marke daneben, damit
 // zwei Konsolen desselben Harness trotzdem unterscheidbar bleiben.
 pruefe("die Marke nennt den alten Harness",
-  /Cline · plan-free/.test(folge?.querySelector(".run-pane-harness")?.textContent || ""),
+  /Cline · plan-free/.test(folge?.querySelector(".run-pane-harness")?.title || ""),
   folge?.querySelector(".run-pane-harness")?.textContent);
 pruefe("das Feld zeigt den Ordner des alten Auftrags",
   folge?.querySelector(".run-pane-target")?.value === "/tmp/proj-b",
@@ -763,7 +763,7 @@ pruefe("das Feld trägt den Auftrag als Titel",
   /LAYER-MARKER/.test(konsole(layerSlot)?.querySelector(".run-pane-title")?.textContent || ""),
   konsole(layerSlot)?.querySelector(".run-pane-title")?.textContent);
 pruefe("die Marke trägt Harness und Modell",
-  /Claude Code · Standard/.test(konsole(layerSlot)?.querySelector(".run-pane-harness")?.textContent || ""),
+  /Claude Code · Standard/.test(konsole(layerSlot)?.querySelector(".run-pane-harness")?.title || ""),
   konsole(layerSlot)?.querySelector(".run-pane-harness")?.textContent);
 
 const seitenItem = () => document.querySelector('.task-item[data-task-id="task_l"]');
@@ -940,6 +940,18 @@ for (const id of ['claude','codex','cline','opencode','antigravity','qoder','cod
 }
 pruefe('CLI-Icon folgt beim Fallback dem aktuellen Executable', typeof window.taskHarnessIcon === 'function' && window.taskHarnessIcon({command:'kiro-cli',harnessId:'codex'}).includes('/kiro.'));
 pruefe('Unbekannte CLI bekommt ein sicheres neutrales Icon', typeof window.taskHarnessIcon === 'function' && !window.taskHarnessIcon({harness:'<script>test</script>'}).includes('<script>'));
+
+const longModel = 'opencode/ling-3.1-flash-free';
+const layoutTask = {id:'layout-long-model',status:'completed',harnessId:'opencode',harness:'opencode_cli',model:longModel,projectPath:'/tmp/cliscade',prompt:'Was können wir als Nächstes machen?',timestamp:'2026-10-11T21:08:00.000Z'};
+sag({type:'task_created',taskId:layoutTask.id,task:layoutTask});
+sag({type:'route_selected',taskId:layoutTask.id,harness:'opencode_cli',command:'opencode',model:longModel});
+await ruhen(2);
+const layoutRow = document.querySelector('.task-item[data-task-id="layout-long-model"]');
+pruefe('Lange Task-Modelle haben eigene Modell- und Zeitfelder', layoutRow.querySelector('.task-model')?.title === longModel && Boolean(layoutRow.querySelector('.task-time')) && Boolean(layoutRow.querySelector('.task-status')));
+layoutRow.click();
+await ruhen(2);
+const layoutPane = [...document.querySelectorAll('.run-pane')].find(p => p.querySelector('.run-pane-title').textContent === layoutTask.prompt);
+pruefe('Konsolenkopf zeigt CLI-Icon und vollständiges Modell im Tooltip', layoutPane?.querySelector('.run-pane-harness img')?.getAttribute('src') === '/harness-icons/opencode.png' && layoutPane?.querySelector('.run-pane-model')?.title === longModel);
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;
