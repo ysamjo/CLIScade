@@ -215,7 +215,7 @@ body {
 
 .project-node.active > .project-header {
   background: var(--bg-card);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: none;
   color: var(--text-main);
 }
 
@@ -398,7 +398,7 @@ body {
 .task-item.active {
   background: var(--bg-elevated);
   border-color: var(--border-color);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: none;
 }
 
 .task-icon {
@@ -1358,7 +1358,7 @@ body {
 .settings-nav-item.active {
   background: var(--bg-card);
   border-color: var(--border-color);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: none;
   color: var(--text-main);
 }
 
@@ -2847,25 +2847,21 @@ kbd {
 }
 
 .ko-block {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-soft);
-  border-left: 2px solid var(--border-color);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
   margin: 10px 0;
   overflow: hidden;
 }
-
-.ko-denke { border-left-color: var(--accent); }
-.ko-werkzeug { border-left-color: var(--border-focus); }
-.ko-notiz { border-left-color: var(--warning); }
 
 .ko-kopf {
   list-style: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px;
-  background: var(--bg-card);
+  padding: 8px 6px;
+  background: transparent;
   cursor: pointer;
   user-select: none;
 }
@@ -2926,7 +2922,7 @@ kbd {
 .ko-inhalt {
   padding: 8px 10px 9px;
   border-top: 1px solid var(--border-soft);
-  background: var(--bg-primary);
+  background: transparent;
   max-height: 260px;
   overflow-y: auto;
 }
