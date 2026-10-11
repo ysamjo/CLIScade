@@ -45,5 +45,8 @@ test('Resume wird nur bei vorhandener Session verwendet und ist exklusiv', async
   release();
   const resumed = await runHarness({ harnessId: 'codex', prompt: 'Aufgabe', cwd: root, env, previousSessionId: 'abc' });
   assert.match(resumed.finalText, /resume abc/);
+  assert.match(resumed.finalText, /Headless-Auftrag mit fachlicher Autonomie/);
+  assert.match(resumed.finalText, /AGENTS\.md haben Vorrang/);
+  assert.equal(resumed.finalText.split('Headless-Auftrag mit fachlicher Autonomie').length - 1, 1);
   fs.rmSync(root, { recursive: true, force: true });
 });

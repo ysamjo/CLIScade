@@ -1,7 +1,12 @@
+// Nur eindeutige CLI-Diagnosezeilen, keine allgemeinen Fragen/Antworttexte.
+const INTERACTIVE_REQUIRED = /^(?:error:\s*)?(?:interactive (?:mode|input|terminal) (?:is )?required|cannot prompt in (?:non-interactive|headless) mode|(?:stdin|standard input) is not a (?:tty|terminal))\s*[.!]?\s*$/im;
+
 function classifyError({ explicit, raw = '', stderr = '', exitCode, reason } = {}) {
   if (reason === 'cancelled') return { kind: 'cancelled', retryability: 'never', message: 'Abgebrochen durch Benutzer' };
   if (reason === 'timeout' || reason === 'idle_timeout') return { kind: 'timeout', retryability: 'next_harness', message: reason === 'idle_timeout' ? 'Keine Ausgabe innerhalb der Frist' : 'Zeitlimit überschritten' };
   if (reason === 'spawn_failure') return { kind: 'spawn_failure', retryability: 'next_harness', message: String(explicit || 'Prozess konnte nicht gestartet werden') };
+  const interaction = String(explicit || `${raw}\n${stderr}`).replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').match(INTERACTIVE_REQUIRED);
+  if (interaction) return { kind: 'interactive_required', retryability: 'next_harness', message: `CLI benötigt interaktive Eingabe: ${interaction[0].trim()}` };
   const successfulStartupRefusal = /^(?:configuration is invalid at|invalid configuration file|unknown (?:option|command|flag)|unrecognized command line option)\b/im.test(raw);
   if (!explicit && exitCode === 0 && !successfulStartupRefusal && !stderr) return null;
   const text = String(explicit || (exitCode === 0 ? (stderr || raw) : raw) || '').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
