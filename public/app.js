@@ -1430,7 +1430,7 @@ function renderProjectTree() {
       // Abbrechen verstecken. Erledigte dürfen ins Archiv.
       const aktion = task.archived
         ? '<button class="task-restore-btn" title="Zurück in die Aufgabenliste" data-icon="inbox"></button>'
-        : (task.status === 'completed' || task.status === 'error'
+        : (TaskState.terminal(task.status)
             ? '<button class="task-archive-btn" title="Ins Archiv legen — die Ausgabe bleibt erhalten" data-icon="archive"></button>'
             : '');
 

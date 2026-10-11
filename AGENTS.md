@@ -137,3 +137,5 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Sichtbarkeit der zweiten Konsole: initial `hidden`, erst `openRunPane()` oder bewusster neuer Task ruft `revealPane()` auf. Ordnerauswahl im Kopf; Aufgabenunterzeile bleibt erhalten. Gedächtniszusammenfassung berücksichtigt nur sichtbare Felder.
 
 - Konsolenschichten: strukturierte Denk-/Werkzeugereignisse tragen `data-console-layer` auch in gespeicherten HTML-Ausgaben. Laufende Bereiche offen; bei nachfolgender Antwort oder Laufende einmalig automatisch schließen und frühere Faltwünsche löschen. Erneutes manuelles Öffnen danach bleibt erhalten.
+
+- Archivaktionen im Aufgabenbaum verwenden `TaskState.terminal()` für alle Abschlusszustände, einschließlich `failed`, `cancelled` und `incomplete`; laufende und wartende Aufgaben bleiben ohne Archiv-Button.

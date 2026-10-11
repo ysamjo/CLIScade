@@ -915,5 +915,21 @@ await ruhen(5);
 pruefe('AGENTS-Marke lädt Regeln genau für den angeklickten Projektordner', fetches.some(f => f.schluessel === 'GET /api/agents-md?project=%2Ftmp%2Fcliscade'));
 pruefe('AGENTS-Marke öffnet den Projekteditor', document.querySelector('.agents-tab-btn[data-target="project"]')?.classList.contains('active'));
 
+// Jeder abgeschlossene Zustand bietet Archivieren; laufende und wartende nicht.
+for (const status of ['completed', 'done', 'failed', 'error', 'cancelled', 'incomplete', 'running', 'queued']) {
+  const id = `archive-status-${status}`;
+  sag({type:'task_created',taskId:id,task:{id,status,projectPath:'/tmp/cliscade',prompt:'Archivzustand',timestamp:'2026-10-11T12:00:00.000Z'}});
+  await ruhen(2);
+  const button = document.querySelector(`.task-item[data-task-id="${id}"] .task-archive-btn`);
+  const terminal = !['running', 'queued'].includes(status);
+  pruefe(`Archiv-Icon für ${status} korrekt`, terminal ? Boolean(button?.querySelector('svg')) : !button);
+  if (terminal && button) {
+    fetches.length = 0;
+    button.click();
+    await ruhen(4);
+    pruefe(`Archiv-Icon für ${status} archiviert den passenden Task`, fetches.some(f => f.schluessel === 'POST /api/tasks/archive' && JSON.parse(f.body).taskId === id && JSON.parse(f.body).archived === true));
+  }
+}
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

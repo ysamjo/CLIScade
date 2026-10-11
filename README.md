@@ -26,6 +26,7 @@ HOST=127.0.0.1 npm start
 - Moderne dunkle Oberfläche mit abgestuften Flächen, klarer Schrift, ruhigem Akzent und zusammenhängenden Eingabekarten; Desktop und Mobilansicht bleiben bedienbar.
 - Beads arbeitet in eingerichteten Projekten automatisch. Status, optionale Aufgabenbindung und bewusste Fehlerausnahme stehen ausschließlich im aufklappbaren Bereich **Projektgedächtnis** oberhalb der Konsolen. Die Eingabe braucht keine Beads-Auswahl.
 - Zu Beginn eine breite Konsole; erst ein zweiter geöffneter Auftrag oder neuer Task zeigt die zweite Konsole. Der auswählbare Projektordner ist der Konsolentitel, der Auftrag erscheint als Unterzeile.
+- Abgeschlossene, fehlgeschlagene, abgebrochene und unterbrochene Tasks zeigen beim Hover die Archivaktion. Laufende und wartende Aufträge bleiben davon ausgenommen.
 - Reasoning und Werkzeugausgaben bleiben während der Arbeit aufklappbar sichtbar und klappen beim Erscheinen der Antwort automatisch zu; anschließend lassen sie sich wieder öffnen. Mehrzeilige strukturierte Ereignisse bleiben vollständig im passenden Bereich.
 - Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Kopieren, Abbrechen, Bildauswahl und Kontextvorschau unten als Icons mit Tooltip und Tastaturbedienung.
 
