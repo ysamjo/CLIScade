@@ -141,3 +141,5 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Archivaktionen im Aufgabenbaum verwenden `TaskState.terminal()` für alle Abschlusszustände, einschließlich `failed`, `cancelled` und `incomplete`; laufende und wartende Aufgaben bleiben ohne Archiv-Button.
 
 - Sichtbare Produktschreibweise exakt `CLIscade`; technische Repo-/Executable-Pfade bleiben kompatibel. Task-Icons liegen lokal in `public/harness-icons/`, Quellen in `SOURCES.md`; aktuelle Executables haben bei der Zuordnung Vorrang vor historischen Harness-IDs. Unbekannte CLIs erhalten ein neutrales Icon.
+
+- Geöffnete Ausgabedetails zeigen keine wiederholte Vorschau/Kopfzeile. Das native `summary` bleibt als beschrifteter 24-Pixel-Pfeil mit Tastaturfokus bedienbar; geschlossen erscheint die Vorschau wieder.

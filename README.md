@@ -28,7 +28,7 @@ HOST=127.0.0.1 npm start
 - Zu Beginn eine breite Konsole; erst ein zweiter geöffneter Auftrag oder neuer Task zeigt die zweite Konsole. Der auswählbare Projektordner ist der Konsolentitel, der Auftrag erscheint als Unterzeile.
 - Task-Zeilen zeigen lokale Hersteller-Icons für alle 13 CLIs und daneben das Modell; der CLI-Name bleibt als Tooltip und Alternativtext erhalten.
 - Abgeschlossene, fehlgeschlagene, abgebrochene und unterbrochene Tasks zeigen beim Hover die Archivaktion. Laufende und wartende Aufträge bleiben davon ausgenommen.
-- Reasoning und Werkzeugausgaben bleiben während der Arbeit aufklappbar sichtbar und klappen beim Erscheinen der Antwort automatisch zu; anschließend lassen sie sich wieder öffnen. Mehrzeilige strukturierte Ereignisse bleiben vollständig im passenden Bereich.
+- Reasoning und Werkzeugausgaben bleiben während der Arbeit aufklappbar sichtbar und klappen beim Erscheinen der Antwort automatisch zu; anschließend lassen sie sich wieder öffnen. Aufgeklappt entfällt die doppelte Kopfzeile; ein kleiner Pfeil bleibt zum Zuklappen. Mehrzeilige strukturierte Ereignisse bleiben vollständig im passenden Bereich.
 - Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Kopieren, Abbrechen, Bildauswahl und Kontextvorschau unten als Icons mit Tooltip und Tastaturbedienung.
 
 

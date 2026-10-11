@@ -265,7 +265,7 @@ class KonsoleFormatierer {
       if (!block.zusammenfaltbar) return `<div class="ko-antwort">${inhalt}</div>`;
       return `<details class="ko-block ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}"` +
         ` data-schluessel="${block.schluessel}"${block.offen ? " open" : ""}>` +
-        `<summary class="ko-kopf"><span class="ko-art">${block.titel}</span>` +
+        `<summary class="ko-kopf" aria-label="${block.titel} ein- oder ausklappen" title="${block.titel} ein- oder ausklappen"><span class="ko-art">${block.titel}</span>` +
         `<span class="ko-zaehler">${block.zaehler}</span>` +
         `<span class="ko-kurztitel">${escapeText(block.kurz)}</span></summary>` +
         `<div class="ko-inhalt">${inhalt}</div></details>`;
