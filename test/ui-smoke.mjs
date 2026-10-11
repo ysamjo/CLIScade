@@ -293,6 +293,8 @@ const C = auftrag("task_c", "proj-c", "Dritter Auftrag");
 const sag = (json) => ws2.onmessage({ data: JSON.stringify(json) });
 
 pruefe("#run-split existiert", document.querySelector("#run-split") !== null);
+pruefe("Nur die erste Konsole ist am Anfang sichtbar", !konsole(0).hidden && konsole(1).hidden);
+pruefe("Ordnerauswahl sitzt als Titel im Konsolenkopf", [...document.querySelectorAll(".run-pane")].every(p => p.querySelector(".run-pane-head .run-pane-target") && !p.querySelector(".run-pane-toolbar .run-pane-target")));
 pruefe("zwei Konsolenfelder", document.querySelectorAll("#run-split .run-pane").length === 2);
 pruefe("jedes Feld hat eigene Ausgabe",
   document.querySelectorAll("#run-split .run-pane-body").length === 2);
@@ -307,6 +309,8 @@ sag({ type: "route_selected", taskId: A.id, harness: "Cline", command: "cline", 
 sag({ type: "output", taskId: A.id, html: "AUSGABE-A" });
 await ruhen(4);
 
+pruefe("Ein einzelner Task öffnet keine zweite Konsole", konsole(1).hidden);
+pruefe("Der Ordnertitel folgt dem geöffneten Task", konsole(0).querySelector(".run-pane-target").value === "/tmp/proj-a");
 pruefe("Auftrag A sitzt im ersten Feld", (konsole(0)?.textContent || "").includes("AUSGABE-A"), konsole(0)?.innerHTML);
 pruefe("der Senden-Knopf bleibt während des Laufs benutzbar",
   [...document.querySelectorAll(".run-pane-send")].every((b) => b.disabled === false));
@@ -317,6 +321,7 @@ sag({ type: "route_selected", taskId: B.id, harness: "Qoder", command: "qoder", 
 sag({ type: "output", taskId: B.id, html: "AUSGABE-B" });
 await ruhen(4);
 
+pruefe("Der zweite geöffnete Task macht die zweite Konsole sichtbar", !konsole(1).hidden);
 pruefe("Auftrag B bekommt das zweite Feld", (konsole(1)?.textContent || "").includes("AUSGABE-B"));
 pruefe("B schreibt nicht in A's Feld", !(konsole(0)?.textContent || "").includes("AUSGABE-B"));
 pruefe("A's Ausgabe bleibt stehen", (konsole(0)?.textContent || "").includes("AUSGABE-A"));

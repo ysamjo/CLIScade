@@ -93,7 +93,7 @@
                   <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe für Konsole 1" hidden></select>
                 </label>
               </section>
-              <section id="memory-pane-1" class="memory-pane">
+              <section id="memory-pane-1" class="memory-pane" hidden>
                 <h4 class="memory-pane-title">Konsole 2</h4>
                 <div class="run-pane-context">
                   <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
@@ -110,9 +110,9 @@
           <div id="run-split" class="run-split">
             <div class="run-pane" id="run-pane-0">
               <div class="run-pane-head">
-                <span class="run-pane-title">Konsole 1</span>
+                <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
                 <span class="run-pane-harness"></span>
-                <span class="run-pane-folder"></span>
+                <span class="run-pane-folder" hidden></span>
                 <span class="run-pane-tools">
                   <button class="btn-text run-pane-copy" title="Ausgabe kopieren">Kopieren</button>
                   <button class="btn-text btn-text-danger run-pane-cancel" title="Nur diesen Auftrag abbrechen" hidden>Abbrechen</button>
@@ -130,7 +130,6 @@
                 <textarea class="run-pane-input" rows="3" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
                 <div class="run-pane-toolbar">
                   <div class="run-pane-targets">
-                    <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
                     <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
                   <option value="auto">Auto-Route</option>
                   <option value="consensus">Konsens</option>
@@ -146,11 +145,11 @@
                 </div>
               </div>
             </div>
-            <div class="run-pane" id="run-pane-1">
+            <div class="run-pane" id="run-pane-1" hidden>
               <div class="run-pane-head">
-                <span class="run-pane-title">Konsole 2</span>
+                <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
                 <span class="run-pane-harness"></span>
-                <span class="run-pane-folder"></span>
+                <span class="run-pane-folder" hidden></span>
                 <span class="run-pane-tools">
                   <button class="btn-text run-pane-copy" title="Ausgabe kopieren">Kopieren</button>
                   <button class="btn-text btn-text-danger run-pane-cancel" title="Nur diesen Auftrag abbrechen" hidden>Abbrechen</button>
@@ -168,7 +167,6 @@
                 <textarea class="run-pane-input" rows="3" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
                 <div class="run-pane-toolbar">
                   <div class="run-pane-targets">
-                    <select class="run-pane-target custom-select" title="Zielordner für diesen Auftrag"></select>
                     <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
                   <option value="auto">Auto-Route</option>
                   <option value="consensus">Konsens</option>

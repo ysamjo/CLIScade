@@ -677,8 +677,25 @@ function openRunPane(taskId, init = {}) {
   }
   state.streams.set(taskId, stream);
   state.panes[slot] = taskId;
+  const pane = dom.runPanes[slot];
+  revealPane(slot);
+  if (stream.path) state.paneTarget[slot] = stream.path;
+  if (stream.path && [...pane.target.options].some(option => option.value === stream.path)) {
+    if (pane.target.value !== stream.path) {
+      pane.target.value = stream.path;
+      loadBeads(pane);
+    }
+  }
   runPaneFollow[slot] = true;
   return stream;
+}
+
+function revealPane(slot) {
+  const pane = dom.runPanes[slot];
+  if (!pane) return;
+  pane.root.hidden = false;
+  pane.memoryPanel.hidden = false;
+  renderMemorySummary();
 }
 
 function scrollRunPaneToBottom(slot) {
@@ -693,18 +710,19 @@ function renderRunPane(slot) {
   if (!pane) return;
 
   if (!stream) {
-    pane.title.textContent = `Konsole ${slot + 1}`;
+    pane.title.textContent = '';
+    pane.title.hidden = true;
     pane.harness.textContent = '';
     pane.folder.textContent = '';
     pane.cancel.hidden = true;
     return;
   }
 
-  // Der Auftragstitel ist die Zeile, an der der Nutzer seinen Lauf wiedererkennt —
-  // Harness und Modell daneben sind die Art, nicht der Name.
+  // Der Ordner ist der Haupttitel; die Aufgabe bleibt darunter als Unterzeile.
   pane.title.textContent = stream.prompt
     ? stream.prompt.replace(/\s+/g, ' ').trim()
     : (stream.title || 'Auftrag');
+  pane.title.hidden = false;
   pane.harness.textContent = stream.title || '';
   pane.folder.textContent = stream.folder || '';
   pane.cancel.hidden = TaskState.terminal(stream.status);
@@ -1587,6 +1605,7 @@ function startNewTaskInProject(projectPath) {
   const slot = freeSlot();
   const pane = dom.runPanes[slot];
   if (!pane) return;
+  revealPane(slot);
   // ＋ heißt Anfang: kein Auftrag aus der Historie leiht diesem Feld sein Ziel.
   const stream = streamAtSlot(slot);
   if (stream) delete stream.folge;
@@ -1594,6 +1613,7 @@ function startNewTaskInProject(projectPath) {
   if (projectPath) {
     state.paneTarget[slot] = projectPath;
     pane.target.value = projectPath;
+    loadBeads(pane);
   }
   pane.input.focus();
 }
@@ -2378,7 +2398,7 @@ function renderBackupStatus(pane, backup) {
 
 function renderMemorySummary() {
   const summary = document.getElementById('memory-summary');
-  const panes = dom.runPanes.filter(pane => pane?.target.value);
+  const panes = dom.runPanes.filter(pane => pane?.target.value && !pane.root.hidden);
   const states = panes.map(pane => pane.memoryStatus.dataset.state);
   const failed = states.includes('error') || panes.some(pane => pane.backupStatus.dataset.state === 'error');
   summary.dataset.state = failed ? 'error' : states.includes('loading') ? 'loading' : states.includes('ready') ? 'ready' : 'disabled';

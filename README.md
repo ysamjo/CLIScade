@@ -25,6 +25,7 @@ HOST=127.0.0.1 npm start
 - Die Seitenleiste merkt sich eingeklappte Ordner und den Filter für Ordner ohne Aufgaben; AGENTS-Marken öffnen den Projektregel-Editor. Archiv-Icons erscheinen am Desktop bei Hover oder Tastaturfokus und bleiben auf Touch-Geräten sichtbar.
 - Moderne dunkle Oberfläche mit abgestuften Flächen, klarer Schrift, ruhigem Akzent und zusammenhängenden Eingabekarten; Desktop und Mobilansicht bleiben bedienbar.
 - Beads arbeitet in eingerichteten Projekten automatisch. Status, optionale Aufgabenbindung und bewusste Fehlerausnahme stehen ausschließlich im aufklappbaren Bereich **Projektgedächtnis** oberhalb der Konsolen. Die Eingabe braucht keine Beads-Auswahl.
+- Zu Beginn eine breite Konsole; erst ein zweiter geöffneter Auftrag oder neuer Task zeigt die zweite Konsole. Der auswählbare Projektordner ist der Konsolentitel, der Auftrag erscheint als Unterzeile.
 - Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Bildauswahl und Kontextvorschau als Icons mit Tooltip und Tastaturbedienung.
 
 
