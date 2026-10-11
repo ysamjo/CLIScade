@@ -61,7 +61,7 @@ const ANTWORTEN = {
   },
   "GET /api/workspace": {
     projects: [
-      { name: "harness-router-gui", path: "/tmp/harness-router-gui", hasAgentsMd: true },
+      { name: "cliscade", path: "/tmp/cliscade", hasAgentsMd: true },
       // Die drei Parallel-Aufträge liegen in echten Ordnern — sonst tauchen sie
       // in der Seitenleiste gar nicht auf und diebadge-Prüfung liefe ins Leere.
       { name: "proj-a", path: "/tmp/proj-a" },
@@ -176,7 +176,7 @@ await ruhen(12);
 
 // --- 1. Die Top-Leiste ist raus -----------------------------------------
 
-pruefe("Die Oberfläche heißt HarnessCascade", document.title === "HarnessCascade" && document.querySelector(".logo-text")?.textContent === "HarnessCascade");
+pruefe("Die Oberfläche heißt CLIScade", document.title === "CLIScade" && document.querySelector(".logo-text")?.textContent === "CLIScade");
 pruefe("keine .top-bar mehr im DOM", document.querySelector(".top-bar") === null);
 pruefe("kein #current-project-name mehr", document.querySelector("#current-project-name") === null);
 pruefe("kein #new-task-top-btn mehr", document.querySelector("#new-task-top-btn") === null);

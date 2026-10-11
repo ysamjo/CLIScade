@@ -16,10 +16,10 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
             defer: false
         )
         window.minSize = NSSize(width: 800, height: 550)
-        window.title = "HarnessCascade"
+        window.title = "CLIScade"
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(calibratedRed: 0.043, green: 0.047, blue: 0.063, alpha: 1.0) // #0b0c10
-        window.setFrameAutosaveName("HarnessRouterMainWindow")
+        window.setFrameAutosaveName("CLIScadeMainWindow")
         window.center()
 
         super.init(window: window)
@@ -62,7 +62,7 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
         stack.translatesAutoresizingMaskIntoConstraints = false
         loadingView.addSubview(stack)
 
-        let titleLabel = NSTextField(labelWithString: "HarnessCascade")
+        let titleLabel = NSTextField(labelWithString: "CLIScade")
         titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .bold)
         titleLabel.textColor = NSColor(calibratedRed: 0.9, green: 0.92, blue: 0.95, alpha: 1.0)
         stack.addArrangedSubview(titleLabel)
@@ -156,7 +156,7 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
 
     public func toggleDevTools() {
         // Öffnet den Web Inspector falls Entwickler-Werkzeuge aktiv sind
-        webView.evaluateJavaScript("console.log('HarnessCascade DevTools getriggert');", completionHandler: nil)
+        webView.evaluateJavaScript("console.log('CLIScade DevTools getriggert');", completionHandler: nil)
     }
 
     // MARK: - WKNavigationDelegate

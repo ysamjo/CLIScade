@@ -4,11 +4,11 @@ public final class MenuBuilder {
     public static func setupMenu(app: NSApplication, appDelegate: AppDelegate) {
         let mainMenu = NSMenu()
 
-        // 1. App-Menü (HarnessCascade)
+        // 1. App-Menü (CLIScade)
         let appMenuItem = NSMenuItem()
-        let appMenu = NSMenu(title: "HarnessCascade")
+        let appMenu = NSMenu(title: "CLIScade")
 
-        let aboutItem = NSMenuItem(title: "Über HarnessCascade", action: #selector(appDelegate.showAbout), keyEquivalent: "")
+        let aboutItem = NSMenuItem(title: "Über CLIScade", action: #selector(appDelegate.showAbout), keyEquivalent: "")
         aboutItem.target = appDelegate
         appMenu.addItem(aboutItem)
 
@@ -20,7 +20,7 @@ public final class MenuBuilder {
 
         appMenu.addItem(NSMenuItem.separator())
 
-        let hideItem = NSMenuItem(title: "HarnessCascade ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideItem = NSMenuItem(title: "CLIScade ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(hideItem)
 
         let hideOthersItem = NSMenuItem(title: "Andere ausblenden", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -32,7 +32,7 @@ public final class MenuBuilder {
 
         appMenu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "HarnessCascade beenden", action: #selector(appDelegate.requestQuit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "CLIScade beenden", action: #selector(appDelegate.requestQuit), keyEquivalent: "q")
         quitItem.target = appDelegate
         appMenu.addItem(quitItem)
 
@@ -97,7 +97,7 @@ public final class MenuBuilder {
         restartServerItem.target = appDelegate
         serverMenu.addItem(restartServerItem)
 
-        let openLogItem = NSMenuItem(title: "Server-Log öffnen (/tmp/harness-router-studio.log)", action: #selector(appDelegate.openServerLog), keyEquivalent: "l")
+        let openLogItem = NSMenuItem(title: "Server-Log öffnen (/tmp/cliscade.log)", action: #selector(appDelegate.openServerLog), keyEquivalent: "l")
         openLogItem.keyEquivalentModifierMask = [.command, .option]
         openLogItem.target = appDelegate
         serverMenu.addItem(openLogItem)

@@ -1,4 +1,4 @@
-# HarnessCascade
+# CLIScade
 
 Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, codex, opencode, cline, codebuddy, qodercli, antigravity, cursor, grok, kiro) parallel über die Projektordner eines Workspace dispatcht — inklusive Telegram-Relay.
 
@@ -77,7 +77,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
   Zeichenkette zerlegt zsh **nicht**, der Server läuft dann trotzdem und vergiftet jedes
   `qodercli` mit `sdk_invalid_args`. Nachprüfen:
   `ps eww -p <PID> | tr ' ' '\n' | grep -cE '^(QODER|CODEBUDDY|WORKBUDDY|NODE_OPTIONS)'` muss `0` sein.
-- **Service Worker:** `public/sw.js` arbeitet network-first und hält `harness-studio-v<N>` als
+- **Service Worker:** `public/sw.js` arbeitet network-first und hält `cliscade-v<N>` als
   Rückfall. Ändern sich `index.html`, `app.js` oder `style.css`, die Nummer hochziehen — sonst
   kann bei totem Server die alte Fassung erscheinen, und die Seite sieht heil aus, obwohl sie
   mit einem toten Backend spricht.
@@ -89,7 +89,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - **Secrets nie ausgeben oder übertragen**: der `ANTHROPIC_API_KEY`-Wert in `~/.zshrc`. Von der
   Gateway-Umbiegung dürfen nur Variablen**namen** geloggt werden.
 - `.workbuddy-ai/` ist das Gedächtnis eines anderen Agenten — untracked lassen, nie committen.
-- `origin` ist das **öffentliche** GitHub-Repo (`github.com/ysamjo/HarnessCascade`). Vor einem Push
+- `origin` ist das **öffentliche** GitHub-Repo (`github.com/ysamjo/CLIScade`). Vor einem Push
   prüfen, was mitgeht (`git status --short`), und keine Schlüssel aus dem Laufzeitverzeichnis.
 - Das GUI dispatchet auch in dieses Repo: vor `git checkout`/`reset`/Neustart prüfen, ob ein zweiter
   Agent gerade am Arbeitsbaum schreibt.

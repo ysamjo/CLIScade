@@ -1,4 +1,4 @@
-# HarnessCascade – Architektur und nächste Schritte
+# CLIScade – Architektur und nächste Schritte
 
 Stand: 11. Oktober 2026. Die Oberfläche bleibt Vanilla JS ohne Bundler; Ausführung bleibt auf die feste Harness-Registry beschränkt.
 

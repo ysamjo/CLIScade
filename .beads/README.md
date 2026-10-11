@@ -1,6 +1,6 @@
-# Beads-Kontext für HarnessCascade
+# Beads-Kontext für CLIScade
 
-Diese lokale Beads-Datenbank speichert Aufgaben, Abhängigkeiten und ausdrücklich hinterlegtes Projektwissen. HarnessCascade lädt ihren Kontext vor jedem Auftrag automatisch; eine Aufgabenauswahl ist optional.
+Diese lokale Beads-Datenbank speichert Aufgaben, Abhängigkeiten und ausdrücklich hinterlegtes Projektwissen. CLIScade lädt ihren Kontext vor jedem Auftrag automatisch; eine Aufgabenauswahl ist optional.
 
 - Kontext prüfen: `bd prime --full --readonly`
 - Verfügbare Aufgaben lesen: `bd ready --json --readonly`

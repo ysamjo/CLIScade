@@ -1,6 +1,6 @@
-# HarnessCascade macOS App
+# CLIScade macOS App
 
-Schlanke, native macOS-Desktop-Anwendung für den HarnessCascade.
+Schlanke, native macOS-Desktop-Anwendung für den CLIScade.
 
 ## Merkmale
 
@@ -18,7 +18,7 @@ Schlanke, native macOS-Desktop-Anwendung für den HarnessCascade.
 ## Bauen & Installieren
 
 ```bash
-# Bauen nach build/HarnessCascade.app
+# Bauen nach build/CLIScade.app
 npm run build:mac
 
 # Bauen und direkt nach /Applications installieren

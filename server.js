@@ -2197,7 +2197,7 @@ async function handleTelegramUpdate(update, token) {
       await sendTelegramMessage(
         token,
         chatId,
-        `⛔ *Zugriff verweigert!*\nDieser Bot ist exklusiv an das persönliche HarnessCascade auf dem Mac gekoppelt (User-ID \`${userId}\` nicht freigeschaltet).`
+        `⛔ *Zugriff verweigert!*\nDieser Bot ist exklusiv an das persönliche CLIScade auf dem Mac gekoppelt (User-ID \`${userId}\` nicht freigeschaltet).`
       );
       return;
     }
@@ -2247,7 +2247,7 @@ async function handleTelegramUpdate(update, token) {
       await sendTelegramMessage(
         token,
         chatId,
-        `⚡ *HarnessCascade Remote Bot*\n` +
+        `⚡ *CLIScade Remote Bot*\n` +
         `Verbunden mit deinem Mac!\n\n` +
         `📁 *Aktives Projekt:* \`${currentProj}\`\n\n` +
         `*Befehle von unterwegs:*\n` +
@@ -2274,7 +2274,7 @@ async function handleTelegramUpdate(update, token) {
       await sendTelegramMessage(
         token,
         chatId,
-        `📊 *HarnessCascade Status:*\n\n` +
+        `📊 *CLIScade Status:*\n\n` +
         `📁 *Root:* \`${rootDir}\`\n` +
         `📦 *Projekt:* \`${currentProj}\`\n` +
         `🟢 *Server:* \`http://${getLanIp()}:${PORT}\`\n\n` +
@@ -2578,7 +2578,7 @@ app.post('/api/remote/telegram/test', async (req, res) => {
       const sendRes = await sendTelegramMessage(
         tele.botToken,
         targetUser,
-        `🔔 *HarnessCascade Test-Nachricht*\n\nVerbindung erfolgreich hergestellt! Dein Bot @${check.user.username} ist bereit für Befehle von unterwegs.`
+        `🔔 *CLIScade Test-Nachricht*\n\nVerbindung erfolgreich hergestellt! Dein Bot @${check.user.username} ist bereit für Befehle von unterwegs.`
       );
       if (!sendRes.ok) {
         return res.status(400).json({ error: `Nachricht an User ${targetUser} fehlgeschlagen: ${sendRes.description || 'Fehler'}` });
@@ -2612,7 +2612,7 @@ function reconcileOrphanedTasks() { taskStore.reconcile(); }
 
 server.listen(PORT, HOST, () => {
   const lanHint = HOST === '0.0.0.0' ? ` (LAN: http://${getLanIp()}:${PORT})` : '';
-  console.log(`HarnessCascade running on http://${HOST}:${PORT}${lanHint}`);
+  console.log(`CLIScade running on http://${HOST}:${PORT}${lanHint}`);
   reconcileOrphanedTasks();
   if (process.env.HARNESS_BEADS_BACKUPS !== '0') backupService.start(() => {
     const root = loadTasksData().rootDirectory;

@@ -1,6 +1,6 @@
 {
-  "name": "HarnessCascade",
-  "short_name": "HarnessCascade",
+  "name": "CLIScade",
+  "short_name": "CLIScade",
   "description": "Lokale Steuerung mehrerer KI-Coding-Harnesses mit Fallback und Projektgedächtnis",
   "start_url": "/",
   "display": "standalone",

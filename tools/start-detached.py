@@ -1,4 +1,4 @@
-"""Startet den HarnessCascade losgeloest von der aufrufenden Shell.
+"""Startet den CLIScade losgeloest von der aufrufenden Shell.
 
 Aufruf:  python3 tools/start-detached.py
 
@@ -40,7 +40,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NODE = os.environ.get("HARNESS_NODE") or "/Users/family/.local/bin/node"
-LOG = os.environ.get("HARNESS_LOG") or "/tmp/harness-router-studio.log"
+LOG = os.environ.get("HARNESS_LOG") or "/tmp/cliscade.log"
 
 # Namen, die genau so weg muessen.
 ZU_ENTFERNEN = (

@@ -19,7 +19,7 @@ public final class ServerManager {
 
     public func findProjectRoot() -> String {
         // 1. Aus der Umgebung
-        if let envDir = ProcessInfo.processInfo.environment["HARNESS_ROUTER_DIR"],
+        if let envDir = (ProcessInfo.processInfo.environment["CLISCADE_DIR"] ?? ProcessInfo.processInfo.environment["HARNESS_ROUTER_DIR"]),
            FileManager.default.fileExists(atPath: "\(envDir)/server.js") {
             return envDir
         }
@@ -38,7 +38,7 @@ public final class ServerManager {
         }
 
         // 4. Standard-Entwicklungsverzeichnis
-        let defaultDevDir = "/Users/family/Developer/HarnessCascade"
+        let defaultDevDir = "/Users/family/Developer/CLIScade"
         if FileManager.default.fileExists(atPath: "\(defaultDevDir)/server.js") {
             return defaultDevDir
         }
@@ -135,7 +135,7 @@ public final class ServerManager {
                 }
 
                 if Date().timeIntervalSince(startTime) >= timeout {
-                    completion(false, "Server reagiert nach \(Int(timeout))s nicht. Bitte Log prüfen: /tmp/harness-router-studio.log")
+                    completion(false, "Server reagiert nach \(Int(timeout))s nicht. Bitte Log prüfen: /tmp/cliscade.log")
                     return
                 }
 

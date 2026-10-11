@@ -94,7 +94,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc public func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "HarnessCascade"
+        alert.messageText = "CLIScade"
         alert.informativeText = "Version 1.0.0\n\nLokale macOS-Steuerung für KI-Coding-Harnesses (Claude Code, Codex, Cline, OpenCode, Qoder, Antigravity, CodeBuddy, Cursor)."
         alert.alertStyle = .informational
         alert.runModal()
@@ -134,7 +134,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc public func openServerLog() {
-        let logUrl = URL(fileURLWithPath: "/tmp/harness-router-studio.log")
+        let logUrl = URL(fileURLWithPath: "/tmp/cliscade.log")
         if FileManager.default.fileExists(atPath: logUrl.path) {
             NSWorkspace.shared.open(logUrl)
         } else {
@@ -156,7 +156,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let readmeURL = URL(fileURLWithPath: "\(repoRoot)/README.md")
         if FileManager.default.fileExists(atPath: readmeURL.path) {
             NSWorkspace.shared.open(readmeURL)
-        } else if let github = URL(string: "https://github.com/ysamjo/HarnessCascade") {
+        } else if let github = URL(string: "https://github.com/ysamjo/CLIScade") {
             NSWorkspace.shared.open(github)
         }
     }

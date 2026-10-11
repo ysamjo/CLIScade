@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 REPO_DIR="${SCRIPT_DIR:h}"
 BUILD_DIR="$REPO_DIR/build"
-APP_NAME="HarnessCascade"
+APP_NAME="CLIScade"
 APP_DIR="$BUILD_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -57,7 +57,7 @@ swiftc \
     "$SCRIPT_DIR/Sources/MenuBuilder.swift" \
     "$SCRIPT_DIR/Sources/AppDelegate.swift" \
     "$SCRIPT_DIR/Sources/main.swift" \
-    -o "$MACOS_DIR/HarnessRouter"
+    -o "$MACOS_DIR/CLIScade"
 
 # 5. Ad-Hoc Signieren
 echo "==> Signiere Bundle ad-hoc…"
