@@ -175,6 +175,7 @@ await ruhen(12);
 
 // --- 1. Die Top-Leiste ist raus -----------------------------------------
 
+pruefe("Die Oberfläche heißt HarnessCascade", document.title === "HarnessCascade" && document.querySelector(".logo-text")?.textContent === "HarnessCascade");
 pruefe("keine .top-bar mehr im DOM", document.querySelector(".top-bar") === null);
 pruefe("kein #current-project-name mehr", document.querySelector("#current-project-name") === null);
 pruefe("kein #new-task-top-btn mehr", document.querySelector("#new-task-top-btn") === null);

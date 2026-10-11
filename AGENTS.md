@@ -1,4 +1,4 @@
-# Harness Router GUI
+# HarnessCascade
 
 Browser-Oberfläche und Orchestrator, die mehrere KI-Coding-Harnesses (claude, codex, opencode, cline, codebuddy, qodercli, antigravity, cursor, grok, kiro) parallel über die Projektordner eines Workspace dispatcht — inklusive Telegram-Relay.
 
@@ -89,7 +89,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - **Secrets nie ausgeben oder übertragen**: der `ANTHROPIC_API_KEY`-Wert in `~/.zshrc`. Von der
   Gateway-Umbiegung dürfen nur Variablen**namen** geloggt werden.
 - `.workbuddy-ai/` ist das Gedächtnis eines anderen Agenten — untracked lassen, nie committen.
-- `origin` ist das **private** GitHub-Repo (`github.com/ysamjo/harness-router-gui`). Vor einem Push
+- `origin` ist das **öffentliche** GitHub-Repo (`github.com/ysamjo/HarnessCascade`). Vor einem Push
   prüfen, was mitgeht (`git status --short`), und keine Schlüssel aus dem Laufzeitverzeichnis.
 - Das GUI dispatchet auch in dieses Repo: vor `git checkout`/`reset`/Neustart prüfen, ob ein zweiter
   Agent gerade am Arbeitsbaum schreibt.

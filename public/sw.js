@@ -1,9 +1,9 @@
-// Service Worker for Harness Studio Remote PWA
+// Service Worker for HarnessCascade Remote PWA
 // Die Nummer hochziehen, wenn sich index.html, app.js oder style.css aendern: der
 // activate-Handler loescht dann jeden aelteren Cache, statt ihn als Rueckfall
 // weiterzureichen. Ohne den Sprung kann bei totem Server die Fassung von gestern
 // erscheinen — die Seite sieht dann heil aus, spricht aber mit einem toten Backend.
-const CACHE_NAME = 'harness-studio-v11';
+const CACHE_NAME = 'harness-studio-v12';
 const ASSETS = [
   '/',
   '/index.html',

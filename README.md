@@ -1,6 +1,27 @@
-# Harness Router GUI
+# HarnessCascade
 
 Browser-Oberfläche für KI-Coding-Harnesses im lokalen Workspace. Die Oberfläche verwaltet Projektordner, Aufgaben, Auto-Route mit Fallback und Kontextübergabe, Konsensläufe, Zeitpläne und Telegram. Normale Aufträge arbeiten direkt im gewählten Projektordner.
+
+## Schnellstart
+
+Voraussetzungen: Node.js ab 22.13 und mindestens ein installiertes, angemeldetes Coding-Harness. Beads ist optional und wird nur in bereits eingerichteten Projekten verwendet.
+
+```bash
+git clone https://github.com/ysamjo/HarnessCascade.git
+cd HarnessCascade
+npm install
+HOST=127.0.0.1 npm start
+```
+
+Öffne anschließend [localhost:3000](http://localhost:3000), wähle den Workspace und aktiviere die gewünschten Harnesses in den Einstellungen.
+
+## Funktionen
+
+- Priorisierte Harness-Kaskade mit automatischem Fallback und Kontextübergabe.
+- Parallele Aufträge mit Warteschlange, Projekt-Sperre und gezieltem Abbruch.
+- Dauerhafte Aufgabenhistorie, ausdrückliche Fortsetzung und Konsensläufe.
+- Optionales Beads-Projektgedächtnis mit relevanten Erkenntnissen, Prüfbelegen und geprüften Sicherungen.
+- Browser-Oberfläche, abgesicherter LAN-Zugang, Zeitpläne und Telegram-Steuerung.
 
 ## Ausführung
 

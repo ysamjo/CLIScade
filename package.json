@@ -1,7 +1,7 @@
 {
-  "name": "harness-router-gui",
+  "name": "harnesscascade",
   "version": "1.0.0",
-  "description": "Web-Oberfl\u00e4che und Orchestrator f\u00fcr acht KI-Coding-Harnesses",
+  "description": "Lokaler Orchestrator für KI-Coding-Harnesses mit Fallback-Kaskade und Projektgedächtnis",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -28,5 +28,9 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ysamjo/HarnessCascade.git"
   }
 }

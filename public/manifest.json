@@ -1,7 +1,7 @@
 {
-  "name": "Harness Studio Remote",
-  "short_name": "Harness",
-  "description": "Multi-Harness AI Code Assistant Remote Control",
+  "name": "HarnessCascade",
+  "short_name": "HarnessCascade",
+  "description": "Lokale Steuerung mehrerer KI-Coding-Harnesses mit Fallback und Projektgedächtnis",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

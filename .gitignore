@@ -14,3 +14,7 @@ Archiv/*.zip
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Lokale Agentennotizen und persönliche Berechtigungen
+.workbuddy-ai/
+.qoder/settings.local.json

@@ -1,4 +1,4 @@
-"""Startet den Harness Router losgeloest von der aufrufenden Shell.
+"""Startet den HarnessCascade losgeloest von der aufrufenden Shell.
 
 Aufruf:  python3 tools/start-detached.py
 
