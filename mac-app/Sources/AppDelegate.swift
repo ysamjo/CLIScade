@@ -94,7 +94,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc public func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "CLIScade"
+        alert.messageText = "CLIscade"
         alert.informativeText = "Version 1.0.0\n\nLokale macOS-Steuerung für KI-Coding-Harnesses (Claude Code, Codex, Cline, OpenCode, Qoder, Antigravity, CodeBuddy, Cursor)."
         alert.alertStyle = .informational
         alert.runModal()

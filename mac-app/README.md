@@ -1,6 +1,6 @@
-# CLIScade macOS App
+# CLIscade macOS App
 
-Schlanke, native macOS-Desktop-Anwendung für den CLIScade.
+Schlanke, native macOS-Desktop-Anwendung für den CLIscade.
 
 ## Merkmale
 
@@ -18,7 +18,7 @@ Schlanke, native macOS-Desktop-Anwendung für den CLIScade.
 ## Bauen & Installieren
 
 ```bash
-# Bauen nach build/CLIScade.app
+# Bauen nach build/CLIscade.app
 npm run build:mac
 
 # Bauen und direkt nach /Applications installieren

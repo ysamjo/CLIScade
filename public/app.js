@@ -1438,7 +1438,7 @@ function renderProjectTree() {
         <span class="task-icon">↳</span>
         <div class="task-meta">
           <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
-          <span class="task-badge">${statusIcon} ${escapeHtml(task.harness || 'cli')} · ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
+          <span class="task-badge">${statusIcon} ${taskHarnessIcon(task)} ${escapeHtml(task.model || 'Standard')}${usageMeta} · ${timeStr}</span>
           ${isTaskActive ? `<span class="task-konsole">Konsole ${konsole + 1}</span>` : ''}
         </div>
         ${aktion}

@@ -1,9 +1,9 @@
-// Service Worker for CLIScade Remote PWA
+// Service Worker for CLIscade Remote PWA
 // Die Nummer hochziehen, wenn sich index.html, app.js oder style.css aendern: der
 // activate-Handler loescht dann jeden aelteren Cache, statt ihn als Rueckfall
 // weiterzureichen. Ohne den Sprung kann bei totem Server die Fassung von gestern
 // erscheinen — die Seite sieht dann heil aus, spricht aber mit einem toten Backend.
-const CACHE_NAME = 'cliscade-v23';
+const CACHE_NAME = 'cliscade-v24';
 const ASSETS = [
   '/',
   '/index.html',
@@ -14,7 +14,20 @@ const ASSETS = [
   '/icons.js',
   '/konsole-schichten.js',
   '/icon.svg',
-  '/manifest.json'
+  '/manifest.json',
+  '/harness-icons/antigravity.svg',
+  '/harness-icons/claude.png',
+  '/harness-icons/cline.png',
+  '/harness-icons/codebuddy.svg',
+  '/harness-icons/codex.png',
+  '/harness-icons/copilot.svg',
+  '/harness-icons/cursor.svg',
+  '/harness-icons/junie.svg',
+  '/harness-icons/kilo.svg',
+  '/harness-icons/kiro.svg',
+  '/harness-icons/opencode.png',
+  '/harness-icons/qoder.svg',
+  '/harness-icons/vibe.svg'
 ];
 
 self.addEventListener('install', (e) => {

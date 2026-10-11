@@ -4,11 +4,11 @@ public final class MenuBuilder {
     public static func setupMenu(app: NSApplication, appDelegate: AppDelegate) {
         let mainMenu = NSMenu()
 
-        // 1. App-Menü (CLIScade)
+        // 1. App-Menü (CLIscade)
         let appMenuItem = NSMenuItem()
-        let appMenu = NSMenu(title: "CLIScade")
+        let appMenu = NSMenu(title: "CLIscade")
 
-        let aboutItem = NSMenuItem(title: "Über CLIScade", action: #selector(appDelegate.showAbout), keyEquivalent: "")
+        let aboutItem = NSMenuItem(title: "Über CLIscade", action: #selector(appDelegate.showAbout), keyEquivalent: "")
         aboutItem.target = appDelegate
         appMenu.addItem(aboutItem)
 
@@ -20,7 +20,7 @@ public final class MenuBuilder {
 
         appMenu.addItem(NSMenuItem.separator())
 
-        let hideItem = NSMenuItem(title: "CLIScade ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideItem = NSMenuItem(title: "CLIscade ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(hideItem)
 
         let hideOthersItem = NSMenuItem(title: "Andere ausblenden", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -32,7 +32,7 @@ public final class MenuBuilder {
 
         appMenu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "CLIScade beenden", action: #selector(appDelegate.requestQuit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "CLIscade beenden", action: #selector(appDelegate.requestQuit), keyEquivalent: "q")
         quitItem.target = appDelegate
         appMenu.addItem(quitItem)
 

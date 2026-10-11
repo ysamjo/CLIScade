@@ -54,3 +54,35 @@ const HARNESS_META = {
 function icon(n){return '<span class="svg-icon">'+(ICONS[n]||ICONS.bolt)+'</span>';}
 function harnessIcon(k,s){s=s||30;var h=HARNESS_META[k]||{letter:String(k||'?').slice(0,2).toUpperCase()};var fs=Math.round(s*0.42);return '<span class="harness-monogram" style="width:'+s+'px;height:'+s+'px;font-size:'+fs+'px;">'+h.letter+'</span>';}
 window.ICONS = ICONS; window.HARNESS_META = HARNESS_META; window.icon = icon; window.harnessIcon = harnessIcon;
+
+// Feste lokale Herstellerzeichen; Aufgaben erzeugen keine externen Bildanfragen.
+const TASK_HARNESS_ICONS = {
+  claude: ['Claude Code', 'png', ['claude_code_cli', 'claudecode', 'claudecodecli']],
+  codex: ['Codex', 'png', ['codex_cli', 'codexcli']],
+  cline: ['Cline', 'png', ['cline_cli', 'clinecli']],
+  opencode: ['OpenCode', 'png', ['opencode_cli']],
+  antigravity: ['Antigravity', 'svg', ['agy', 'antigravity_cli', 'antigravityagy']],
+  qoder: ['Qoder', 'svg', ['qodercli', 'qoder_cli', 'qodercli']],
+  codebuddy: ['CodeBuddy', 'svg', ['codebuddy_cli', 'codebuddycli']],
+  cursor: ['Cursor', 'svg', ['agent', 'cursor-agent', 'cursor_cli', 'cursorcli']],
+  junie: ['Junie', 'svg', ['junie_cli', 'juniecli']],
+  kilo: ['Kilo Code', 'svg', ['kilo_cli', 'kilocode', 'kilocodecli']],
+  copilot: ['GitHub Copilot', 'svg', ['copilot_cli', 'githubcopilot', 'githubcopilotcli', 'copilotcli']],
+  kiro: ['Kiro', 'svg', ['kiro-cli', 'kiro_cli', 'kirocli']],
+  vibe: ['Mistral Vibe', 'svg', ['vibe_cli', 'mistralvibe', 'mistralvibecli']]
+};
+function taskHarnessIcon(task) {
+  const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const candidate of [task.command, task.harnessId, task.harness]) {
+    const key = normalize(candidate);
+    if (!key) continue;
+    for (const [id, [name, extension, aliases]] of Object.entries(TASK_HARNESS_ICONS)) {
+      if ([id, ...aliases].some(alias => normalize(alias) === key)) {
+        return `<img class="task-harness-icon" src="/harness-icons/${id}.${extension}" alt="${name}" title="${name}" width="16" height="16">`;
+      }
+    }
+  }
+  const label = String(task.harness || 'CLI noch nicht ausgewählt').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return `<span class="task-harness-fallback" role="img" aria-label="${label}" title="${label}">${icon('terminal')}</span>`;
+}
+window.taskHarnessIcon = taskHarnessIcon;

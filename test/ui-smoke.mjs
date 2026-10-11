@@ -176,7 +176,7 @@ await ruhen(12);
 
 // --- 1. Die Top-Leiste ist raus -----------------------------------------
 
-pruefe("Die Oberfläche heißt CLIScade", document.title === "CLIScade" && document.querySelector(".logo-text")?.textContent === "CLIScade");
+pruefe("Die Oberfläche heißt CLIscade", document.title === "CLIscade" && document.querySelector(".logo-text")?.textContent === "CLIscade");
 pruefe("keine .top-bar mehr im DOM", document.querySelector(".top-bar") === null);
 pruefe("kein #current-project-name mehr", document.querySelector("#current-project-name") === null);
 pruefe("kein #new-task-top-btn mehr", document.querySelector("#new-task-top-btn") === null);
@@ -333,7 +333,7 @@ pruefe("jedes Feld nennt seinen Harness",
   /Cline/.test(konsole(0)?.textContent || "") && /Qoder/.test(konsole(1)?.textContent || ""));
 // Die Seitenleiste weiß es vorher (erste Route der Kette) — route_selected bessert nach.
 pruefe("die Seitenleiste zeigt den gewählten Harness",
-  /Qoder/.test(document.querySelector('.task-item[data-task-id="task_b"]')?.textContent || ""),
+  document.querySelector('.task-item[data-task-id="task_b"] .task-harness-icon')?.getAttribute('src') === '/harness-icons/qoder.svg',
   document.querySelector('.task-item[data-task-id="task_b"]')?.textContent);
 pruefe("die Seitenleiste markiert den Lauf als aktiv",
   /◐/.test(document.querySelector('.task-item[data-task-id="task_b"]')?.textContent || ""),
@@ -930,6 +930,16 @@ for (const status of ['completed', 'done', 'failed', 'error', 'cancelled', 'inco
     pruefe(`Archiv-Icon für ${status} archiviert den passenden Task`, fetches.some(f => f.schluessel === 'POST /api/tasks/archive' && JSON.parse(f.body).taskId === id && JSON.parse(f.body).archived === true));
   }
 }
+
+for (const id of ['claude','codex','cline','opencode','antigravity','qoder','codebuddy','cursor','junie','kilo','copilot','kiro','vibe']) {
+  const taskId = `logo-${id}`;
+  sag({type:'task_created',taskId,task:{id:taskId,harnessId:id,harness:'Anzeigename',status:'completed',model:'Testmodell',projectPath:'/tmp/cliscade',prompt:'Icon prüfen',timestamp:'2026-10-11T12:00:00.000Z'}});
+  await ruhen(2);
+  const badge=document.querySelector(`.task-item[data-task-id="${taskId}"] .task-badge`);
+  pruefe(`Task zeigt lokales CLI-Icon für ${id} und nur Modelltext`, badge?.querySelector('img')?.getAttribute('src')?.startsWith(`/harness-icons/${id}.`) && badge.textContent.includes('Testmodell') && !badge.textContent.includes('Anzeigename') && Boolean(badge.querySelector('img').alt));
+}
+pruefe('CLI-Icon folgt beim Fallback dem aktuellen Executable', typeof window.taskHarnessIcon === 'function' && window.taskHarnessIcon({command:'kiro-cli',harnessId:'codex'}).includes('/kiro.'));
+pruefe('Unbekannte CLI bekommt ein sicheres neutrales Icon', typeof window.taskHarnessIcon === 'function' && !window.taskHarnessIcon({harness:'<script>test</script>'}).includes('<script>'));
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

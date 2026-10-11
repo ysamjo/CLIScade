@@ -8,7 +8,7 @@
     "test": "npm run test:routing && node test/ui-smoke.mjs",
     "test:routing": "node --test \"test/*.test.js\" \"test/runtime/*.test.js\"",
     "build:mac": "zsh mac-app/build.sh",
-    "open:mac": "open \"build/CLIScade.app\"",
+    "open:mac": "open \"build/CLIscade.app\"",
     "install:mac": "zsh mac-app/build.sh --install"
   },
   "keywords": [
