@@ -30,6 +30,11 @@ Zustand liegt **außerhalb** des Repos unter `~/.harness-dispatch/` — `config.
 - Deutsch für UI-Texte, Kommentare, Meldungen und Commit-Messages; englische Code-Bezeichner.
 - Erscheinung: kurze Zeilen, Gruppen, Zähler statt Erklärtext, kein Anbieter-Jargon.
   UI-Varianten **bauen und screenshoten** statt sie zu beschreiben.
+- **Ein Lauf endet in `done`, `error` oder `cancelled`** — nie als `done` mit Fehlercode.
+  `cancelled` ist ein eigener Meldungstyp (Exit-Code 130), damit die Oberfläche ihn nicht grün
+  malt und der Baum ihn nicht als Erfolg führt; ein Abbruch wird zweistufig gemeldet
+  (`abbruch_laeuft` quittiert, `cancelled` schließt ab). Wer einen terminalen Zustand auswertet
+  — Queue, Wartezelle, Feldwahl, Test-Helfer —, muss alle drei kennen.
 - Browser-Prüfungen über Ego Lite (`ego-browser`), siehe globale `Developer/AGENTS.md` §2.
 
 ## Commands

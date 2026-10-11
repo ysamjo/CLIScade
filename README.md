@@ -36,3 +36,12 @@ Die Kettentests starten eigene Server auf 3911 und 3912 mit Wegwerf-`HOME` und S
 ## Grenzen
 
 Ein Headless-Auftrag kann Dateien im ausgewählten Projekt ändern. Ein Projekt-Lock verhindert parallele Dispatches in denselben Ordner; die native Session-Sperre verhindert zwei Turns in derselben Session. Fehlende Sessions beginnen einen neuen CLI-Thread mit expliziter Meldung. Abbruch wird als `cancelled` gespeichert. Konsens ist nur `completed`, wenn alle drei Phasen erfolgreich waren; bei einem ausgefallenen Ansatz lautet der Status `incomplete`.
+
+## Abbruch
+
+Ein Abbruch ist ein eigener Abschluss, kein `done` mit Exit-Code 130. Der Server meldet ihn zweistufig:
+
+- `abbruch_laeuft` quittiert den Wunsch sofort — der Prozess stirbt nicht im selben Moment. Die Oberfläche sperrt den Knopf und beschriftet ihn mit „Bricht ab…", damit ein Abbruch, der nicht greift, sichtbar bleibt.
+- `cancelled` meldet das Ergebnis (Exit-Code 130). Der Auftrag steht danach als `cancelled` im Baum (⊘ statt ●), die Meldung ist gelb statt grün, und der Abbrechen-Knopf verschwindet.
+
+Ein abgebrochener Lauf hält keinen Platz mehr: sein Feld ist für den nächsten Auftrag frei, und ein Auftrag im selben Ordner wartet nicht mehr dahinter. Wartet ein Auftrag unter einem laufenden, trägt seine ⏳-Zeile ein eigenes ✕ — der Abbrechen-Knopf im Kopf gilt dem laufenden. Bricht der *wartende* Auftrag ab, verschwindet seine Zeile; bricht der *laufende* ab, rückt der wartende in dasselbe Feld nach, und die Naht nennt den Grund („übernommen, weil der vorige Auftrag abgebrochen wurde").
