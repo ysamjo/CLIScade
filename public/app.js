@@ -416,6 +416,11 @@ function setupWebSocket() {
     const data = JSON.parse(event.data);
 
     if (data.type === 'task_created') {
+      // Wiederholte Bestätigungen dürfen den Lauf nicht hinter sich selbst einreihen.
+      if (state.streams.has(data.task.id) || state.wartendIn[data.task.id] !== undefined) {
+        renderProjectTree();
+        return;
+      }
       // Prepend task to task list if not exists
       const existingIdx = state.tasks.findIndex(t => t.id === data.task.id);
       if (existingIdx === -1) {
@@ -428,7 +433,8 @@ function setupWebSocket() {
       const Stelle = state.fortsetzung.findIndex((f) => data.task.requestId
         ? f.requestId === data.task.requestId
         : f.prompt === data.task.prompt);
-      const besitzerSlot = Stelle === -1 ? slotFuerOrdner(data.task.projectPath) : undefined;
+      const pending = Stelle === -1 ? null : state.fortsetzung.splice(Stelle, 1)[0];
+      const besitzerSlot = slotFuerOrdner(data.task.projectPath);
       if (besitzerSlot !== undefined) {
         const besitzer = streamAtSlot(besitzerSlot);
         besitzer.wartende = (besitzer.wartende || []).concat([{ taskId: data.task.id, prompt: data.task.prompt }]);
@@ -440,7 +446,7 @@ function setupWebSocket() {
           folder: data.task.projectName || '',
           path: data.task.projectPath || '',
           startedAt: Date.parse(data.task.timestamp) || Date.now(),
-          fortsetzung: Stelle === -1 ? null : state.fortsetzung.splice(Stelle, 1)[0]
+          fortsetzung: pending
         });
         renderRunPane(born.slot);
       }
@@ -450,40 +456,45 @@ function setupWebSocket() {
       let uebergabe = null;
       if (feld !== undefined) {
         delete state.wartendIn[data.taskId];
-        const besitzer = streamAtSlot(feld);
+        const besitzer = waitingOwner(data.taskId);
         if (besitzer) {
           besitzer.wartende = (besitzer.wartende || []).filter((w) => w.taskId !== data.taskId);
-          uebergabe = { slot: feld, buffer: besitzer.buffer, folge: besitzer.folge, naht: RUN_UEBERGABE };
+          if (state.panes[besitzer.slot] === besitzer.taskId) {
+            uebergabe = { slot: besitzer.slot, buffer: besitzer.buffer, folge: besitzer.folge, naht: RUN_UEBERGABE };
+          }
         }
       }
+      const task = state.tasks.find(t => t.id === data.taskId);
       const stream = state.streams.get(data.taskId)
-        || openRunPane(data.taskId, { prompt: (state.tasks.find((t) => t.id === data.taskId) || {}).prompt || '', fortsetzung: uebergabe });
+        || openRunPane(data.taskId, { prompt: task?.prompt || '', path: task?.projectPath || data.projectPath || '', folder: task?.projectName || '', fortsetzung: uebergabe });
       stream.status = 'running';
       stream.title = `${data.harness} · ${data.model || 'Standard'}`;
       const pane = dom.runPanes[stream.slot];
-      if (pane) pane.root.title = data.agentsInfo || '';
+      if (pane && state.panes[stream.slot] === data.taskId) pane.root.title = data.agentsInfo || '';
       // Die Seitenleiste nannte die erste Route der Kette; jetzt gilt die gewaehlte.
-      const task = state.tasks.find(t => t.id === data.taskId);
       if (task) {
         task.harness = data.harness;
         task.command = data.command;
         task.model = data.model || 'Standard';
         task.status = 'running';
+        if (stream.folge) {
+          stream.folge = { projectPath: task.projectPath, harness: task.harness, model: task.model, previousTaskId: task.id, beadId: task.beadId };
+        }
       }
-      renderRunPane(stream.slot);
+      renderRunPane(stream.slot, stream.taskId);
       renderProjectTree();
     } else if (data.type === 'queued') {
       const feld = state.wartendIn[data.taskId];
       if (feld !== undefined) {
-        const besitzer = streamAtSlot(feld);
+        const besitzer = waitingOwner(data.taskId);
         const eintrag = (besitzer?.wartende || []).find((w) => w.taskId === data.taskId);
         if (eintrag) eintrag.message = data.message || 'Warteschlange';
-        if (besitzer) renderRunPane(feld);
+        if (besitzer) renderRunPane(besitzer.slot, besitzer.taskId);
       } else {
         const stream = state.streams.get(data.taskId) || openRunPane(data.taskId);
         stream.status = 'queued';
         appendRunOutput(stream, `<div class="run-queue-note">[${escapeHtml(data.message || 'Warteschlange')}]</div>\n`);
-        renderRunPane(stream.slot);
+        renderRunPane(stream.slot, stream.taskId);
       }
     } else if (data.type === 'backup_status') {
       for (const pane of dom.runPanes) if (pane?.target.value === data.projectPath) renderBackupStatus(pane, data.backup);
@@ -498,16 +509,16 @@ function setupWebSocket() {
       }
     } else if (data.type === 'abbruch_laeuft') {
       const stream = state.streams.get(data.taskId);
-      if (stream) { stream.cancelling = true; renderRunPane(stream.slot); }
+      if (stream) { stream.cancelling = true; renderRunPane(stream.slot, stream.taskId); }
     } else if (['done', 'error', 'cancelled'].includes(data.type)) {
       const status = TaskState.fromMessage(data);
       const feld = state.wartendIn[data.taskId];
       if (feld !== undefined) {
         delete state.wartendIn[data.taskId];
-        const owner = streamAtSlot(feld);
+        const owner = waitingOwner(data.taskId);
         if (owner) {
           owner.wartende = (owner.wartende || []).filter((task) => task.taskId !== data.taskId);
-          renderRunPane(feld);
+          renderRunPane(owner.slot, owner.taskId);
         }
       }
       const stream = state.streams.get(data.taskId);
@@ -522,7 +533,7 @@ function setupWebSocket() {
           const color = status === 'completed' ? 'var(--success)' : status === 'cancelled' ? 'var(--warning)' : 'var(--danger)';
           stream.buffer += `\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`;
         }
-        renderRunPane(stream.slot);
+        renderRunPane(stream.slot, stream.taskId);
       }
       const task = state.tasks.find(t => t.id === data.taskId);
       if (task) {
@@ -661,6 +672,10 @@ function wartendeHtml(stream) {
     .join('');
 }
 
+function waitingOwner(taskId) {
+  return [...state.streams.values()].find(stream => stream.wartende?.some(task => task.taskId === taskId));
+}
+
 function openRunPane(taskId, init = {}) {
   const bestehend = state.streams.get(taskId);
   if (bestehend && state.panes.includes(taskId)) return bestehend;
@@ -671,8 +686,7 @@ function openRunPane(taskId, init = {}) {
   const slot = gewollt && (state.panes[gewollt.slot] === null || isBeendet(state.panes[gewollt.slot]))
     ? gewollt.slot
     : freeSlot();
-  const verdraengt = state.panes[slot];
-  if (verdraengt && verdraengt !== taskId) state.streams.delete(verdraengt);
+  // Verdrängte Streams bleiben erreichbar: späte Ereignisse dürfen kein Feld neu belegen.
 
   const stream = Object.assign(
     { taskId, slot, buffer: '', status: 'queued', title: '', folder: '', prompt: '', falten: {}, startedAt: Date.now() },
@@ -688,6 +702,7 @@ function openRunPane(taskId, init = {}) {
   state.streams.set(taskId, stream);
   state.panes[slot] = taskId;
   const pane = dom.runPanes[slot];
+  pane.newTask = false;
   revealPane(slot);
   if (stream.path) state.paneTarget[slot] = stream.path;
   if (stream.path && [...pane.target.options].some(option => option.value === stream.path)) {
@@ -714,7 +729,8 @@ function scrollRunPaneToBottom(slot) {
   pane.body.scrollTop = pane.body.scrollHeight;
 }
 
-function renderRunPane(slot) {
+function renderRunPane(slot, expectedTaskId) {
+  if (expectedTaskId && state.panes[slot] !== expectedTaskId) return;
   const pane = dom.runPanes[slot];
   const stream = streamAtSlot(slot);
   if (!pane) return;
@@ -753,12 +769,14 @@ function renderRunPane(slot) {
 function appendRunOutput(stream, htmlContent) {
   const pane = dom.runPanes[stream.slot];
   stream.buffer += htmlContent;
-  if (!pane) return;
+  if (!pane || state.panes[stream.slot] !== stream.taskId) return;
   pane.body.innerHTML = konsoleHtml(stream) + wartendeHtml(stream);
   scrollRunPaneToBottom(stream.slot);
   // Ersetzt der Chunk den Inhalt, wird neu umgebrochen: die Endhöhe kennt das Layout
   // erst im nächsten Frame, also einmal nachziehen.
-  requestAnimationFrame(() => scrollRunPaneToBottom(stream.slot));
+  requestAnimationFrame(() => {
+    if (state.panes[stream.slot] === stream.taskId) scrollRunPaneToBottom(stream.slot);
+  });
 }
 
 // Auto-follow pro Feld: wer in einem Lauf mitliest, liest mit; wer hochscrollt, liest
@@ -885,7 +903,7 @@ function showTaskInPane(task) {
       pane.target.value = task.projectPath;
     }
   }
-  renderRunPane(stream.slot);
+  renderRunPane(stream.slot, stream.taskId);
   runPaneFollow[stream.slot] = false;
   if (pane) {
     pane.body.scrollTop = 0;
@@ -908,7 +926,7 @@ async function refreshRunPool() {
     ...(pool.queued || []).map((r) => ({ ...r, laufStatus: 'queued' }))
   ];
   for (const lauf of laeufe) {
-    if (!lauf.taskId || state.panes.includes(lauf.taskId) || state.wartendIn[lauf.taskId] !== undefined) continue;
+    if (!lauf.taskId || state.streams.has(lauf.taskId) || state.wartendIn[lauf.taskId] !== undefined) continue;
     const task = state.tasks.find((t) => t.id === lauf.taskId);
     if (!task) continue;
     showTaskInPane({ ...task, status: lauf.laufStatus });
@@ -1635,7 +1653,7 @@ function startNewTaskInProject(projectPath) {
   // ＋ heißt Anfang: kein Auftrag aus der Historie leiht diesem Feld sein Ziel.
   const stream = streamAtSlot(slot);
   if (stream) delete stream.folge;
-  state.fortsetzung = state.fortsetzung.filter((f) => f.slot !== slot);
+  pane.newTask = true;
   if (projectPath) {
     state.paneTarget[slot] = projectPath;
     pane.target.value = projectPath;
@@ -2466,7 +2484,7 @@ function promptPayload(slot) {
   const pane = dom.runPanes[slot];
   const prompt = pane.input.value.trim() || (window.HarnessImages.has(pane.root) ? 'Analysiere das beigefügte Bild.' : '');
   const stream = streamAtSlot(slot);
-  const folge = stream?.folge && pane.target.value === stream.folge.projectPath ? stream.folge : null;
+  const folge = !pane.newTask && stream?.folge && pane.target.value === stream.folge.projectPath ? stream.folge : null;
 
   const payload = {
     type: 'dispatch',

@@ -974,5 +974,48 @@ frames.length = 0;
 tippe(liveSlot, 'Zweite Live-Fortsetzung');enter(liveSlot);await ruhen(2);
 pruefe('Nächste Fortsetzung verweist auf den jüngsten Lauf', sendungen()[0]?.previousTaskId === 'live-follow');
 
+// Doppelte Bestätigung, wartender Folgeprompt und verspätetes Ereignis.
+const auditTask = {id:'audit-live',projectPath:'/tmp/proj-a',projectName:'proj-a',prompt:'Übergabe prüfen',status:'queued',timestamp:new Date().toISOString()};
+sag({type:'task_created',taskId:auditTask.id,task:auditTask});
+sag({type:'route_selected',taskId:auditTask.id,harness:'Cline',command:'cline',model:'plan-free'});
+sag({type:'output',taskId:auditTask.id,html:'AUDIT-ERSTE-AUSGABE'});await ruhen(2);
+const auditSlot = [0,1].find(i=>konsole(i).textContent.includes('AUDIT-ERSTE-AUSGABE'));
+sag({type:'task_created',taskId:auditTask.id,task:auditTask});await ruhen(2);
+pruefe('Doppelte Task-Bestätigung reiht den Lauf nicht hinter sich selbst ein', !konsole(auditSlot).querySelector('.run-wartende'));
+sag({type:'done',taskId:auditTask.id,exitCode:0});await ruhen(2);
+frames.length=0;tippe(auditSlot,'Audit-Fortsetzung');enter(auditSlot);await ruhen(2);
+const auditFirst=sendungen()[0];
+sag({type:'task_created',taskId:'audit-follow-1',task:{...auditTask,id:'audit-follow-1',prompt:auditFirst.prompt,requestId:auditFirst.requestId}});
+sag({type:'route_selected',taskId:'audit-follow-1',harness:'Cline',command:'cline',model:'plan-free'});
+sag({type:'output',taskId:'audit-follow-1',html:'AUDIT-ZWEITE-AUSGABE'});await ruhen(2);
+frames.length=0;tippe(auditSlot,'Noch während des Laufs');enter(auditSlot);await ruhen(2);
+const auditWaiting=sendungen()[0];
+pruefe('Folgeprompt während eines Laufs verweist auf den aktuellen Vorgänger', auditWaiting.previousTaskId==='audit-follow-1');
+sag({type:'task_created',taskId:'audit-follow-2',task:{...auditTask,id:'audit-follow-2',prompt:auditWaiting.prompt,requestId:auditWaiting.requestId}});
+sag({type:'queued',taskId:'audit-follow-2',reason:'project',message:'Wartet auf Vorgänger'});await ruhen(2);
+pruefe('Wartender Folgeprompt bleibt unter dem laufenden Auftrag', konsole(auditSlot).textContent.includes('AUDIT-ZWEITE-AUSGABE') && Boolean(konsole(auditSlot).querySelector('.run-wartende')));
+sag({type:'done',taskId:'audit-follow-1',exitCode:0});
+sag({type:'route_selected',taskId:'audit-follow-2',harness:'Cline',command:'cline',model:'plan-free',projectPath:'/tmp/proj-a'});
+sag({type:'output',taskId:'audit-follow-2',html:'AUDIT-DRITTE-AUSGABE'});await ruhen(2);
+pruefe('Warteschlangen-Übergabe erhält Zielordner und altes Protokoll', konsole(auditSlot).querySelector('.run-pane-target').value==='/tmp/proj-a' && konsole(auditSlot).textContent.includes('AUDIT-ZWEITE-AUSGABE') && konsole(auditSlot).textContent.includes('AUDIT-DRITTE-AUSGABE'));
+const beforeLate=[0,1].map(i=>konsole(i).querySelector('.run-pane-title').textContent);
+sag({type:'output',taskId:'audit-follow-1',html:'VERSPAETETER-CHUNK'});await ruhen(2);
+pruefe('Spätes Ereignis öffnet keinen verdrängten Task erneut', [0,1].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforeLate[i]));
+pruefe('Später Chunk verändert keine fremde sichtbare Ausgabe', ![0,1].some(i=>konsole(i).textContent.includes('VERSPAETETER-CHUNK')));
+sag({type:'task_created',taskId:'audit-follow-3',task:{...auditTask,id:'audit-follow-3',prompt:'Weitere Warteschlange'}});await ruhen(2);
+pruefe('Nach Warteschlangen-Übergabe gehört der nächste Auftrag weiterhin zum selben Feld', konsole(auditSlot).textContent.includes('AUDIT-DRITTE-AUSGABE') && konsole(auditSlot).querySelector('.run-wartende')?.textContent.includes('Weitere Warteschlange'));
+// Ein bewusst neuer Task darf durch den Abschluss des alten Laufs nicht zur Fortsetzung werden.
+konsole(auditSlot).querySelector('.run-pane-input').focus();
+window.startNewTaskInProject('/tmp/proj-a');
+sag({type:'done',taskId:'audit-follow-2',exitCode:0});await ruhen(2);
+frames.length=0;tippe(auditSlot,'Bewusst neuer Task');enter(auditSlot);await ruhen(2);
+pruefe('Neuer Task bleibt auch nach spätem Abschluss ohne Vorgänger', sendungen()[0]?.previousTaskId === undefined && sendungen()[0]?.harnessOverride === 'auto');
+const oldPool = ANTWORTEN['GET /api/runs'];
+ANTWORTEN['GET /api/runs'] = {running:[{taskId:'audit-follow-1',projectPath:'/tmp/proj-a'}],queued:[]};
+const beforePool=[0,1].map(i=>konsole(i).querySelector('.run-pane-title').textContent);
+await window.refreshRunPool();await ruhen(2);
+pruefe('Pool-Abgleich öffnet einen bewusst verdrängten Lauf nicht erneut', [0,1].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforePool[i]));
+ANTWORTEN['GET /api/runs'] = oldPool;
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;
