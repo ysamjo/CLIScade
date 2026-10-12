@@ -94,6 +94,27 @@ body {
   flex-shrink: 0;
 }
 
+/* Einklappen ab zwei Konsolen (app.js setzt die Klasse). Der Griff bleibt erreichbar. */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#sidebar-expand {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+}
+#sidebar-expand[hidden] { display: none; }
+@media (min-width: 769px) {
+  .app-layout.sidebar-collapsed .sidebar { display: none; }
+}
+@media (max-width: 768px) {
+  #sidebar-collapse, #sidebar-expand { display: none !important; }
+}
+
 .sidebar-header {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-color);
@@ -431,18 +452,6 @@ body {
   font-family: var(--font-mono);
 }
 
-/* Welches Feld diesen Auftrag gerade hält. */
-.task-konsole {
-  align-self: flex-start;
-  font-size: 9px;
-  line-height: 1.4;
-  color: var(--text-dim);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 0 4px;
-  margin-top: 1px;
-}
-
 .empty-task-hint {
   font-size: 11px;
   color: var(--text-dim);
@@ -591,16 +600,27 @@ body {
   overflow: hidden;
 }
 
-/* SPLIT-VIEW: zwei Konsolen nebeneinander, je eine pro Auftrag */
+/* RASTER: 1 Konsole füllt die Fläche, 2 stehen nebeneinander, 3–4 im 2×2-Quadrat.
+   Die Zahl sichtbarer Felder setzt app.js als data-panes. */
 .run-split {
   flex: 1;
-  display: flex;
+  display: grid;
   gap: 8px;
   min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+}
+.run-split[data-panes="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.run-split[data-panes="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 1fr; }
+.run-split[data-panes="3"],
+.run-split[data-panes="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+
+/* Bei 3 Konsolen füllt die dritte Konsole automatisch die volle Breite (beide Spalten). */
+.run-split[data-panes="3"] > .run-pane.run-pane-wide,
+.run-split[data-panes="3"] > .run-pane:not([hidden]):nth-child(3 of :not([hidden])) {
+  grid-column: 1 / -1;
 }
 
 .run-pane {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -2603,9 +2623,11 @@ kbd {
     min-height: 0;
   }
 
-  /* Untereinander statt nebeneinander: zwei Spalten wären zu schmal. */
-  .run-split {
-    flex-direction: column;
+  /* Untereinander statt im Raster: zwei Spalten wären zu schmal. */
+  .run-split[data-panes] {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-auto-rows: minmax(0, 1fr);
   }
 
   .run-pane {
@@ -3183,10 +3205,27 @@ body, .app-layout { height:100dvh; }
 
 /* Eine Konsole zu Beginn; der Ordner ist die Auswahl im Kopf des Felds. */
 .run-pane[hidden], .memory-pane[hidden] { display:none; }
-.run-pane-heading { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
-.run-pane-head { display:grid; grid-template-columns:minmax(0,1fr); gap:4px; height:auto; min-height:54px; flex:0 0 auto; padding:8px 12px; }
-.run-pane-head .run-pane-harness { display:flex; align-items:center; gap:6px; width:fit-content; max-width:100%; min-width:0; padding:3px 5px; }
+.run-pane-heading { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; grid-area:heading; }
+.run-pane-head { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"heading close" "harness harness" "folder folder"; gap:4px; height:auto; min-height:54px; flex:0 0 auto; padding:8px 12px; }
+.run-pane-head .run-pane-harness { display:flex; align-items:center; gap:6px; width:fit-content; max-width:100%; min-width:0; padding:3px 5px; grid-area:harness; }
 .run-pane-head .run-pane-harness:empty { display:none; }
+.run-pane-folder { grid-area:folder; }
+.run-pane-close { grid-area:close; align-self:start; display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; border:0; background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; }
+.run-pane-close:hover { background:var(--bg-elevated); color:var(--text-main); }
+.run-pane-close:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
+.run-pane-close[hidden] { display:none; }
+.run-pane-close .svg-icon { width:16px; height:16px; }
+
+/* Bei drei oder vier Konsolen darf die Arbeitsfläche breiter werden. */
+.studio-container:has(.run-split[data-panes="3"]),
+.studio-container:has(.run-split[data-panes="4"]) { max-width: 1800px; }
+
+/* Rückfrage beim Schließen einer laufenden Konsole. */
+#pane-close-dialog { color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; max-width: min(460px, calc(100vw - 32px)); }
+#pane-close-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+#pane-close-dialog h2 { margin: 0 0 8px; }
+#pane-close-dialog p { margin: 0 0 16px; color: var(--text-muted); }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .run-pane-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .run-pane-head .run-pane-target { width:100%; max-width:none; min-width:0; height:30px; flex:none; padding:3px 4px; border:1px solid transparent; background:transparent; font-size:14px; font-weight:600; color:var(--text-main); }
 .run-pane-head .run-pane-target:hover { background:var(--bg-card); }
@@ -3199,7 +3238,6 @@ body, .app-layout { height:100dvh; }
 .task-badge { display:grid; grid-template-columns:auto 16px minmax(0,1fr) auto; align-items:center; gap:4px; min-width:0; }
 .task-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .task-time { white-space:nowrap; }
-.task-usage { grid-column:1 / -1; }
 .task-harness-icon { width:16px; height:16px; flex:0 0 16px; object-fit:contain; border-radius:3px; background:#f3f3f3; }
 .task-harness-fallback { display:inline-flex; width:16px; height:16px; flex:0 0 16px; }
 .task-harness-fallback .svg-icon { width:16px; height:16px; }
