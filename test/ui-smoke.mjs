@@ -566,6 +566,33 @@ pruefe("das Feld bleibt für weitere Aufträge am alten Ziel",
   sendungen()[0]?.harnessOverride === "Cline" && sendungen()[0]?.projectPath === "/tmp/proj-b",
   JSON.stringify(sendungen()[0]));
 
+// Eine bewusste Wahl im Routing-Feld schlägt die Fortsetzung: der Screenshot
+// zeigte CodeBuddy unten, gelaufen ist trotzdem Cline — die alte Logik nahm
+// immer den Harness des alten Laufs.
+const routing = (slot, wert) => {
+  const feld = konsole(slot).querySelector(".run-pane-routing");
+  if (![...feld.options].some((o) => o.value === wert)) {
+    const opt = document.createElement("option");
+    opt.value = wert;
+    opt.textContent = wert;
+    feld.appendChild(opt);
+  }
+  feld.value = wert;
+  feld.dispatchEvent(new window.Event("change", { bubbles: true }));
+};
+routing(folgeSlot, "CodeBuddy");
+frames.length = 0;
+tippe(folgeSlot, "Bewusst anderer Harness im selben Ordner");
+enter(folgeSlot);
+await ruhen(4);
+const bewusst = sendungen()[0];
+pruefe("eine bewusste Routing-Wahl schlägt die Fortsetzung",
+  bewusst?.harnessOverride === "CodeBuddy" && bewusst?.projectPath === "/tmp/proj-b",
+  JSON.stringify(bewusst));
+pruefe("bei bewusst anderem Harness geht das alte Modell nicht mit",
+  bewusst?.modelOverride === undefined, JSON.stringify(bewusst));
+routing(folgeSlot, "auto");
+
 // Der Folgauftrag zieht in sein Feld zurück, auch wenn das andere Feld gerade
 // einen Platz frei hätte — das Protokoll soll nicht allein stehen bleiben.
 sag({ type: "done", taskId: "task_c" });
