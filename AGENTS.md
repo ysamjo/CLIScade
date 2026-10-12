@@ -110,6 +110,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 
 - Skills-Inventar bleibt lesend; nur ausdrückliche Synchronisierung/Installation erzeugt Links.
 - Vor einem Restart aktive Prozesse und `/api/runs` prüfen. Unterbrochene Aufgaben benötigen ausdrückliche Fortsetzung; niemals automatisch erneut dispatchen.
+- Nach erfolgreichen Änderungen die native App immer neu bauen, installieren und starten. Installation/Server-Neustart erst ohne laufende oder wartende Aufträge und ohne aktive Harness-Kindprozesse; unmittelbar davor erneut prüfen. Dauerbetrieb weiter über `tools/start-detached.py` aus dem aktualisierten App-Bundle. Aktive Aufträge nicht für ein Update abbrechen.
 
 - Bild-Einsetzen: `public/image-composer.js` verwaltet je Konsole ein Bild (PNG/JPEG/GIF/WebP, 10 MB). Upload ausschließlich beim Senden über den angemeldeten `POST /api/images`; Ablage unter `~/.harness-dispatch/uploads`, anschließend bestehender Attachment-Pfad. Fehler erhalten den Entwurf. Mac-App: `mac-app/`, `npm run build:mac` / `npm run install:mac`; native Zwischenablage-TIFFs werden bei ⌘V nach PNG gewandelt. `.beads` nie ins Bundle aufnehmen.
 
@@ -155,6 +156,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Lange Modellnamen: Task-Status, CLI-Icon, Modell und Uhrzeit bleiben in einer Zeile; das Modell wird bei Platzmangel gekürzt und ist im Tooltip vollständig lesbar. Im Konsolenkopf erhält die Ordnerauswahl die volle Breite, CLI-Icon und Modell stehen darunter. Desktop und Mobil mit zwei Konsolen prüfen.
 
 - Folgeprompts nach einem Live-Lauf bleiben ohne Historienklick in derselben Konsole und übernehmen CLI, Modell und den jüngsten Vorgänger für den Kontext. Die Serverantwort wird über `requestId` zugeordnet; nur ältere Antworten ohne Anfrage-ID verwenden den Prompt als Rückfall. Ein bewusst neuer Task oder anderer Zielordner verwendet weiterhin die gewählte Route.
+- Eine bewusste Änderung des Routing-Dropdowns hat pro Konsole Vorrang vor geerbter CLI-/Modellwahl, auch beim Wechsel zurück auf Auto-Route oder Konsens. `pane.routingExplicit` wird ausschließlich durch `change` gesetzt, nicht durch Status-/Task-Ereignisse. Kein altes `modelOverride` an eine andere Route senden; Vorgänger, Projektkontext und Konsolenzuordnung bleiben erhalten. Ohne bewusste Auswahl bleibt die automatische Fortsetzung bei ihrer bisherigen CLI und ihrem Modell.
 
 - Übergaben: doppelte Task-Bestätigungen sind idempotent. Wartende Folgeprompts bleiben beim laufenden Auftrag; beim Start werden Ordner und aktueller Vorgänger übernommen. Verdrängte Streams nehmen späte Ereignisse auf, dürfen aber Inhalt, Status, Tooltip oder Scrollposition eines anderen sichtbaren Tasks nicht ändern. Ein bewusst neuer Task bleibt auch bei nachträglichem Abschluss des alten Laufs ohne Vorgänger; bereits gesendete Anfragezuordnungen bleiben erhalten.
 
