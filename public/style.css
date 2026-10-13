@@ -1750,31 +1750,6 @@ kbd {
   background: var(--bg-card-hover);
 }
 
-/* AGENTS.md liegt hier tatsaechlich: Punkt in --success, der Rest bleibt neutral. */
-.workspace-agents-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 2px 5px;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-  transition: all 0.15s;
-}
-
-.workspace-agents-badge:hover {
-  border-color: var(--border-focus);
-  color: var(--text-main);
-}
-
 .count-badge {
   font-size: 10px;
   font-weight: 700;

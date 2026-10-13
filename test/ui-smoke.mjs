@@ -1192,5 +1192,30 @@ pruefe('Ein gemerktes Erscheinungsbild wird gelesen',
 pruefe('Ein unsinniger gemerkter Wert fällt auf die Systemvorgabe zurück',
   (window.localStorage.setItem('cliscade_theme', 'neon'), window.leseErscheinungsbild()) !== 'neon');
 
+// --- 18. Kein AGENTS.md-Rest in der Seitenleiste ---------------------------
+// Die Marke stand neben dem Root-Ordner und sagte wenig. Wer die Richtlinien
+// öffnen will, geht über die Einstellungen. Der Test hält Oberfläche und
+// Quelltext frei, damit die Referenz nicht als toter Griff zurückkommt.
+const leiste = document.getElementById("sidebar");
+pruefe("Der Kopf der Seitenleiste trägt keine AGENTS.md-Marke",
+  document.getElementById("root-agents-badge") === null
+  && document.querySelector(".workspace-agents-badge") === null);
+pruefe("Der Text „AGENTS.md aktiv“ steht nicht mehr in der Seitenleiste",
+  !leiste.textContent.includes("AGENTS.md"));
+pruefe("Der Root-Ordner bleibt im Kopf der Seitenleiste",
+  document.getElementById("root-dir-display") !== null
+  && document.getElementById("refresh-tree-btn") !== null);
+
+const quelltext = {
+  "index.html": readFileSync(join(PUBLIC, "index.html"), "utf8"),
+  "style.css": readFileSync(join(PUBLIC, "style.css"), "utf8"),
+  "app.js": readFileSync(join(PUBLIC, "app.js"), "utf8"),
+};
+const reste = Object.entries(quelltext).flatMap(([datei, text]) =>
+  ["root-agents-badge", "root-agents-text", "workspace-agents-badge", "rootAgentsBadge", "rootAgentsText"]
+    .filter((spur) => text.includes(spur))
+    .map((spur) => `${datei}:${spur}`));
+pruefe("Keine Spur der Marke in HTML, Stil oder Skript", reste.length === 0, reste.join(", "));
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

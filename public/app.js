@@ -145,8 +145,6 @@ const dom = {
   // Root Directory & Tree
   rootDirDisplay: document.getElementById('root-dir-display'),
   rootDirText: document.getElementById('root-dir-text'),
-  rootAgentsBadge: document.getElementById('root-agents-badge'),
-  rootAgentsText: document.getElementById('root-agents-text'),
   refreshTreeBtn: document.getElementById('refresh-tree-btn'),
   projectTree: document.getElementById('project-tree'),
   projectsCountBadge: document.getElementById('projects-count-badge'),
@@ -1543,10 +1541,6 @@ function updateWorkspaceUI() {
 
   syncPaneTargets();
 
-  if (dom.rootAgentsText) {
-    dom.rootAgentsText.textContent = `AGENTS.md aktiv`;
-  }
-
   // Update Stats in Settings Dialog
   if (dom.statRootPath) dom.statRootPath.textContent = state.rootDirectory || '-';
   if (dom.statProjectsCount) dom.statProjectsCount.textContent = state.projects.length;
@@ -2276,9 +2270,6 @@ function setupEventListeners() {
   }
   if (dom.rootDirDisplay) {
     dom.rootDirDisplay.addEventListener('click', () => openSettingsModal('workspace'));
-  }
-  if (dom.rootAgentsBadge) {
-    dom.rootAgentsBadge.addEventListener('click', () => openSettingsModal('agents'));
   }
   if (dom.harnessStatusPills) {
     dom.harnessStatusPills.addEventListener('click', () => openSettingsModal('diagnostics'));
