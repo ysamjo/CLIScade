@@ -1,33 +1,32 @@
 :root {
-  /* Dunkle, neutrale Anthrazit-Flächen mit Fokus auf Information und Lesbarkeit; Zustandsfarben bleiben für echte Meldungen. */
+  /* Neutraler, kontraststarker Dark-Mode: Klare Trennung von Flächen, kein Blaustich, Fokus auf Inhalt & Information. */
   color-scheme: dark;
-  --bg-primary: #0f1115;
-  --bg-secondary: #15181e;
-  --bg-card: #1b1e25;
-  --bg-card-hover: #222630;
-  --bg-elevated: #282d38;
-  --bg-input: #121418;
-  --border-color: #272c36;
-  --border-soft: #1e222a;
-  --border-focus: #4b6fae;
+  --bg-primary: #0c0d10;
+  --bg-secondary: #131519;
+  --bg-card: #181a20;
+  --bg-card-hover: #20232b;
+  --bg-elevated: #262933;
+  --bg-input: #101216;
+  --border-color: #262932;
+  --border-soft: #1c1e24;
+  --border-focus: #505c70;
   --text-main: #f0f2f5;
-  --text-muted: #9aa2b0;
-  --text-dim: #656d7b;
-  --accent: #4b6fae;
-  --accent-hover: #5d82c4;
-  --accent-light: rgba(75, 111, 174, 0.12);
+  --text-muted: #969eae;
+  --text-dim: #606876;
+  --accent: #3e506b;
+  --accent-hover: #4e6382;
+  --accent-light: rgba(62, 80, 107, 0.16);
   --success: #38a169;
   --warning: #d97706;
   --danger: #e53e3e;
   --danger-hover: #ef4444;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  /* Die Antwort in der Konsole: Fließtext, den man längere Zeit liest. */
-  --font-text: 'Helvetica Neue', Helvetica, Arial, var(--font-sans);
+  --font-text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-card: none;
 }
 
 .hidden {
@@ -902,12 +901,15 @@ body {
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
+  background: var(--bg-card-hover);
+  border-color: var(--border-focus);
+  color: #ffffff;
 }
 
 .btn-secondary {
@@ -3127,17 +3129,17 @@ body, .app-layout { height:100dvh; }
 .sidebar-footer { padding:12px; background:transparent; }
 .sidebar-settings-btn { min-height:40px; border-radius:var(--radius-md); }
 .run-split { gap:16px; }
-.run-pane { background:var(--bg-secondary); box-shadow:none; border:1px solid var(--border-color); }
-.run-pane-head { height:46px; flex-basis:46px; padding-inline:16px; background:transparent; border-bottom-color:var(--border-soft); }
-.run-pane-title { font-size:13px; color:var(--text-main); }
-.terminal-body { padding:20px; }
-.terminal-placeholder { color:var(--text-muted); font-style:normal; font-size:14px; }
-.composer-empty { flex-direction:column; gap:6px; opacity:0.75; }
+.run-pane { background:var(--bg-card); box-shadow:none; border:1px solid var(--border-color); border-radius:var(--radius-md); }
+.run-pane-head { height:40px; flex-basis:40px; padding-inline:14px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); }
+.run-pane-title { font-size:12.5px; font-weight:600; color:var(--text-main); }
+.terminal-body { padding:16px; }
+.terminal-placeholder { color:var(--text-muted); font-style:normal; font-size:13px; }
+.composer-empty { flex-direction:column; gap:6px; opacity:0.8; }
 .composer-empty > [data-icon] { display:none; }
-.composer-empty strong { color:var(--text-muted); font-size:13px; font-weight:500; letter-spacing:0; }
-.composer-empty small { max-width:32ch; font-size:11.5px; line-height:1.5; color:var(--text-dim); }
-.run-pane-context { padding:8px 18px; font-size:11px; }
-.run-pane-composer { margin:0 12px 12px; padding:10px; gap:8px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); }
+.composer-empty strong { color:var(--text-muted); font-size:13px; font-weight:600; letter-spacing:0; }
+.composer-empty small { max-width:36ch; font-size:11.5px; line-height:1.5; color:var(--text-dim); }
+.run-pane-context { padding:6px 14px; font-size:11px; }
+.run-pane-composer { margin:0 10px 10px; padding:8px 10px; gap:8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); }
 .run-pane-composer:focus-within { border-color:var(--border-focus); }
 .run-pane-composer textarea { background:transparent; border:0; padding:8px 4px; }
 .run-pane-composer textarea::placeholder { color:var(--text-muted); }
