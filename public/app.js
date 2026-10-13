@@ -35,15 +35,15 @@ let state = {
   projects: [],
   activeProject: '',
   tasks: [],
-  // Zwei Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
+  // Bis zu vier Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
   streams: new Map(),
-  panes: [null, null],
+  panes: [null, null, null, null],
   // Das Feld, in dem der Nutzer zuletzt Maus oder Tastatur benutzt hat. Dorthin zieht
   // der nächste Auftrag — nicht in das, in dem er gerade liest.
   letztesFeld: null,
   // Jeder Composer gehört zu einem Feld: Zielordner und das zuletzt angefasste Feld.
-  paneTarget: [null, null],
-  paneRouting: ['auto', 'auto'],
+  paneTarget: [null, null, null, null],
+  paneRouting: ['auto', 'auto', 'auto', 'auto'],
   // Das Protokoll eines fortgesetzten Auftrags: der neue Lauf zieht zurück in sein Feld.
   fortsetzung: [],
   // Auftrag => Feld, in dessen Ordner er wartet. Er bekommt kein eigenes Feld.
@@ -58,6 +58,12 @@ let state = {
   collapsedProjects: loadCollapsedProjects(),
   // Gemerkte Sichtbarkeit von Ordnern ohne Aufgaben.
   showTasklessFolders: loadShowTasklessFolders(),
+  // Seitenleiste: ab zwei Konsolen eingeklappt. `sidebarMode` merkt den Modus, damit
+  // die Automatik nur beim Wechsel zwischen „einzeln" und „mehrspaltig" greift.
+  sidebarCollapsed: false,
+  sidebarMode: null,
+  // Das Feld, dessen Schließen gerade im Dialog zur Wahl steht.
+  pendingCloseSlot: null,
   // Archivierte Aufträge sind eingepackt, nicht gelöscht — erst der Schalter zeigt sie.
   showArchived: false,
   activeAgentsTab: 'rootDev',
@@ -85,10 +91,11 @@ const dom = {
   projectsCountBadge: document.getElementById('projects-count-badge'),
 
   // Studio & Konsolen (Split-View, zwei Felder — je eines zum Tippen)
-  runPanes: [0, 1].map((i) => {
+  runPanes: [0, 1, 2, 3].map((i) => {
     const root = document.getElementById(`run-pane-${i}`);
     if (!root) return null;
     const memoryPanel = document.getElementById(`memory-pane-${i}`);
+    if (!memoryPanel) return null;
     return {
       root, memoryPanel,
       title: root.querySelector('.run-pane-title'),
@@ -97,6 +104,7 @@ const dom = {
       body: root.querySelector('.run-pane-body'),
       copy: root.querySelector('.run-pane-copy'),
       cancel: root.querySelector('.run-pane-cancel'),
+      close: root.querySelector('.run-pane-close'),
       target: root.querySelector('.run-pane-target'),
       routing: root.querySelector('.run-pane-routing'),
       beads: memoryPanel.querySelector('.run-pane-beads'),
@@ -108,6 +116,13 @@ const dom = {
       send: root.querySelector('.run-pane-send')
     };
   }),
+  runSplit: document.getElementById('run-split'),
+  sidebarCollapse: document.getElementById('sidebar-collapse'),
+  sidebarExpand: document.getElementById('sidebar-expand'),
+  paneCloseDialog: document.getElementById('pane-close-dialog'),
+  paneCloseDismiss: document.getElementById('pane-close-dismiss'),
+  paneCloseKeep: document.getElementById('pane-close-keep'),
+  paneCloseAbort: document.getElementById('pane-close-abort'),
   archiveFilterBtn: document.getElementById('archive-filter-btn'),
   archiveCountText: document.getElementById('archive-count-text'),
 
@@ -605,11 +620,11 @@ function konsoleHtml(stream) {
 }
 
 // --- RUN PANES (SPLIT-VIEW) ---
-// Zwei Konsolenfelder nebeneinander. Ein Auftrag zieht in das Feld, das leer ist oder
-// einen beendeten Lauf zeigt; Meldungen sind über die Task-ID zugeordnet, deshalb
+// Bis zu vier Konsolenfelder im Raster. Ein Auftrag zieht in das Feld, das leer ist
+// oder einen beendeten Lauf zeigt; Meldungen sind über die Task-ID zugeordnet, deshalb
 // schreibt ein Lauf nie in die Konsole eines anderen.
-const RUN_PANE_COUNT = 2;
-const runPaneFollow = [true, true];
+const RUN_PANE_COUNT = 4;
+const runPaneFollow = [true, true, true, true];
 
 const RUN_LEERTEXT = {
   queued: 'Wartet auf einen freien Platz…',
@@ -644,26 +659,32 @@ function freeSlot() {
   const leer = state.panes.findIndex((id) => id === null);
   if (leer !== -1) return leer;
 
-  // Streng auf 0/1 prüfen: `null >= 0` ist in JS wahr, ein ungesetztes Feld würde
-  // sonst als gültige Wahl durchgehen.
+  // Streng auf gültige Indizes prüfen: `null >= 0` ist in JS wahr, ein ungesetztes
+  // Feld würde sonst als gültige Wahl durchgehen.
   const gewaehlt = state.letztesFeld;
-  if (gewaehlt === 0 || gewaehlt === 1) return gewaehlt;
+  if (typeof gewaehlt === 'number' && gewaehlt >= 0 && gewaehlt < state.panes.length) return gewaehlt;
 
   const beendet = state.panes.findIndex((id) => isBeendet(id));
   if (beendet !== -1) return beendet;
-  const links = state.streams.get(state.panes[0]);
-  const rechts = state.streams.get(state.panes[1]);
-  return (links?.startedAt ?? 0) <= (rechts?.startedAt ?? 0) ? 0 : 1;
+  // Ohne beendeten Lauf weicht der älteste gestartete Auftrag.
+  let aeltester = 0;
+  let aeltesteZeit = Infinity;
+  state.panes.forEach((id, i) => {
+    const zeit = state.streams.get(id)?.startedAt ?? 0;
+    if (zeit < aeltesteZeit) { aeltesteZeit = zeit; aeltester = i; }
+  });
+  return aeltester;
 }
 
 // Ein Ordner gehört in eine Konsole: arbeitet dort schon ein Auftrag, wartet der
-// nächste unter ihm in demselben Feld, statt in das andere zu wandern.
+// nächste unter ihm in demselben Feld, statt in ein anderes zu wandern.
 function slotFuerOrdner(path) {
   if (!path) return undefined;
-  return [0, 1].find((i) => {
+  for (let i = 0; i < state.panes.length; i += 1) {
     const s = streamAtSlot(i);
-    return s && s.path === path && !TaskState.terminal(s.status);
-  });
+    if (s && s.path === path && !TaskState.terminal(s.status)) return i;
+  }
+  return undefined;
 }
 
 function wartendeHtml(stream) {
@@ -721,6 +742,84 @@ function revealPane(slot) {
   pane.root.hidden = false;
   pane.memoryPanel.hidden = false;
   renderMemorySummary();
+  layoutPanes();
+}
+
+// --- RASTER & SEITENLEISTE ---
+// Das Raster richtet sich nach der Zahl sichtbarer Felder: 1 = volle Fläche,
+// 2 = nebeneinander, 3–4 = 2×2. Der ×-Knopf erscheint erst, wenn mehr als ein
+// Feld offen ist — die letzte Konsole lässt sich nicht schließen.
+function visiblePaneCount() {
+  return dom.runPanes.filter((pane) => pane && !pane.root.hidden).length;
+}
+
+function layoutPanes() {
+  const count = visiblePaneCount();
+  if (dom.runSplit) dom.runSplit.dataset.panes = String(count);
+  dom.runPanes.forEach((pane) => { if (pane && pane.close) pane.close.hidden = count <= 1; });
+  updateSidebarMode();
+}
+
+// Ab zwei Konsolen klappt die Seitenleiste ein. Die Automatik greift nur beim Wechsel
+// zwischen „einzeln" und „mehrspaltig", damit ein manuelles Ausklappen erhalten bleibt,
+// wenn eine dritte Konsole dazukommt.
+function updateSidebarMode() {
+  const mode = visiblePaneCount() >= 2 ? 'mehrspaltig' : 'einzeln';
+  if (mode === state.sidebarMode) return;
+  state.sidebarMode = mode;
+  setSidebarCollapsed(mode === 'mehrspaltig');
+}
+
+function setSidebarCollapsed(collapsed) {
+  state.sidebarCollapsed = Boolean(collapsed);
+  document.querySelector('.app-layout')?.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
+  if (dom.sidebarExpand) dom.sidebarExpand.hidden = !state.sidebarCollapsed;
+}
+
+function toggleSidebar() {
+  setSidebarCollapsed(!state.sidebarCollapsed);
+}
+
+// Ein Feld schließen: die Ausgabe verschwindet, der Lauf bleibt als Stream erhalten und
+// landet normal in der Historie. Läuft der Auftrag noch, entscheidet der Dialog.
+function hideRunPane(slot) {
+  state.panes[slot] = null;
+  const pane = dom.runPanes[slot];
+  if (pane) {
+    pane.root.hidden = true;
+    pane.memoryPanel.hidden = true;
+  }
+  renderRunPane(slot);
+  renderMemorySummary();
+  renderProjectTree();
+  layoutPanes();
+}
+
+function closeRunPane(slot) {
+  const stream = streamAtSlot(slot);
+  if (!stream || TaskState.terminal(stream.status)) {
+    hideRunPane(slot);
+    return;
+  }
+  state.pendingCloseSlot = slot;
+  if (dom.paneCloseDialog && typeof dom.paneCloseDialog.showModal === 'function') {
+    dom.paneCloseDialog.showModal();
+  } else {
+    // Ohne Dialog (z. B. im Test) läuft der Auftrag im Hintergrund weiter — nie abbrechen.
+    hideRunPane(slot);
+  }
+}
+
+function confirmClosePane(abbrechen) {
+  const slot = state.pendingCloseSlot;
+  if (slot === null || slot === undefined) return;
+  if (abbrechen) {
+    const taskId = state.panes[slot];
+    if (taskId && state.ws) state.ws.send(JSON.stringify({ type: 'cancel', taskId }));
+  }
+  hideRunPane(slot);
+  state.pendingCloseSlot = null;
+  if (dom.paneCloseDialog?.open) dom.paneCloseDialog.close();
 }
 
 function scrollRunPaneToBottom(slot) {
@@ -831,6 +930,8 @@ function setupRunPanes() {
       if (!taskId || !state.ws) return;
       state.ws.send(JSON.stringify({ type: 'cancel', taskId }));
     });
+
+    pane.close?.addEventListener('click', () => closeRunPane(slot));
 
     // Der Composer gehört zum Feld: hier tippen, hier senden, hierher der Auftrag.
     window.HarnessImages.setup(pane.root);
@@ -1437,23 +1538,13 @@ function renderProjectTree() {
     taskList.className = `task-list ${isExpanded ? '' : 'hidden'}`;
 
     projectTasks.forEach(task => {
-      const konsole = state.panes.indexOf(task.id);
-      const isTaskActive = konsole !== -1;
+      const isTaskActive = state.panes.includes(task.id);
       const taskItem = document.createElement('div');
       taskItem.className = `task-item ${isTaskActive ? 'active' : ''}`;
       taskItem.dataset.taskId = task.id;
 
       const timeStr = formatTimestamp(task.timestamp);
       const statusIcon = task.status === 'completed' ? '●' : (task.status === 'running' ? '◐' : '○');
-
-      let usageMeta = '';
-      if (task.usage && task.usage.totalTokens) {
-        const tokK = Math.round(task.usage.totalTokens / 100) / 10;
-        usageMeta = `<span style="color:var(--text-main);">${tokK}k Tok</span>`;
-        if (task.usage.remainingPercent !== undefined) {
-          usageMeta += ` <span style="color:var(--text-dim); font-size:10px;">(${task.usage.remainingPercent}% frei)</span>`;
-        }
-      }
 
       // Ein laufender Auftrag bleibt unangetastet: einpacken würde ihn vor dem
       // Abbrechen verstecken. Erledigte dürfen ins Archiv.
@@ -1467,8 +1558,7 @@ function renderProjectTree() {
         <span class="task-icon">↳</span>
         <div class="task-meta">
           <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
-          <span class="task-badge"><span class="task-status">${statusIcon}</span>${taskHarnessIcon(task)}<span class="task-model" title="${escapeHtml(task.model || 'Standard')}">${escapeHtml(task.model || 'Standard')}</span><span class="task-time">${timeStr}</span>${usageMeta ? `<span class="task-usage">${usageMeta}</span>` : ''}</span>
-          ${isTaskActive ? `<span class="task-konsole">Konsole ${konsole + 1}</span>` : ''}
+          <span class="task-badge"><span class="task-status">${statusIcon}</span>${taskHarnessIcon(task)}<span class="task-model" title="${escapeHtml(task.model || 'Standard')}">${escapeHtml(task.model || 'Standard')}</span><span class="task-time">${timeStr}</span></span>
         </div>
         ${aktion}
       `;
@@ -2056,6 +2146,18 @@ function renderUsageTable() {
 function setupEventListeners() {
   // Konsolenfelder: jedes bricht nur seinen eigenen Auftrag ab, jedes tippt für sich
   setupRunPanes();
+  layoutPanes();
+
+  // Seitenleiste ein-/ausklappen und das Schließen einer Konsole bestätigen.
+  dom.sidebarCollapse?.addEventListener('click', toggleSidebar);
+  dom.sidebarExpand?.addEventListener('click', toggleSidebar);
+  dom.paneCloseKeep?.addEventListener('click', () => confirmClosePane(false));
+  dom.paneCloseAbort?.addEventListener('click', () => confirmClosePane(true));
+  dom.paneCloseDismiss?.addEventListener('click', () => {
+    state.pendingCloseSlot = null;
+    if (dom.paneCloseDialog?.open) dom.paneCloseDialog.close();
+  });
+  dom.paneCloseDialog?.addEventListener('close', () => { state.pendingCloseSlot = null; });
   document.getElementById('context-preview-close').addEventListener('click', () => document.getElementById('context-preview-dialog').close());
   document.getElementById('user-config-reload').addEventListener('click', async (event) => {
     const button = event.currentTarget;
@@ -2450,9 +2552,8 @@ function renderMemorySummary() {
     states.includes('ready') ? 'Automatisch aktiv' : 'Nicht eingerichtet';
   for (const pane of dom.runPanes) {
     if (!pane) continue;
-    const slot = dom.runPanes.indexOf(pane);
-    const project = pane.target.selectedOptions[0]?.textContent || 'Kein Projekt';
-    pane.memoryPanel.querySelector('.memory-pane-title').textContent = `Konsole ${slot + 1} · ${project}`;
+    const project = pane.target.selectedOptions[0]?.textContent || '';
+    pane.memoryPanel.querySelector('.memory-pane-title').textContent = project;
     pane.memoryPanel.querySelector('.memory-task-label').hidden = pane.beads.hidden;
   }
 }

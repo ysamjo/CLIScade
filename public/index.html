@@ -21,6 +21,9 @@
     <!-- MOBILE DRAWER BACKDROP -->
     <div id="mobile-drawer-overlay" class="mobile-drawer-overlay"></div>
 
+    <!-- Griff zum Ausklappen, wenn die Seitenleiste eingeklappt ist (nur Desktop) -->
+    <button id="sidebar-expand" class="icon-btn" title="Seitenleiste ausklappen" aria-label="Seitenleiste ausklappen" data-icon="chevron-right" hidden></button>
+
     <!-- SIDEBAR (PROJECTS & TASKS EXPLORER) -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
@@ -28,6 +31,7 @@
           <span class="logo-icon" data-icon="logo"></span>
           <span class="logo-text">CLIscade</span>
         </div>
+        <button id="sidebar-collapse" class="icon-btn" title="Seitenleiste einklappen" aria-label="Seitenleiste einklappen" data-icon="chevron-left"></button>
       </div>
 
       <!-- WORKSPACE INFO BAR -->
@@ -83,34 +87,57 @@
             <div class="memory-details">
               <p>Beads arbeitet automatisch. Eine feste Aufgabe ist optional; bei einem Fehler kannst du hier bewusst ohne Projektgedächtnis fortsetzen.</p>
               <section id="memory-pane-0" class="memory-pane">
-                <h4 class="memory-pane-title">Konsole 1</h4>
+                <h4 class="memory-pane-title"></h4>
                 <div class="run-pane-context">
                   <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
                   <span class="run-pane-backup-status"></span>
                   <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
                 </div>
                 <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe für Konsole 1" hidden></select>
+                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
                 </label>
               </section>
               <section id="memory-pane-1" class="memory-pane" hidden>
-                <h4 class="memory-pane-title">Konsole 2</h4>
+                <h4 class="memory-pane-title"></h4>
                 <div class="run-pane-context">
                   <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
                   <span class="run-pane-backup-status"></span>
                   <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
                 </div>
                 <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe für Konsole 2" hidden></select>
+                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                </label>
+              </section>
+              <section id="memory-pane-2" class="memory-pane" hidden>
+                <h4 class="memory-pane-title"></h4>
+                <div class="run-pane-context">
+                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                  <span class="run-pane-backup-status"></span>
+                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                </div>
+                <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                </label>
+              </section>
+              <section id="memory-pane-3" class="memory-pane" hidden>
+                <h4 class="memory-pane-title"></h4>
+                <div class="run-pane-context">
+                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                  <span class="run-pane-backup-status"></span>
+                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                </div>
+                <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
                 </label>
               </section>
             </div>
           </details>
-          <!-- KONSOLEN: zwei Aufträge nebeneinander, je einer pro Feld -->
+          <!-- KONSOLEN: bis zu vier Aufträge im Raster, je einer pro Feld -->
           <div id="run-split" class="run-split">
             <div class="run-pane" id="run-pane-0">
               <div class="run-pane-head">
                 <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
                 <span class="run-pane-harness"></span>
                 <span class="run-pane-folder" hidden></span>
               </div>
@@ -146,6 +173,79 @@
             <div class="run-pane" id="run-pane-1" hidden>
               <div class="run-pane-head">
                 <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
+                <span class="run-pane-harness"></span>
+                <span class="run-pane-folder" hidden></span>
+              </div>
+              <div class="run-pane-body terminal-body">
+                <div class="terminal-placeholder composer-empty"><span data-icon="sparkles" aria-hidden="true"></span><strong>Platz für deine nächste Idee</strong><small>Projekt wählen, Aufgabe beschreiben und starten.</small></div>
+              </div>
+              <div class="run-pane-attachment" hidden>
+                <img class="run-pane-image-preview" alt="Eingefügtes Bild">
+                <button type="button" class="btn-text run-pane-image-remove">Bild entfernen</button>
+              </div>
+              <span class="run-pane-image-status" role="status" aria-live="polite"></span>
+              <div class="run-pane-composer">
+                <textarea class="run-pane-input" rows="3" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
+                <div class="run-pane-toolbar">
+                  <div class="run-pane-targets">
+                    <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
+                  <option value="auto">Auto-Route</option>
+                  <option value="consensus">Konsens</option>
+                  <!-- Populated dynamically with available harnesses -->
+                </select>
+                  </div>
+                  <div class="run-pane-actions">
+                    <button type="button" class="btn-text run-pane-copy run-pane-tool" aria-label="Ausgabe kopieren" title="Ausgabe kopieren"><span data-icon="copy" aria-hidden="true"></span></button>
+                    <button type="button" class="btn-text btn-text-danger run-pane-cancel run-pane-tool" aria-label="Auftrag abbrechen" title="Nur diesen Auftrag abbrechen" hidden><span data-icon="x" aria-hidden="true"></span></button>
+                    <input class="run-pane-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="btn-text run-pane-image-select run-pane-tool" aria-label="Foto oder Bild auswählen" title="Foto oder Bild auswählen"><span data-icon="image" aria-hidden="true"></span></button>
+                <button type="button" class="btn-text run-pane-context-preview run-pane-tool" aria-label="Kontext ansehen" title="Kontext ansehen"><span data-icon="file" aria-hidden="true"></span></button>
+                <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="run-pane" id="run-pane-2" hidden>
+              <div class="run-pane-head">
+                <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
+                <span class="run-pane-harness"></span>
+                <span class="run-pane-folder" hidden></span>
+              </div>
+              <div class="run-pane-body terminal-body">
+                <div class="terminal-placeholder composer-empty"><span data-icon="sparkles" aria-hidden="true"></span><strong>Platz für deine nächste Idee</strong><small>Projekt wählen, Aufgabe beschreiben und starten.</small></div>
+              </div>
+              <div class="run-pane-attachment" hidden>
+                <img class="run-pane-image-preview" alt="Eingefügtes Bild">
+                <button type="button" class="btn-text run-pane-image-remove">Bild entfernen</button>
+              </div>
+              <span class="run-pane-image-status" role="status" aria-live="polite"></span>
+              <div class="run-pane-composer">
+                <textarea class="run-pane-input" rows="3" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
+                <div class="run-pane-toolbar">
+                  <div class="run-pane-targets">
+                    <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
+                  <option value="auto">Auto-Route</option>
+                  <option value="consensus">Konsens</option>
+                  <!-- Populated dynamically with available harnesses -->
+                </select>
+                  </div>
+                  <div class="run-pane-actions">
+                    <button type="button" class="btn-text run-pane-copy run-pane-tool" aria-label="Ausgabe kopieren" title="Ausgabe kopieren"><span data-icon="copy" aria-hidden="true"></span></button>
+                    <button type="button" class="btn-text btn-text-danger run-pane-cancel run-pane-tool" aria-label="Auftrag abbrechen" title="Nur diesen Auftrag abbrechen" hidden><span data-icon="x" aria-hidden="true"></span></button>
+                    <input class="run-pane-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="btn-text run-pane-image-select run-pane-tool" aria-label="Foto oder Bild auswählen" title="Foto oder Bild auswählen"><span data-icon="image" aria-hidden="true"></span></button>
+                <button type="button" class="btn-text run-pane-context-preview run-pane-tool" aria-label="Kontext ansehen" title="Kontext ansehen"><span data-icon="file" aria-hidden="true"></span></button>
+                <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="run-pane" id="run-pane-3" hidden>
+              <div class="run-pane-head">
+                <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
                 <span class="run-pane-harness"></span>
                 <span class="run-pane-folder" hidden></span>
               </div>
@@ -885,6 +985,15 @@
     <p id="context-preview-summary" role="status"></p>
     <pre id="context-preview-content"></pre>
     <button type="button" id="context-preview-close" class="btn">Schließen</button>
+  </dialog>
+  <dialog id="pane-close-dialog" aria-labelledby="pane-close-title">
+    <h2 id="pane-close-title">Konsole schließen</h2>
+    <p>Der Auftrag läuft noch. Soll er weiterlaufen oder abgebrochen werden?</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="pane-close-dismiss">Nicht schließen</button>
+      <button type="button" class="btn" id="pane-close-keep">Im Hintergrund weiterlaufen</button>
+      <button type="button" class="btn btn-primary btn-text-danger" id="pane-close-abort">Auftrag abbrechen</button>
+    </div>
   </dialog>
   <script src="image-composer.js"></script>
   <script src="app.js"></script>
