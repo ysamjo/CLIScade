@@ -26,6 +26,20 @@ test('Runner meldet Spawn-Fehler', async () => {
   assert.equal(result.reason, 'spawn_failure');
 });
 
+test('Headless-STDIN liefert EOF statt Auswahlantwort oder Terminal', async () => {
+  const result = await runProcess({ command: process.execPath, args: ['-e',
+    'console.log(JSON.stringify({ tty: Boolean(process.stdin.isTTY), input: require("node:fs").readFileSync(0, "utf8") }))'], timeoutMs: 2000 });
+  assert.equal(result.reason, null);
+  assert.deepEqual(JSON.parse(result.stdoutTail), { tty: false, input: '' });
+});
+
+test('Auch wiederholt ausgegebene Auswahlmenüs bleiben durch das Gesamtzeitlimit begrenzt', async () => {
+  const result = await runProcess({ command: process.execPath, args: ['-e',
+    'setInterval(() => console.log("Please select [1/2]"), 20)'], idleTimeoutMs: 500, timeoutMs: 1000 });
+  assert.match(result.stdoutTail, /Please select/);
+  assert.equal(result.reason, 'timeout');
+});
+
 test('Runner beendet stille Läufe und bereits abgebrochene Anfragen', async () => {
   const idle = await runProcess({ command: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], idleTimeoutMs: 50 });
   assert.equal(idle.reason, 'idle_timeout');

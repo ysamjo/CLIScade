@@ -40,7 +40,9 @@ makeStub('stub-env', 'echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"'
 makeStub('stub-codex-auth', 'echo \'{"type":"error","message":"Authentication failed"}\'; exit 1');
 makeStub('stub-codex-rate', 'echo \'{"type":"error","message":"429 Too Many Requests"}\'; exit 1');
 // Cursor lehnt ein untrusted Verzeichnis still ab (Exit 0) — die Flags sind der Auftrag.
-makeStub('agent', 'echo "ARGS=$*"; echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
+// Der Stub heißt `cursor-agent`; `agent` gehört der Grok-CLI und darf nie getroffen werden.
+makeStub('cursor-agent', 'echo "ARGS=$*"; echo "ENTRYPOINT=[${QODER_AGENT_SDK_ENTRYPOINT:-keiner}]"');
+makeStub('agent', 'echo "FALSCHER_AGENT=$*"');
 // Taktende Laeufe: bleiben unter der Idle-Frist und liefern ein Zeitfenster zum Eingreifen.
 const tickStub = (name) => makeStub(name,
   'echo "START"; i=0; while [ $i -lt 50 ]; do echo "t$i"; i=$((i+1)); sleep 0.1; done; echo "FERTIG"');
@@ -67,7 +69,7 @@ const stubHarnesses = {
   'stub-tick-a': ['qoder', 'qodercli'], 'stub-tick-b': ['codebuddy', 'codebuddy'],
   'stub-hang': ['qoder', 'qodercli'], 'stub-run': ['codebuddy', 'codebuddy'],
   'stub-login': ['qoder', 'qodercli'], 'stub-configfehler': ['qoder', 'qodercli'],
-  'stub-env': ['qoder', 'qodercli'], claude: ['claude', 'claude'], agent: ['cursor', 'agent'],
+  'stub-env': ['qoder', 'qodercli'], claude: ['claude', 'claude'], 'cursor-agent': ['cursor', 'cursor-agent'],
   'stub-codex-auth': ['codex', 'codex'], 'stub-codex-rate': ['codex', 'codex'],
   'stub-fremd': ['stub-fremd', 'stub-fremd']
 };
@@ -593,7 +595,7 @@ test('chain: claude läuft über denselben Gateway wie im Terminal', async () =>
 
 test('chain: cursor startet mit Verzeichnis-Freigabe und Modell-Schalter', async () => {
   writeConfig([
-    { name: 'Cursor', harness: 'cursor', command: 'agent', model: 'auto', enabled: true }
+    { name: 'Cursor', harness: 'cursor', command: 'cursor-agent', model: 'auto', enabled: true }
   ]);
 
   const messages = await runDispatch({ prompt: 'mach was' });
@@ -601,6 +603,7 @@ test('chain: cursor startet mit Verzeichnis-Freigabe und Modell-Schalter', async
 
   assert.match(trail, /ARGS=-p --force --trust --model auto/, 'ohne --force/--trust bricht Cursor die Arbeit mit Exit 0 ab:\n' + trail);
   assert.match(trail, /ENTRYPOINT=\[keiner\]/, 'auch hier darf der SDK-Marker nicht weitergegeben werden:\n' + trail);
+  assert.doesNotMatch(trail, /FALSCHER_AGENT/, 'Cursor darf nicht das gleichnamige Grok-Executable treffen:\n' + trail);
   assert.strictEqual(messages.at(-1).exitCode, 0, 'der Lauf muss durchlaufen:\n' + trail);
 });
 
@@ -885,7 +888,9 @@ memories) echo '{"wissen":"BEADS_WISSEN_MARKER"}' ;;
 remember) echo gespeichert ;;
 *) exit 1 ;;
 esac`);
-  makeStub('stub-beads-context', 'printf "%s\\n" "$*"');
+  // Zeilenweise mit Präfix: strukturierte Harnesses lesen jede JSON-Zeile als
+  // Ereignis, die einzeilige bd-ready-Liste würde sonst als unbekannt verworfen.
+  makeStub('stub-beads-context', 'printf "%s\\n" "$*" | sed "s/^/AUSGABE: /"');
   stubHarnesses['stub-beads-context'] = ['codebuddy', 'codebuddy'];
   writeConfig([{ name: 'Haenger', command: 'stub-hang' }, { name: 'Kontext', command: 'stub-beads-context' }]);
   const first = await runDispatch({ prompt: 'Normaler Auftrag' });

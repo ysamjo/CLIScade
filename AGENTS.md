@@ -126,6 +126,14 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 - Alle fünf derzeit `resumable: false`: Fortsetzung über ContextService, keine globale/zuletzt aktive Hersteller-Session erraten. Echte Werkzeug-Exit-Codes werden strukturiert erfasst (z. B. aus Kiro ACP `rawOutput.exitCode` oder Kilo `metadata.exit`); fehlende Werkzeug-Exit-Codes bleiben `null`.
 - Zusätzliche Prüfungen: `node --test test/runtime/new-clis.test.js test/new_clis_server.test.js`; letzterer startet isolierten Server auf freiem Port und ausschließlich Stub-CLIs. Echte Modelltests verbrauchen ggf. Kontingent.
 
+## Headless-Autonomie seit 12. Oktober 2026
+
+- `runtime/headless-prompt.js` ergänzt die fachliche Standardinstruktion zentral in `runHarness()` unmittelbar vor `adapter.build()`, auch bei Resume und Fallback. Originalkontext nicht verändern; feste Instruktion zusätzlich zum ContextService-Budget. Keine harness-spezifischen Promptkopien.
+- Keine fachlichen Rückfragen/Menüs: sinnvolle Entscheidung treffen, wesentliche Annahmen begründen, implementieren und testen. Explizite Nutzer-/Projekt-/AGENTS.md-Regeln haben Vorrang; vorgeschriebene Bestätigungen niemals erfinden.
+- Autonomie erteilt keine Rechte. Adapterflags, gespeicherte Policies und ausdrückliche Einstellungen erhalten; keine neuen Trust-/Freigabeflags, Tool-Erweiterungen oder Sandbox-Umgehung. STDIN geschlossen halten, keine automatischen Menüantworten und kein Interaktionsprotokoll ergänzen.
+- Eindeutige Interaktionsverweigerung als `interactive_required` mit `next_harness` klassifizieren, auch bei Exit 0. Sonst bestehende Fristen: 180 s ohne Ausgabe, 30 min insgesamt, 5 s SIGTERM-Gnadenfrist. Allgemeine Antworttexte nicht als Auswahlmenüs interpretieren; Abbruch behält Vorrang.
+- Prüfungen: `node --test test/runtime/headless-prompt.test.js test/runtime/harness-runtime.test.js test/runtime/errors.test.js test/runtime/process-runner.test.js test/new_clis_server.test.js`, danach `npm test`. Stub-Belege nicht als Live-Modellabnahme ausgeben.
+
 - Konsolen-Composer: mehrzeilige Eingabe über volle Breite, darunter Ziel/Routing und Icon-Aktionen für Bild und Kontext. Icon-Buttons behalten `aria-label`, Tooltip und sichtbaren Tastaturfokus; Bild-/Kontextpfade bleiben unverändert.
 
 - Seitenleisten-Zustand liegt in localStorage (`hrg_collapsed_projects`, `hrg_show_taskless_folders`); defekte Speicherwerte dürfen den Start nicht verhindern. AGENTS-Marken öffnen ausschließlich den Projekteditor. Archivaktionen nur bei feinem Hover-Zeiger ausblenden; Fokus und Touch bleiben bedienbar.

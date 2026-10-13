@@ -735,7 +735,7 @@ function fetchCliCostsAndUsage(forceRefresh = false) {
     cursor: {
       id: 'cursor',
       name: 'Cursor CLI',
-      command: 'agent',
+      command: 'cursor-agent',
       available: false,
       plan: 'Cursor-Konto',
       contextWindow: 'Modellabhängig',
