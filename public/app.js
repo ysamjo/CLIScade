@@ -1214,6 +1214,11 @@ function getHarnessKey(item) {
   if (item.command === 'qodercli' || item.command === 'qoder') return 'qoder';
   if (item.command === 'codebuddy' || item.command === 'cbc') return 'codebuddy';
   if (item.command === 'agent' || item.command === 'cursor-agent') return 'cursor';
+  if (item.command === 'kilo') return 'kilo';
+  if (item.command === 'kiro-cli' || item.command === 'kiro') return 'kiro';
+  if (item.command === 'junie') return 'junie';
+  if (item.command === 'copilot') return 'copilot';
+  if (item.command === 'vibe') return 'vibe';
   return 'claude_code';
 }
 

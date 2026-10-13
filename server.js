@@ -158,9 +158,26 @@ const DEFAULT_MODEL_PRESETS = {
     { id: 'auto', label: 'Auto' }
   ],
   junie: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
-  kilo: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  kilo: [
+    { id: 'Standard', label: 'Standard / Kilo Auto Free' },
+    { id: 'kilo/kilo-auto/free', label: 'Kilo Auto Free (Kostenlos)' },
+    { id: 'kilo/openrouter/free', label: 'OpenRouter Free (Kostenlos)' },
+    { id: 'kilo/kilo-auto/balanced', label: 'Kilo Auto Balanced' },
+    { id: 'kilo/kilo-auto/frontier', label: 'Kilo Auto Frontier' },
+    { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (Anthropic Key)' },
+    { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5 (Anthropic Key)' }
+  ],
   copilot: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
-  kiro: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  kiro: [
+    { id: 'Standard', label: 'Standard / Auto' },
+    { id: 'auto', label: 'Auto (Optimal)' },
+    { id: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+    { id: 'deepseek-3.2', label: 'DeepSeek 3.2' },
+    { id: 'minimax-m2.5', label: 'MiniMax M2.5' },
+    { id: 'glm-5', label: 'GLM-5' },
+    { id: 'qwen3-coder-next', label: 'Qwen3 Coder Next' }
+  ],
   vibe: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }]
 };
 
@@ -311,6 +328,39 @@ async function fetchDynamicModelPresets() {
       const cbData = JSON.parse(fs.readFileSync(cbPath, 'utf8'));
       if (cbData.model && !result.codebuddy.some(m => m.id === cbData.model)) {
         result.codebuddy.splice(1, 0, { id: cbData.model, label: `${cbData.model} (In settings.json konfiguriert)` });
+      }
+    }
+  } catch (e) {}
+
+  // 8. Kilo: inspect ~/.local/state/kilo/model.json
+  try {
+    const kiloModelPath = path.join(os.homedir(), '.local', 'state', 'kilo', 'model.json');
+    if (fs.existsSync(kiloModelPath)) {
+      const kData = JSON.parse(fs.readFileSync(kiloModelPath, 'utf8'));
+      const active = kData.model?.code?.modelID;
+      const prov = kData.model?.code?.providerID;
+      const full = prov && active && !active.startsWith(`${prov}/`) ? `${prov}/${active}` : active;
+      if (full && !['stealth/glyph-cluster'].includes(full) && !result.kilo.some(m => m.id === full)) {
+        result.kilo.splice(1, 0, { id: full, label: `${full} (Aktiv in model.json)` });
+      }
+    }
+  } catch (e) {}
+
+  // 9. Kiro: query models from kiro-cli
+  try {
+    const kiroRaw = await execAsync('kiro-cli chat --list-models --format json 2>/dev/null', 3000);
+    if (kiroRaw) {
+      const parsed = JSON.parse(kiroRaw);
+      const models = Array.isArray(parsed.models) ? parsed.models : [];
+      if (models.length > 0) {
+        const list = [{ id: 'Standard', label: 'Standard / Auto' }];
+        models.forEach(m => {
+          const id = m.model_id || m.model_name;
+          if (!id) return;
+          const label = m.model_name ? `${m.model_name}${m.description ? ` (${m.description.slice(0, 35)})` : ''}` : id;
+          list.push({ id, label });
+        });
+        result.kiro = list;
       }
     }
   } catch (e) {}
