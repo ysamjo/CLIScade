@@ -1,33 +1,33 @@
 :root {
-  /* Dunkle, abgestufte Flächen; Zustandsfarben bleiben für echte Meldungen. */
+  /* Dunkle, neutrale Anthrazit-Flächen mit Fokus auf Information und Lesbarkeit; Zustandsfarben bleiben für echte Meldungen. */
   color-scheme: dark;
-  --bg-primary: #0c1018;
-  --bg-secondary: #121722;
-  --bg-card: #19202d;
-  --bg-card-hover: #202938;
-  --bg-elevated: #263145;
-  --bg-input: #141a25;
-  --border-color: #2b3546;
-  --border-soft: #202938;
-  --border-focus: #a7b8f5;
-  --text-main: #eef2fa;
-  --text-muted: #adb8cc;
-  --text-dim: #8c9ab0;
-  --accent: #a7b8f5;
-  --accent-hover: #becbf9;
-  --accent-light: rgba(167, 184, 245, 0.12);
-  --success: #4f9d7f;
-  --warning: #b98a45;
-  --danger: #c2625c;
-  --danger-hover: #d98a85;
+  --bg-primary: #0f1115;
+  --bg-secondary: #15181e;
+  --bg-card: #1b1e25;
+  --bg-card-hover: #222630;
+  --bg-elevated: #282d38;
+  --bg-input: #121418;
+  --border-color: #272c36;
+  --border-soft: #1e222a;
+  --border-focus: #5275e0;
+  --text-main: #f0f2f5;
+  --text-muted: #9aa2b0;
+  --text-dim: #656d7b;
+  --accent: #5275e0;
+  --accent-hover: #6787ea;
+  --accent-light: rgba(82, 117, 224, 0.12);
+  --success: #38a169;
+  --warning: #d97706;
+  --danger: #e53e3e;
+  --danger-hover: #ef4444;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   /* Die Antwort in der Konsole: Fließtext, den man längere Zeit liest. */
   --font-text: 'Helvetica Neue', Helvetica, Arial, var(--font-sans);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .hidden {
@@ -134,7 +134,7 @@ body {
   height: 24px;
   background: var(--accent);
   border-radius: 6px;
-  color: var(--bg-primary);
+  color: #ffffff;
 }
 
 .logo-text {
@@ -779,12 +779,13 @@ body {
 
 .route-banner {
   background: var(--bg-card);
-  border-left: 2px solid var(--accent);
+  border: 1px solid var(--border-color);
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 2px 14px;
+  gap: 4px 14px;
   font-size: 11.5px;
   color: var(--text-muted);
   margin-bottom: 8px;
@@ -901,7 +902,7 @@ body {
 
 .btn-primary {
   background: var(--accent);
-  color: var(--bg-primary);
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -2479,7 +2480,7 @@ kbd {
 .btn-card-install.primary {
   background: var(--accent);
   border: none;
-  color: var(--bg-primary);
+  color: #ffffff;
 }
 
 .btn-card-install.primary:hover {
