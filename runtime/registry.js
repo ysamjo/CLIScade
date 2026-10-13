@@ -81,8 +81,7 @@ const CLI_INSTALL_REGISTRY = {
   cursor_cli: {
     id: 'cursor_cli',
     name: 'Cursor CLI',
-    cmd: 'agent',
-    altCmd: 'cursor-agent',
+    cmd: 'cursor-agent',
     package: 'cursor-agent',
     installCmd: 'curl https://cursor.com/install -fsS | bash',
     description: 'Cursor Agent CLI für Terminal und GitHub Actions',
@@ -134,7 +133,7 @@ const HARNESS_DEFINITIONS = {
   opencode: { installId: 'opencode_cli', aliases: [], transport: 'headless', resumable: true, structuredOutput: true },
   antigravity: { installId: 'antigravity_cli', aliases: ['antigravity_cli'], transport: 'headless', resumable: false, structuredOutput: false },
   qoder: { installId: 'qoder_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
-  codebuddy: { installId: 'codebuddy_cli', aliases: ['cbc'], transport: 'headless', resumable: false, structuredOutput: false },
+  codebuddy: { installId: 'codebuddy_cli', aliases: ['cbc'], transport: 'headless', resumable: false, structuredOutput: true },
   cursor: { installId: 'cursor_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
   junie: { installId: 'junie_cli', aliases: ['junie_cli'], transport: 'headless', resumable: false, structuredOutput: false, strictOutput: true, requiresText: true },
   kilo: { installId: 'kilo_cli', aliases: ['kilo_cli'], transport: 'headless', resumable: false, structuredOutput: true, strictOutput: true, requiresText: true },

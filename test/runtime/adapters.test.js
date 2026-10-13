@@ -11,7 +11,21 @@ test('Codex nutzt Sandbox als Standard und braucht ausdrückliche Freigabe', () 
   assert.ok(adapter.build({ prompt: 'Aufgabe', execution: { codexUnsafe: true } }).includes('--dangerously-bypass-approvals-and-sandbox'));
 });
 
-for (const id of ['claude', 'codex', 'cline', 'opencode']) {
+test('Codebuddy gibt Live-Ereignisse aus statt eines gepufferten Blocks', () => {
+  const adapter = require('../../runtime/adapters/codebuddy');
+  const args = adapter.build({ prompt: 'Aufgabe', model: 'deepseek-v4.1-flash' });
+  assert.ok(args.includes('--output-format') && args.includes('stream-json'),
+    'ohne stream-json puffert die CLI bis zum Ende und der Idle-Watchdog tötet lange Läufe');
+  assert.ok(args.includes('--model') && args.includes('deepseek-v4.1-flash'));
+  assert.equal(args.at(-1), 'Aufgabe');
+  // Werkzeugergebnis kommt als Blockliste; sie muss lesbar werden, ohne einen Exit-Code zu erfinden.
+  const [toolResult] = adapter.normalize({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: [{ type: 'text', text: 'GEHEIM-42' }] }] } });
+  assert.equal(toolResult.type, 'tool_result');
+  assert.equal(toolResult.text, 'GEHEIM-42');
+  assert.equal(toolResult.exitCode, null);
+});
+
+for (const id of ['claude', 'codebuddy', 'codex', 'cline', 'opencode']) {
   test(`${id} normalisiert strukturierte Text-, Tool- und Session-Ereignisse`, () => {
     const adapter = require(`../../runtime/adapters/${id}`);
     const fixture = fs.readFileSync(path.join(__dirname, '..', 'fixtures', id, 'stream.ndjson'), 'utf8');
@@ -26,6 +40,7 @@ for (const id of ['claude', 'codex', 'cline', 'opencode']) {
 test('strukturierte Fehler werden von allen vier Adaptern erfasst', () => {
   const failures = {
     claude: { type: 'result', is_error: true, result: 'Authentication failed' },
+    codebuddy: { type: 'result', is_error: true, result: 'Authentication failed' },
     codex: { type: 'turn.failed', error: { message: 'Authentication failed' } },
     cline: { type: 'run_result', finishReason: 'error', text: 'Authentication failed' },
     opencode: { type: 'error', error: { message: 'Authentication failed' } }
