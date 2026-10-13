@@ -2634,18 +2634,21 @@ function renderBackupStatus(pane, backup) {
 
 function renderMemorySummary() {
   const summary = document.getElementById('memory-summary');
+  if (!summary) return;
   const panes = dom.runPanes.filter(pane => pane?.target.value && !pane.root.hidden);
   const states = panes.map(pane => pane.memoryStatus.dataset.state);
   const failed = states.includes('error') || panes.some(pane => pane.backupStatus.dataset.state === 'error');
   summary.dataset.state = failed ? 'error' : states.includes('loading') ? 'loading' : states.includes('ready') ? 'ready' : 'disabled';
-  summary.textContent = failed ? 'Problem – Details öffnen' : states.includes('loading') ? 'Wird geprüft…' :
+  summary.textContent = failed ? 'Problem – Details unten' : states.includes('loading') ? 'Wird geprüft…' :
     states.includes('ready') ? 'Automatisch aktiv' : 'Nicht eingerichtet';
-  for (const pane of dom.runPanes) {
-    if (!pane) continue;
-    const project = pane.target.selectedOptions[0]?.textContent || '';
+  dom.runPanes.forEach((pane, slot) => {
+    if (!pane) return;
+    // Im Einstellungsdialog trägt jeder Eintrag den Projektnamen; ohne Auswahl
+    // braucht er trotzdem eine Beschriftung, sonst steht dort eine leere Zeile.
+    const project = pane.target.selectedOptions[0]?.textContent || `Konsole ${slot + 1}`;
     pane.memoryPanel.querySelector('.memory-pane-title').textContent = project;
     pane.memoryPanel.querySelector('.memory-task-label').hidden = pane.beads.hidden;
-  }
+  });
 }
 
 async function loadBeads(pane) {

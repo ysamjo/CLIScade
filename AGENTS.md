@@ -140,7 +140,7 @@ HOME=/tmp/hrg PATH=/tmp/hrg/bin:/usr/bin:/bin PORT=3921 node server.js
 
 - Oberflächengestaltung: Farb- und Radiusvariablen in `public/style.css` zentral halten. Konsolen und Composer bilden ruhige Karten; Desktop-/Mobil-Screenshots über Ego Lite prüfen. `100dvh` hält die Arbeitsfläche innerhalb der sichtbaren Browserhöhe.
 
-- Beads-Bedienung ausschließlich im gemeinsamen `#project-memory`: je Konsole eigene Referenzen über `#memory-pane-<slot>`, zentrale Fehlerzusammenfassung immer sichtbar. Keine automatische Fehlerumgehung. Composer-Werkzeugleiste gruppiert Ziel/Routing und die Icon-Aktionen (Kopieren, Abbrechen, Bild, Kontext und Senden) separat; Senden darf nicht allein umbrechen.
+- Beads-Bedienung ausschließlich im Einstellungsbereich `#settings-sec-memory` (`data-section="memory"`): je Konsole eigene Referenzen über `#memory-pane-<slot>`, die Zustandszeile `#memory-summary` steht im Kopf der Karte. **Der Arbeitsbereich `#dispatch-panel` trägt keine Beads-Leiste** — sie kostete dort eine Zeile und sagte im Regelfall nur, dass alles läuft. Fehler sind dadurch erst nach dem Öffnen der Einstellungen sichtbar; wer das ändert, baut das Zeichen bewusst in den Arbeitsbereich. Keine automatische Fehlerumgehung. Composer-Werkzeugleiste gruppiert Ziel/Routing und die Icon-Aktionen (Kopieren, Abbrechen, Bild, Kontext und Senden) separat; Senden darf nicht allein umbrechen.
 
 - Sichtbarkeit der zweiten Konsole: initial `hidden`, erst `openRunPane()` oder bewusster neuer Task ruft `revealPane()` auf. Ordnerauswahl im Kopf; Aufgabenunterzeile bleibt erhalten. Gedächtniszusammenfassung berücksichtigt nur sichtbare Felder.
 

@@ -22,7 +22,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=38">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -99,56 +99,6 @@
 
         <!-- AUTO-ROUTE (KI-DISPATCH) -->
         <div id="dispatch-panel" class="studio-container">
-          <details id="project-memory" class="project-memory">
-            <summary><span data-icon="file" aria-hidden="true"></span><span>Projektgedächtnis</span><span id="memory-summary" role="status" aria-live="polite">Wird geprüft…</span></summary>
-            <div class="memory-details">
-              <p>Beads arbeitet automatisch. Eine feste Aufgabe ist optional; bei einem Fehler kannst du hier bewusst ohne Projektgedächtnis fortsetzen.</p>
-              <section id="memory-pane-0" class="memory-pane">
-                <h4 class="memory-pane-title"></h4>
-                <div class="run-pane-context">
-                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
-                  <span class="run-pane-backup-status"></span>
-                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
-                </div>
-                <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
-                </label>
-              </section>
-              <section id="memory-pane-1" class="memory-pane" hidden>
-                <h4 class="memory-pane-title"></h4>
-                <div class="run-pane-context">
-                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
-                  <span class="run-pane-backup-status"></span>
-                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
-                </div>
-                <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
-                </label>
-              </section>
-              <section id="memory-pane-2" class="memory-pane" hidden>
-                <h4 class="memory-pane-title"></h4>
-                <div class="run-pane-context">
-                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
-                  <span class="run-pane-backup-status"></span>
-                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
-                </div>
-                <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
-                </label>
-              </section>
-              <section id="memory-pane-3" class="memory-pane" hidden>
-                <h4 class="memory-pane-title"></h4>
-                <div class="run-pane-context">
-                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
-                  <span class="run-pane-backup-status"></span>
-                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
-                </div>
-                <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
-                </label>
-              </section>
-            </div>
-          </details>
           <!-- KONSOLEN: bis zu vier Aufträge im Raster, je einer pro Feld -->
           <div id="run-split" class="run-split">
             <div class="run-pane" id="run-pane-0">
@@ -342,6 +292,13 @@
             <div class="item-text">
               <span class="item-title">AGENTS.md Richtlinien</span>
               <span class="item-desc">Globale & Projekt-Regeln</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="memory">
+            <span class="item-icon" data-icon="box"></span>
+            <div class="item-text">
+              <span class="item-title">Projektgedächtnis</span>
+              <span class="item-desc">Beads & Sicherungen</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="skills">
@@ -815,6 +772,69 @@
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 9: PROJEKTGEDÄCHTNIS (BEADS) -->
+          <!-- Die Bedienung liegt hier und nicht im Arbeitsbereich: sie kostete
+               dort eine Zeile und sagte im Regelfall nur, dass alles läuft. -->
+          <div id="settings-sec-memory" class="settings-section">
+            <div class="settings-section-header">
+              <h4>Projektgedächtnis (Beads)</h4>
+              <p>Beads arbeitet in eingerichteten Projekten automatisch. Eine feste Aufgabe ist optional; bei einem Fehler kannst du hier bewusst ohne Projektgedächtnis fortsetzen. Je Konsole im Arbeitsbereich steht ein eigener Eintrag.</p>
+            </div>
+
+            <div class="settings-card">
+              <div class="memory-head">
+                <h5 class="card-subtitle">Kontext je Konsole</h5>
+                <span id="memory-summary" role="status" aria-live="polite">Wird geprüft…</span>
+              </div>
+              <div class="memory-details">
+                <section id="memory-pane-0" class="memory-pane">
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+                <section id="memory-pane-1" class="memory-pane" hidden>
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+                <section id="memory-pane-2" class="memory-pane" hidden>
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+                <section id="memory-pane-3" class="memory-pane" hidden>
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
               </div>
             </div>
           </div>

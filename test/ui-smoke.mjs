@@ -845,7 +845,30 @@ for (const [id, type, status, code] of [
 }
 
 // Beads-Zustand und ausdrückliche Fortsetzung ohne Projektgedächtnis.
-pruefe('Beads ist zentral und aus beiden Eingaben entfernt', document.querySelectorAll('#project-memory').length === 1 && !document.querySelector('.run-pane .run-pane-context, .run-pane .run-pane-beads'));
+// Die Bedienung liegt seit dem Umzug vollständig im Einstellungsdialog; im
+// Arbeitsbereich bleibt keine Leiste stehen, die eine Zeile kostet und nur
+// wiederholt, dass Beads läuft.
+const arbeitsbereich = document.querySelector('#dispatch-panel');
+pruefe('Der Arbeitsbereich trägt keine Beads-Leiste mehr',
+  !document.querySelector('#dispatch-panel .project-memory, #dispatch-panel .memory-details')
+  && !arbeitsbereich.querySelector('#memory-summary'));
+pruefe('Beads ist zentral und aus beiden Eingaben entfernt', !document.querySelector('.run-pane .run-pane-context, .run-pane .run-pane-beads'));
+pruefe('Der Einstellungsdialog hat einen eigenen Punkt für das Projektgedächtnis',
+  Boolean(document.querySelector('.settings-nav-item[data-section="memory"]'))
+  && Boolean(document.querySelector('#settings-sec-memory')));
+pruefe('Alle vier Konsoleinträge liegen in diesem Bereich',
+  document.querySelectorAll('#settings-sec-memory .memory-pane').length === 4
+  && Boolean(document.querySelector('#settings-sec-memory .memory-pane .run-pane-memory-status')));
+pruefe('Die zentrale Zustandszeile steht im Einstellungsbereich',
+  document.querySelector('#settings-sec-memory #memory-summary') !== null);
+// Ein Zustand, der nur in einem unerreichbaren Bereich steckt, ist keiner.
+const memoryNav = document.querySelector('.settings-nav-item[data-section="memory"]');
+memoryNav?.click();
+await ruhen(2);
+pruefe('Ein Klick auf den Punkt öffnet den Bereich',
+  Boolean(memoryNav?.classList.contains('active'))
+  && Boolean(document.querySelector('#settings-sec-memory')?.classList.contains('active'))
+  && !document.querySelector('#settings-sec-workspace').classList.contains('active'));
 const automaticPayload = window.promptPayload(0).payload;
 pruefe('Normaler Auftrag braucht keine Beads-Auswahl oder Ausnahme', !automaticPayload.beadId && !automaticPayload.withoutBeads);
 const memoryPane = document.querySelector('#run-pane-0');
