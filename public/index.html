@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0c10">
+  <meta name="theme-color" content="#0c0d10">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>CLIscade</title>
+  <!-- Erscheinungsbild vor dem ersten Zeichnen setzen. Ohne diesen Kopf blitzt
+       beim Laden kurz das andere auf, weil app.js erst am Ende laeuft. -->
+  <script>
+    (function () {
+      var wahl = null;
+      try { wahl = localStorage.getItem('cliscade_theme'); } catch (e) {}
+      if (wahl !== 'light' && wahl !== 'dark') {
+        wahl = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      document.documentElement.setAttribute('data-theme', wahl);
+    })();
+  </script>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=36">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -63,21 +75,29 @@
         </div>
       </div>
 
-      <!-- SIDEBAR FOOTER: SETTINGS -->
+      <!-- SIDEBAR FOOTER: SETTINGS & ERSCHEINUNGSBILD -->
       <div class="sidebar-footer">
         <button id="sidebar-settings-btn" class="sidebar-settings-btn" title="Einstellungen öffnen (⌘,)">
           <span data-icon="settings"></span>
           <span>Einstellungen</span>
         </button>
+        <button id="theme-toggle" class="icon-btn theme-toggle" type="button" data-icon="moon"
+                aria-pressed="true" aria-label="Zu hellem Erscheinungsbild wechseln"
+                title="Erscheinungsbild: hell / dunkel (T)"></button>
       </div>
     </aside>
 
     <!-- MAIN STUDIO WORKSPACE -->
     <main class="main-content">
       <section id="tab-studio" class="tab-pane active">
-        <!-- Nur mobil: die Seitenleiste ist hier off-canvas, also braucht sie einen Griff. -->
+        <!-- Nur mobil: die Seitenleiste ist hier off-canvas, also braucht sie einen Griff.
+             Der Umschalter fürs Erscheinungsbild sitzt daneben — im off-canvas-Fuß
+             wäre er zwei Handgriffe entfernt. -->
         <div class="studio-bar">
           <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
+          <button class="icon-btn theme-toggle" type="button" data-icon="moon"
+                  aria-pressed="true" aria-label="Zu hellem Erscheinungsbild wechseln"
+                  title="Erscheinungsbild: hell / dunkel (T)"></button>
         </div>
 
         <!-- AUTO-ROUTE (KI-DISPATCH) -->
@@ -421,7 +441,7 @@
               </div>
             </div>
 
-            <div id="models-refresh-banner" class="settings-card hidden" style="padding:10px 14px; margin-bottom:12px; background:rgba(99,102,241,0.08); border-color:var(--accent);">
+            <div id="models-refresh-banner" class="settings-card hidden" style="padding:10px 14px; margin-bottom:12px; border-color:var(--accent);">
               <span id="models-refresh-text" style="font-size:12px; color:var(--text-main);"></span>
             </div>
 
@@ -499,7 +519,7 @@
             </div>
 
             <!-- Sync feedback banner -->
-            <div id="skills-sync-banner" class="hidden" style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:rgba(79,157,127,0.12); border:1px solid rgba(79,157,127,0.3); color:var(--success); font-size:12px; display:flex; align-items:center; justify-content:space-between;">
+            <div id="skills-sync-banner" class="banner-erfolg hidden">
               <span id="skills-sync-text">Skills erfolgreich synchronisiert!</span>
               <button id="close-skills-sync-banner-btn" style="background:transparent; border:none; color:inherit; cursor:pointer;">✕</button>
             </div>
@@ -598,7 +618,7 @@
             <div class="settings-card" id="omniroute-details-card">
               <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>OmniRoute Proxy & Kostenaufstellung (omniroute cost)</span>
-                <span id="omniroute-card-badge" class="order-badge" style="background:rgba(99,102,241,0.15); color:var(--accent);">Live CLI</span>
+                <span id="omniroute-card-badge" class="order-badge" style="background:var(--accent-light); color:var(--accent);">Live CLI</span>
               </h5>
               <div id="omniroute-providers-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
                 <!-- Populated dynamically -->
@@ -608,7 +628,7 @@
             <div class="settings-card" id="opencode-details-card">
               <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>OpenCode Telemetrie & Tokens (opencode stats --cost)</span>
-                <span id="opencode-card-badge" class="order-badge" style="background:rgba(79,157,127,0.15); color:var(--success);">Live CLI</span>
+                <span id="opencode-card-badge" class="order-badge" style="background:var(--success-soft-bg); color:var(--success);">Live CLI</span>
               </h5>
               <div id="opencode-models-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
                 <!-- Populated dynamically -->

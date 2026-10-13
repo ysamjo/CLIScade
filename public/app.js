@@ -30,6 +30,67 @@ function saveShowTasklessFolders() {
   } catch {}
 }
 
+// --- ERSCHEINUNGSBILD (HELL / DUNKEL) -------------------------------------
+// Ein Attribut am Wurzelelement, ein gemerkter Wert, zwei Umschalter. Der
+// Inline-Kopf in index.html setzt das Attribut schon vor dem ersten Zeichnen;
+// hier zieht nur der Umschalter nach und der Wert wird gemerkt.
+const STORAGE_KEY_THEME = 'cliscade_theme';
+const THEME_FARBEN = { dark: '#0c0d10', light: '#f7f8fa' };
+
+function systemErscheinungsbild() {
+  try {
+    if (typeof window.matchMedia === 'function') {
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+  } catch {}
+  return 'dark';
+}
+
+// Ohne gemerkte Wahl folgt die Oberfläche dem System — der Nutzer hat nichts
+// entschieden, also entscheidet das Betriebssystem.
+function leseErscheinungsbild() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_THEME);
+    if (raw === 'light' || raw === 'dark') return raw;
+  } catch {}
+  return systemErscheinungsbild();
+}
+
+function gemerktesErscheinungsbild() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_THEME);
+    if (raw === 'light' || raw === 'dark') return raw;
+  } catch {}
+  return null;
+}
+
+function setzeErscheinungsbild(wahl, merken = true) {
+  const theme = wahl === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  if (merken) {
+    try { localStorage.setItem(STORAGE_KEY_THEME, theme); } catch {}
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_FARBEN[theme]);
+  document.querySelectorAll('.theme-toggle').forEach((knopf) => {
+    knopf.setAttribute('data-icon', theme === 'dark' ? 'sun' : 'moon');
+    knopf.setAttribute('aria-pressed', String(theme === 'dark'));
+    knopf.setAttribute('aria-label', theme === 'dark'
+      ? 'Zu hellem Erscheinungsbild wechseln'
+      : 'Zu dunklem Erscheinungsbild wechseln');
+    knopf.innerHTML = '';
+    delete knopf.dataset.iconHydrated;
+  });
+  hydrateIcons();
+  return theme;
+}
+
+function wechsleErscheinungsbild() {
+  return setzeErscheinungsbild(
+    document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'
+  );
+}
+
 let state = {
   rootDirectory: '',
   projects: [],
@@ -271,6 +332,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   iconObserver.observe(document.body, { childList: true, subtree: true });
+  // Erscheinungsbild anwenden, ohne es zu merken: erst eine bewusste Wahl des
+  // Nutzers wird gespeichert, bis dahin folgt die Oberfläche dem System.
+  setzeErscheinungsbild(leseErscheinungsbild(), false);
+  // Solange nichts gemerkt ist, zieht ein Wechsel des Systemmodus mit.
+  if (typeof window.matchMedia === 'function') {
+    try {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (!gemerktesErscheinungsbild()) setzeErscheinungsbild(systemErscheinungsbild(), false);
+      });
+    } catch {}
+  }
   if (!await ensureAccess()) return;
   setupWebSocket();
   setupEventListeners();
@@ -1884,7 +1956,7 @@ async function loadSkills(filterQuery = '') {
         <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px;">
           ${harnessesHtml}
         </div>
-        <div style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); word-break:break-all; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px; margin-top:auto;">
+        <div style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); word-break:break-all; border-top:1px solid var(--border-soft); padding-top:6px; margin-top:auto;">
           📂 ${escapeHtml(s.sourcePath || s.path || '')}
         </div>
       `;
@@ -2024,7 +2096,7 @@ function renderUsageUI() {
         `;
         provs.forEach(p => {
           html += `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <tr style="border-bottom:1px solid var(--border-soft);">
               <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(p.group)}</td>
               <td style="padding:4px 6px; font-family:monospace;">${escapeHtml(p.reqs)}</td>
               <td style="padding:4px 6px; font-family:var(--font-mono); color:var(--text-main);">${escapeHtml(p.tokensIn)}</td>
@@ -2071,7 +2143,7 @@ function renderUsageUI() {
           const inTok = m.tokens ? (m.tokens.input || 0).toLocaleString() : '0';
           const outTok = m.tokens ? (m.tokens.output || 0).toLocaleString() : '0';
           html += `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <tr style="border-bottom:1px solid var(--border-soft);">
               <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(mid)}</td>
               <td style="padding:4px 6px; color:var(--text-muted);">${escapeHtml(mprov)}</td>
               <td style="padding:4px 6px; font-family:monospace;">${m.steps || 0}</td>
@@ -2193,6 +2265,10 @@ function setupEventListeners() {
 
   if (dom.sidebarSettingsBtn) dom.sidebarSettingsBtn.addEventListener('click', () => openSettingsModal('workspace'));
   if (dom.settingsOpenInstallerBtn) dom.settingsOpenInstallerBtn.addEventListener('click', () => openInstallerModal());
+  // Beide Umschalter fürs Erscheinungsbild (Seitenleiste und mobile Leiste).
+  document.querySelectorAll('.theme-toggle').forEach((knopf) => {
+    knopf.addEventListener('click', () => wechsleErscheinungsbild());
+  });
 
   // Settings Dialog Openers
   if (dom.topOpenSettingsBtn) {
@@ -2346,6 +2422,16 @@ function setupEventListeners() {
     if ((e.metaKey || e.ctrlKey) && e.key === ',') {
       e.preventDefault();
       openSettingsModal('harnesses');
+    }
+    // T wechselt das Erscheinungsbild — aber nicht, während jemand tippt.
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 't' || e.key === 'T')) {
+      const ziel = e.target;
+      const tippt = ziel && (ziel.tagName === 'INPUT' || ziel.tagName === 'TEXTAREA'
+        || ziel.tagName === 'SELECT' || ziel.isContentEditable);
+      if (!tippt) {
+        e.preventDefault();
+        wechsleErscheinungsbild();
+      }
     }
   });
 
@@ -2735,7 +2821,7 @@ async function loadRemoteConfig() {
         dom.telegramBotBadge.innerHTML = `<span class="dot"></span> Online (@${escapeHtml(data.telegram.botUsername || 'Bot')})`;
       } else if (data.telegram?.enabled) {
         dom.telegramBotBadge.className = 'diagnostics-status-badge';
-        dom.telegramBotBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+        dom.telegramBotBadge.style.background = 'var(--warning-soft-bg)';
         dom.telegramBotBadge.style.color = 'var(--warning)';
         dom.telegramBotBadge.innerHTML = `<span class="dot"></span> ${escapeHtml(data.telegram?.lastError || 'Wartet auf Verbindung...')}`;
       } else {

@@ -1139,5 +1139,58 @@ await ruhen(2);
 pruefe("bei 4 Konsolen verliert das 3. Feld die Sonderbreite",
   !konsole(2)?.classList.contains("run-pane-wide") && document.querySelector("#run-split")?.dataset.panes === "4");
 
+// --- 17. Erscheinungsbild: hell und dunkel --------------------------------
+// Ein Umschalter, ein Attribut am Wurzelelement, ein gemerkter Wert. Der
+// Zustand muss an beiden Stellen gleich sein — in der Seitenleiste und in der
+// mobilen Leiste —, sonst zeigt das Handy den falschen nächsten Schritt.
+const themenKnoepfe = [...document.querySelectorAll('.theme-toggle')];
+pruefe('Theme-Umschalter gibt es in Seitenleiste und mobiler Leiste',
+  themenKnoepfe.length === 2, String(themenKnoepfe.length));
+pruefe('Theme-Umschalter sind Knöpfe mit Beschriftung',
+  themenKnoepfe.every((b) => b.tagName === 'BUTTON' && b.getAttribute('aria-label') && b.title));
+
+const wurzel = document.documentElement;
+pruefe('Beim Start steht ein Erscheinungsbild am Wurzelelement',
+  wurzel.dataset.theme === 'light' || wurzel.dataset.theme === 'dark', String(wurzel.dataset.theme));
+
+const vorher = wurzel.dataset.theme;
+themenKnoepfe[0]?.click();
+await ruhen(2);
+const nachher = wurzel.dataset.theme;
+pruefe('Ein Klick wechselt das Erscheinungsbild',
+  nachher !== vorher && (nachher === 'light' || nachher === 'dark'),
+  `${vorher} -> ${nachher}`);
+pruefe('Der gewechselte Wert wird gemerkt',
+  window.localStorage.getItem('cliscade_theme') === nachher,
+  String(window.localStorage.getItem('cliscade_theme')));
+pruefe('Der Umschalter nennt seinen Zustand und das nächste Erscheinungsbild',
+  themenKnoepfe.every((b) => b.getAttribute('aria-pressed') === String(nachher === 'dark')));
+pruefe('Beide Umschalter zeigen dasselbe Zeichen',
+  themenKnoepfe.every((b) => b.getAttribute('data-icon') === themenKnoepfe[0].getAttribute('data-icon')));
+pruefe('Die Farbe der Browserleiste folgt dem Erscheinungsbild',
+  document.querySelector('meta[name="theme-color"]')?.getAttribute('content')
+    === (nachher === 'dark' ? '#0c0d10' : '#f7f8fa'),
+  document.querySelector('meta[name="theme-color"]')?.getAttribute('content'));
+
+// Tastatur: T wechselt — aber nicht, während der Nutzer seinen Auftrag tippt.
+const vorT = wurzel.dataset.theme;
+window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 't', bubbles: true }));
+await ruhen(2);
+pruefe('T wechselt das Erscheinungsbild', wurzel.dataset.theme !== vorT, String(wurzel.dataset.theme));
+
+const nachT = wurzel.dataset.theme;
+const auftragsfeld = konsole(0)?.querySelector('.run-pane-input');
+auftragsfeld.value = 'Text mit t';
+auftragsfeld.dispatchEvent(new window.KeyboardEvent('keydown', { key: 't', bubbles: true }));
+await ruhen(2);
+pruefe('T im Auftragsfeld wechselt nichts', wurzel.dataset.theme === nachT, String(wurzel.dataset.theme));
+
+// Zurück auf den gemerkten Wert: ein Neustart darf nicht anders aussehen.
+window.localStorage.setItem('cliscade_theme', 'light');
+pruefe('Ein gemerktes Erscheinungsbild wird gelesen',
+  window.leseErscheinungsbild() === 'light' && window.setzeErscheinungsbild('light') === 'light');
+pruefe('Ein unsinniger gemerkter Wert fällt auf die Systemvorgabe zurück',
+  (window.localStorage.setItem('cliscade_theme', 'neon'), window.leseErscheinungsbild()) !== 'neon');
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;
