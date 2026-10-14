@@ -160,6 +160,12 @@ In die Auftragseingabe klicken und mit **⌘V** (Mac) oder **Strg+V** ein Bild e
 
 Die native Mac-App wandelt auch TIFF-Screenshots aus der Zwischenablage in PNG um. Bauen: `npm run build:mac`; installieren: `npm run install:mac`. Node.js ab 22.13 und Python müssen lokal verfügbar sein. Lokale Beads-Daten werden nicht in das App-Bundle aufgenommen.
 
+Das Bündel enthält eine **eingefrorene Kopie** von `public/` und `server.js` (`Contents/Resources/app`, dorthin kopiert per `rsync`). Die App liest ausschließlich daraus. Änderungen an der Oberfläche erscheinen in der installierten App deshalb erst nach `npm run install:mac` — ein Reload genügt nicht, und `build/` ist von Git ausgenommen, sodass nichts von selbst nachzieht. Nachprüfen lässt sich der Stand der installierten App so:
+
+```bash
+grep -oE 'style.css\?v=[0-9]+' /Applications/CLIScade.app/Contents/Resources/app/public/index.html
+```
+
 ### Nutzerkonfiguration und portable Installation
 
 CLIscade verwendet die Login-Shell des aktuellen Nutzers. Neben `ANTHROPIC_*` werden Claude-Provider-Schalter, `CLAUDE_CONFIG_DIR`, AWS-/Vertex-/Foundry-Einstellungen sowie Proxy- und Zertifikatseinstellungen übernommen. Bereits beim direkten Serverstart gesetzte Werte haben Vorrang. Der bereinigte Mac-Launcher entfernt Gateway-Werte der aufrufenden Agentensitzung; der Server liest danach die Nutzershell. Unter **Einstellungen → CLI-Diagnose → Terminal-Konfiguration neu laden** wird der Shell-Stand ohne Serverneustart erneuert. Neue Läufe verwenden ihn; laufende Aufträge behalten ihren Stand. Die Rückmeldung enthält nur eine Anzahl, keine Zugangsdaten. Shell-Aliase und Funktionen sind keine registrierten ausführbaren CLIs.
