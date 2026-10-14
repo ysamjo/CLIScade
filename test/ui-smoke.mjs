@@ -749,6 +749,46 @@ pruefe("Tokens-Zeile wird Randnotiz",
 pruefe("die Zwischentexte bleiben sichtbar",
   inKeinemOrdner("ZWISCHENTEXT-EIN") && inKeinemOrdner("ZWISCHENTEXT-ZWEI"));
 
+// --- Der Verlauf wird nicht neu gebaut --------------------------------------
+// Gemessen an 37 echten Protokollen (35.804 Blöcke): beim Anhängen bleibt jeder
+// frühere Block Zeichen für Zeichen gleich, nur das Ende wächst. Baut die Oberfläche
+// trotzdem alles neu, stirbt bei jedem Chunk die Textauswahl, und ein Lauf mit 487
+// Chunks baut den DOM 487-mal auf — der größte Puffer misst 1,1 MB. Der Knoten-
+// vergleich ist der Beweis, dass frühere Blöcke stehen bleiben.
+const bannerKnoten = body()?.querySelector(".route-banner");
+const antwortKnoten = body()?.querySelector(".ko-antwort");
+// Die Leerzeile davor trennt den neuen Absatz ab — sonst wüchse der vorige Block
+// und müsste zu Recht neu gemalt werden.
+sag({ type: "output", taskId: "task_l", html: "<br/>NEUER-ABSATZ<br/>" });
+await ruhen(4);
+pruefe("ein früherer Block behält seinen Knoten",
+  body()?.querySelector(".route-banner") === bannerKnoten,
+  "der Banner wurde neu gebaut");
+pruefe("auch ein früherer Antwortabsatz bleibt derselbe Knoten",
+  body()?.querySelector(".ko-antwort") === antwortKnoten,
+  "der Antwortabsatz wurde neu gebaut");
+pruefe("der neue Absatz ist trotzdem da", /NEUER-ABSATZ/.test(body()?.textContent || ""));
+
+// --- Cursor: eine Konsole ist nie fertig, solange der Prozess läuft ----------
+pruefe("solange der Lauf arbeitet, trägt die Konsole den Cursor",
+  body()?.classList.contains("ko-lebt") === true, body()?.className);
+
+// --- Sprungmarke: wer hochscrollt, kommt zurück ------------------------------
+const sprung = feld()?.querySelector(".run-pane-jump");
+pruefe("die Sprungmarke sitzt im Feld", sprung !== null && sprung !== undefined);
+pruefe("solange man unten mitliest, ist sie versteckt", sprung?.hidden === true);
+const körper = body();
+Object.defineProperty(körper, "scrollHeight", { value: 2000, configurable: true });
+Object.defineProperty(körper, "clientHeight", { value: 400, configurable: true });
+körper.scrollTop = 100;
+körper.dispatchEvent(new window.Event("scroll"));
+await ruhen(2);
+pruefe("wer hochscrollt, bekommt sie zu sehen", sprung?.hidden === false, `hidden=${sprung?.hidden}`);
+sprung.click();
+await ruhen(2);
+pruefe("ein Klick springt ans Ende", körper.scrollTop >= 1960, String(körper.scrollTop));
+pruefe("und nimmt die Verfolgung wieder auf", sprung?.hidden === true);
+
 // Faltzustand: jeder Chunk malt das ganze Feld neu — wer einen Ordner aufmacht,
 // darf ihn nicht beim nächsten Chunk wieder verloren haben.
 const ersterDenk = body()?.querySelector("details.ko-denke");
@@ -797,6 +837,31 @@ sag({ type: "done", taskId: "task_l", exitCode: 0, message: "Fertig" });
 await ruhen(4);
 pruefe("nach dem Lauf ist nichts mehr lebendig",
   body()?.querySelector(".ko-wachsend") === null);
+pruefe("und der Cursor verschwindet", body()?.classList.contains("ko-lebt") === false);
+
+// Eine echte Konsole sagt am Ende, wie es ausging: Rückgabewert und Dauer. Vorher
+// stand dort nur ein eingefärbtes "[Fertig]".
+const schluss = body()?.querySelector(".ko-schluss");
+pruefe("die Schlusszeile steht am Ende des Verlaufs",
+  schluss !== null && schluss !== undefined &&
+  schluss.parentElement?.lastElementChild === schluss,
+  body()?.lastElementChild?.outerHTML?.slice(0, 120));
+pruefe("die Schlusszeile nennt den Rückgabewert",
+  /Code 0/.test(schluss?.textContent || ""), schluss?.textContent);
+pruefe("die Schlusszeile nennt die Dauer",
+  /\d+\s*(ms|s|min)\b/.test(schluss?.textContent || ""), schluss?.textContent);
+pruefe("die Schlusszeile trägt das Ergebnis als Klasse",
+  schluss?.className.includes("ko-schluss-ok") === true, schluss?.className);
+
+// Ein Fehlschlag trägt seinen Grund in derselben Zeile.
+sag({ type: "error", taskId: "task_l", exitCode: 1, message: "Permission denied" });
+await ruhen(4);
+const fehlschluss = [...(body()?.querySelectorAll(".ko-schluss") || [])].at(-1);
+pruefe("ein Fehlschlag wird als Fehlschlag ausgewiesen",
+  fehlschluss?.className.includes("ko-schluss-fehler") === true, fehlschluss?.className);
+pruefe("der Grund steht in der Schlusszeile",
+  /Permission denied/.test(fehlschluss?.textContent || "") && /Code 1/.test(fehlschluss?.textContent || ""),
+  fehlschluss?.textContent);
 pruefe("nach dem Lauf bleiben die Ordner zugeklappt, die der Nutzer nicht öffnete",
   [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).every(d => [ersterDenk.dataset.schluessel, finishedTool.dataset.schluessel].includes(d.dataset.schluessel)));
 

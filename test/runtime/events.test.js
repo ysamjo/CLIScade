@@ -6,7 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { canonicalEvent } = require('../../runtime/events');
+const { canonicalEvent, alsText } = require('../../runtime/events');
 
 test('kein Adapter kann ein Objekt als Text durchreichen', () => {
   const ergebnis = canonicalEvent({ type: 'tool_result', text: { query: 'ls', result: 'a' } }, 'test');
@@ -44,4 +44,20 @@ test('die Optionen einer Auswahlabfrage kommen in einer Form an', () => {
   assert.deepEqual(canonicalEvent({ type: 'question', question: 'X', options: 'A,B' }, 'test').options, []);
   // Eine Frage ohne Text bleibt lesbar statt "[object Object]".
   assert.equal(canonicalEvent({ type: 'question', question: { text: 'X' } }, 'test').question, '{"text":"X"}');
+});
+
+test('ein Wagenrücklauf vor dem Umbruch verschwindet', () => {
+  // Gemessen in den echten Protokollen: 2 von 82 Aufgaben trugen ein \r direkt vor
+  // dem Umbruch. Die Konsole schreibt mit `white-space: pre-wrap`, und dort ist \r
+  // ein eigener Umbruch — jede betroffene Zeile bekam eine Leerzeile darunter.
+  assert.equal(alsText('Fingerprint,Sha256,Reason\r\n14bfdb39'), 'Fingerprint,Sha256,Reason\n14bfdb39');
+  assert.equal(alsText('a\r\nb\r\nc'), 'a\nb\nc');
+  assert.equal(canonicalEvent({ type: 'text', text: 'root@host: Permission denied.\r\n' }, 'test').text,
+    'root@host: Permission denied.\n');
+
+  // Ein einzelnes \r mitten in der Zeile bleibt stehen. Das ist der Wagenrücklauf
+  // eines Fortschrittsbalkens, und den richtig zu stellen hieße, Spalten zu führen
+  // und die Zeile zu überschreiben — das kann die Textschicht nicht, und in den
+  // vorliegenden Protokollen kommt es nicht vor. Lieber unverändert als falsch.
+  assert.equal(alsText('Lade [##   ] 40%\rLade [#####] 100%'), 'Lade [##   ] 40%\rLade [#####] 100%');
 });

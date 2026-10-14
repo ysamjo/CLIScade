@@ -186,6 +186,7 @@ const dom = {
       memoryRecovery: memoryPanel.querySelector('.run-pane-memory-recovery'),
       withoutBeads: memoryPanel.querySelector('.run-pane-without-beads'),
       input: root.querySelector('.run-pane-input'),
+      composer: root.querySelector('.run-pane-composer'),
       send: root.querySelector('.run-pane-send')
     };
   }),
@@ -628,10 +629,7 @@ function setupWebSocket() {
         }
         stream.status = status === 'completed' ? 'done' : status;
         stream.cancelling = false;
-        if (data.message) {
-          const color = status === 'completed' ? 'var(--success)' : status === 'cancelled' ? 'var(--warning)' : 'var(--danger)';
-          stream.buffer += `\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`;
-        }
+        stream.buffer += schlussHtml(status, data.exitCode, stream.startedAt, data.message);
         renderRunPane(stream.slot, stream.taskId);
       }
       const task = state.tasks.find(t => t.id === data.taskId);
@@ -681,15 +679,13 @@ function setupWebSocket() {
 // --- KONSOLEN-LESART ---
 // Der Stream ist reiner Text; die Leseschichten stecken in den Markern, die die
 // Harnesses selbst schreiben. Das Zerlegen wohnt in konsole-schichten.js, damit es
-// ohne Browser prüfbar bleibt. Der Puffer malt bei jedem Chunk alles neu, also muss
-// sich der Lauf merken, was der Nutzer selbst aufgemacht hat — sonst fällt jeder
-// Ordner beim nächsten Textstück wieder zu.
-function konsoleHtml(stream) {
-  if (!stream.buffer) return '';
+// ohne Browser prüfbar bleibt.
+function konsoleAbschnitte(stream) {
+  if (!stream.buffer) return [];
   if (!stream.formatierer) stream.formatierer = new KonsoleSchichten.KonsoleFormatierer();
-  const html = stream.formatierer.HTML({
+  const abschnitte = stream.formatierer.abschnitte({
     html: stream.buffer,
-    lebt: stream.status === 'running' || stream.status === 'queued',
+    lebt: lebtDerLauf(stream),
     offen: stream.falten
   });
   // Eine Antwort beendet die vorherige Arbeit; alte Wünsche gelten danach nicht mehr.
@@ -700,7 +696,112 @@ function konsoleHtml(stream) {
   // eines offenen Ordners ebenfalls als toggle. Nur die Abweichung zählt.
   stream.faltenspuren = {};
   for (const block of stream.formatierer.blocks) stream.faltenspuren[block.schluessel] = block.offen;
-  return html;
+  return abschnitte.map((abschnitt) => abschnitt.html);
+}
+
+function lebtDerLauf(stream) {
+  return stream.status === 'running' || stream.status === 'queued';
+}
+
+// Der Puffer wächst, die Blöcke davor stehen fest. Vorher setzte jeder Chunk das
+// ganze Feld neu zusammen — bei bis zu 487 Chunks je Lauf und 1,1 MB größtem Puffer
+// hieß das: quadratisch wachsende Arbeit, und jede Textauswahl im Verlauf starb beim
+// nächsten Textstück. Gemessen an 37 echten Protokollen (35.804 Blöcke) bleibt beim
+// Anhängen jeder frühere Block Zeichen für Zeichen gleich, also wird nur ab dem
+// ersten geänderten Block gemalt. Geändert sich doch einmal etwas weiter vorn — eine
+// Antwort klappt die Arbeit davor zu —, wird ab dort neu gemalt.
+function maleVerlauf(pane, stream) {
+  const stand = pane.malstand;
+  const teile = konsoleAbschnitte(stream);
+  let ab = 0;
+  while (ab < teile.length && ab < stand.teile.length && teile[ab] === stand.teile[ab]) ab += 1;
+  for (let i = stand.teile.length - 1; i >= ab; i -= 1) {
+    for (const knoten of stand.knoten[i]) knoten.remove();
+    stand.teile.pop();
+    stand.knoten.pop();
+  }
+  for (let i = ab; i < teile.length; i += 1) {
+    const vorlage = document.createElement('template');
+    vorlage.innerHTML = teile[i];
+    const knoten = [...vorlage.content.childNodes];
+    for (const kind of knoten) pane.verlauf.appendChild(kind);
+    stand.teile.push(teile[i]);
+    stand.knoten.push(knoten);
+  }
+  pane.malstand = stand;
+}
+
+// Ein neuer Auftrag im selben Feld: der Verlauf gehört nicht ihm.
+function leereVerlauf(pane, taskId) {
+  if (pane.malstand.taskId === taskId) return;
+  pane.malstand = { taskId, teile: [], knoten: [] };
+  pane.verlauf.replaceChildren();
+}
+
+// Der Platzhalter steht neben dem Verlauf, nicht in ihm — sonst würde ihn der
+// nächste Chunk mit wegräumen.
+function zeigePlatzhalter(pane, text) {
+  const vorhanden = pane.body.querySelector('.terminal-placeholder');
+  if (!text) { vorhanden?.remove(); return; }
+  const platzhalter = vorhanden || document.createElement('div');
+  if (!vorhanden) {
+    platzhalter.className = 'terminal-placeholder';
+    pane.body.insertBefore(platzhalter, pane.verlauf);
+  }
+  platzhalter.textContent = text;
+}
+
+function zeigeWartende(pane, stream) {
+  const html = wartendeHtml(stream);
+  if (pane.wartendHtml === html) return;
+  pane.wartendHtml = html;
+  pane.wartend.innerHTML = html;
+}
+
+// Eine echte Konsole ist nie fertig, solange der Prozess läuft: unten blinkt der
+// Cursor. Ohne ihn sieht ein laufender Auftrag aus wie ein abgeschlossener.
+function zeigeLebt(pane, stream) {
+  pane.body.classList.toggle('ko-lebt', Boolean(stream) && lebtDerLauf(stream));
+}
+
+// Wer hochscrollt, verliert die Verfolgung — und ohne Weg zurück müsste er ziehen.
+// Der Knopf sitzt über dem Eingabebereich; dessen Höhe hängt an der Zahl der
+// Werkzeuge und an einem eingefügten Bild, also wird sie gemessen statt geraten.
+function zeigeSprungmarke(slot) {
+  const pane = dom.runPanes[slot];
+  if (!pane) return;
+  const zeigen = Boolean(streamAtSlot(slot)) && !runPaneFollow[slot];
+  if (zeigen) {
+    const hoehe = pane.composer?.offsetHeight || 0;
+    pane.jump.style.bottom = `${(hoehe || 76) + 8}px`;
+  }
+  pane.jump.hidden = !zeigen;
+}
+
+// Eine echte Konsole sagt am Ende, wie es ausging: Rückgabewert und Dauer. Vorher
+// stand dort nur ein eingefärbtes "[Fertig]" — ohne beides.
+function dauerText(ms) {
+  const ganz = Math.max(0, Math.round(ms));
+  if (ganz < 1000) return `${ganz} ms`;
+  if (ganz < 60000) return `${(ganz / 1000).toFixed(1).replace('.', ',')} s`;
+  return `${Math.floor(ganz / 60000)} min ${Math.round((ganz % 60000) / 1000)} s`;
+}
+
+function schlussHtml(status, exitCode, gestartet, nachricht) {
+  const art = status === 'completed' ? 'ok' : status === 'cancelled' ? 'abbruch' : 'fehler';
+  const kopf = status === 'completed' ? '' : status === 'cancelled' ? 'abgebrochen' : 'fehlgeschlagen';
+  const teile = [
+    kopf,
+    Number.isInteger(exitCode) ? `Code ${exitCode}` : '',
+    dauerText(Date.now() - (gestartet || Date.now()))
+  ].filter(Boolean);
+  // Bei einem Fehlschlag trägt die Meldung den Grund — sie gehört in die Schlusszeile
+  // statt als eigene Zeile darüber. Bei Erfolg ist sie generisch und fällt weg.
+  const grund = status === 'completed' ? '' : String(nachricht || '').trim();
+  return `\n<div class="ko-schluss ko-schluss-${art}">` +
+    `<span class="ko-schluss-text">${escapeHtml(teile.join(' · '))}</span>` +
+    (grund ? `<span class="ko-schluss-grund">${escapeHtml(grund)}</span>` : '') +
+    `</div>\n`;
 }
 
 // --- RUN PANES (SPLIT-VIEW) ---
@@ -951,18 +1052,27 @@ function renderRunPane(slot, expectedTaskId) {
   pane.cancel.disabled = Boolean(stream.cancelling);
   pane.cancel.setAttribute('aria-label', stream.cancelling ? 'Bricht ab…' : 'Auftrag abbrechen');
   pane.cancel.title = stream.cancelling ? 'Bricht ab…' : 'Nur diesen Auftrag abbrechen';
-  const grund = konsoleHtml(stream)
-    || `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
-  pane.body.innerHTML = grund + wartendeHtml(stream);
+  const grund = !stream.buffer ? (RUN_LEERTEXT[stream.status] || 'Kein Auftrag.') : null;
+  leereVerlauf(pane, stream.taskId);
+  zeigePlatzhalter(pane, grund);
+  if (!grund) maleVerlauf(pane, stream);
+  zeigeWartende(pane, stream);
+  zeigeLebt(pane, stream);
   scrollRunPaneToBottom(slot);
+  zeigeSprungmarke(slot);
 }
 
 function appendRunOutput(stream, htmlContent) {
   const pane = dom.runPanes[stream.slot];
   stream.buffer += htmlContent;
   if (!pane || state.panes[stream.slot] !== stream.taskId) return;
-  pane.body.innerHTML = konsoleHtml(stream) + wartendeHtml(stream);
+  leereVerlauf(pane, stream.taskId);
+  zeigePlatzhalter(pane, null);
+  maleVerlauf(pane, stream);
+  zeigeWartende(pane, stream);
+  zeigeLebt(pane, stream);
   scrollRunPaneToBottom(stream.slot);
+  zeigeSprungmarke(stream.slot);
   // Ersetzt der Chunk den Inhalt, wird neu umgebrochen: die Endhöhe kennt das Layout
   // erst im nächsten Frame, also einmal nachziehen.
   requestAnimationFrame(() => {
@@ -979,7 +1089,36 @@ function setupRunPanes() {
     pane.body.addEventListener('scroll', () => {
       const b = pane.body;
       runPaneFollow[slot] = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
+      zeigeSprungmarke(slot);
     });
+
+    // Der Verlauf ist ein eigener Kasten: nur in ihm wird gemalt, damit Platzhalter,
+    // wartende Aufträge und die Sprungmarke unberührt bleiben. Er liegt als einziges
+    // Kind fest, damit ein neuer Auftrag ihn leeren kann, ohne den Rest anzufassen.
+    pane.verlauf = document.createElement('div');
+    pane.verlauf.className = 'ko-verlauf';
+    pane.wartend = document.createElement('div');
+    pane.wartend.className = 'ko-wartend';
+    pane.body.append(pane.verlauf, pane.wartend);
+    pane.malstand = { taskId: null, teile: [], knoten: [] };
+    pane.wartendHtml = '';
+
+    // Eine echte Konsole lässt einen nicht im Nichts stehen: wer hochscrollt, bekommt
+    // unten den Sprung ans Ende angeboten. Ein Klick holt ihn zurück und nimmt die
+    // Verfolgung wieder auf.
+    pane.jump = document.createElement('button');
+    pane.jump.type = 'button';
+    pane.jump.className = 'btn-text run-pane-jump';
+    pane.jump.hidden = true;
+    pane.jump.title = 'Ans Ende springen';
+    pane.jump.setAttribute('aria-label', 'Ans Ende springen');
+    pane.jump.innerHTML = `<span aria-hidden="true">${icon('arrow-down')}</span>`;
+    pane.jump.addEventListener('click', () => {
+      runPaneFollow[slot] = true;
+      scrollRunPaneToBottom(slot);
+      zeigeSprungmarke(slot);
+    });
+    pane.root.appendChild(pane.jump);
 
     // Welches Feld der Nutzer zuletzt angefasst hat, ist sein Feld: dorthin zieht der
     // nächste Auftrag. Nur echte Maus- und Tastaturereignisse zählen — ein Klick im

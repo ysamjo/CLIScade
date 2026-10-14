@@ -261,6 +261,55 @@ pruefe("die Ausgabe zählt ihre Zeilen", /3 Zeilen/.test(ausgabeHtml), ausgabeHt
 pruefe("die Ausgabe wird vor dem Werkzeugaufruf nicht verschluckt",
   ausgabeHtml.indexOf("ko-werkzeug") < ausgabeHtml.indexOf("ko-ausgabe"), ausgabeHtml);
 
+// --- 12. Blöcke einzeln: die Oberfläche malt nur, was sich geändert hat -----
+//
+// Vorher setzte jeder Chunk das ganze Feld neu. Gemessen an 37 echten Protokollen
+// (35.804 Blöcke): beim Anhängen bleibt jeder frühere Block Zeichen für Zeichen
+// gleich, nur das Ende wächst. Die Oberfläche darf frühere Knoten deshalb stehen
+// lassen — sonst stirbt bei jedem Chunk die Textauswahl, und ein Lauf mit 487
+// Chunks baut den DOM 487-mal auf.
+
+const GESETZT = "ANTWORT-EINS<br/><br/>" +
+  "ANTWORT-ZWEI<br/>" +
+  '<span style="color:#7fa3ad">[run_commands]</span> ls -la<br/>' +
+  "&#x23BF; total 496<br/><br/>" +
+  "Tokens: 4,090<br/>";
+
+const teile = new KonsoleFormatierer().abschnitte({ html: GESETZT, lebt: false });
+pruefe("abschnitte liefert je Block einen Eintrag",
+  teile.length === new KonsoleFormatierer().mal({ html: GESETZT, lebt: false }).bloecke.length,
+  `${teile.length} Einträge`);
+pruefe("abschnitte ergibt zusammengesetzt genau HTML()",
+  teile.map((t) => t.html).join("") === new KonsoleFormatierer().HTML({ html: GESETZT, lebt: false }));
+pruefe("jeder Abschnitt trägt seinen Schlüssel",
+  teile.every((t) => typeof t.schluessel === "string" && /^[a-z]+:\d+$/.test(t.schluessel)),
+  JSON.stringify(teile.map((t) => t.schluessel)));
+
+// Die eigentliche Zusage: anbauen ändert nur das Ende.
+const stufen = [
+  "ANTWORT-EINS<br/><br/>",
+  "ANTWORT-EINS<br/><br/>ANTWORT-ZWEI<br/>",
+  "ANTWORT-EINS<br/><br/>ANTWORT-ZWEI<br/><br/>ANTWORT-DREI<br/>"
+].map((s) => new KonsoleFormatierer().abschnitte({ html: s, lebt: false }).map((t) => t.html));
+pruefe("beim Anhängen bleibt der erste Block unverändert",
+  stufen[1][0] === stufen[0][0] && stufen[2][0] === stufen[0][0],
+  JSON.stringify(stufen.map((s) => s[0])));
+pruefe("und der zweite ebenso",
+  stufen[2][1] === stufen[1][1], JSON.stringify([stufen[1][1], stufen[2][1]]));
+pruefe("nur der letzte Block wächst",
+  stufen[1].length === 2 && stufen[2].length === 3,
+  JSON.stringify(stufen.map((s) => s.length)));
+
+// Gegenprobe: eine Antwort klappt die vorherige Arbeit zu. Das ist der eine Fall,
+// in dem sich ein früherer Block doch ändert — die Oberfläche muss ihn dann neu malen.
+// Zwei freie Zeilen, weil eine Denkregion erst danach endet (Claude schreibt keine
+// Schlussmarke).
+const waehrend = new KonsoleFormatierer().abschnitte({ html: "&lt;think&gt;G1<br/>G2<br/>", lebt: true });
+const danach = new KonsoleFormatierer().abschnitte({ html: "&lt;think&gt;G1<br/>G2<br/><br/><br/>ANTWORT<br/>", lebt: true });
+pruefe("der fertige Gedankenblock meldet sich als geändert",
+  waehrend[0].html !== danach[0].html && /open/.test(waehrend[0].html) && !/open/.test(danach[0].html),
+  `${waehrend[0].html.slice(0, 60)}  ->  ${danach[0].html.slice(0, 60)}`);
+
 const fehl = tests.filter((t) => !t.ok);
 console.log(`\n${tests.length - fehl.length} bestanden, ${fehl.length} fehlgeschlagen`);
 process.exitCode = fehl.length ? 1 : 0;

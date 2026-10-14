@@ -262,29 +262,41 @@ class KonsoleFormatierer {
     return this;
   }
 
+  // Die Blöcke einzeln statt als ein langer Faden. Die Oberfläche vergleicht sie mit
+  // dem letzten Stand und malt nur ab dem ersten geänderten Block — vorher baute jeder
+  // Chunk das ganze Feld neu, und ein Lauf hat bis zu 487 davon. Gemessen an 37 echten
+  // Protokollen (35.804 Blöcke): beim Anhängen bleibt jeder frühere Block Zeichen für
+  // Zeichen gleich, der Vergleich trifft also fast immer erst am Ende daneben.
+  abschnitte(optionen) {
+    this.mal(optionen);
+    return this.bloecke.map((block) => ({ schluessel: block.schluessel, html: maleBlock(block) }));
+  }
+
   // HTML für die Konsole. Zugeklappte Ordner tragen den Schluessel als Datenwert,
   // damit die Oberflaeche den Zustand des Nutzers ueber die naechsten Chunks halten kann.
   HTML(optionen) {
-    this.mal(optionen);
-    return this.bloecke.map((block) => {
-      if (block.schicht === "block") return block.zeilen[0] || "";
-      const inhalt = block.zeilen.map((z) => `<div class="ko-zeile">${z}</div>`).join("");
-      if (!block.zusammenfaltbar) {
-        // Die Antwort ist Fließtext. Alles andere — ein einzelner Werkzeugaufruf, eine
-        // einzeilige Ausgabe, ein einzelner Gedanke — behält seine Schicht als Klasse,
-        // damit die Fläche stimmt, ohne einen Ordner aufzumachen.
-        return block.schicht === "antwort"
-          ? `<div class="ko-antwort">${inhalt}</div>`
-          : `<div class="ko-einzeln ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}">${inhalt}</div>`;
-      }
-      return `<details class="ko-block ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}"` +
-        ` data-schluessel="${block.schluessel}"${block.offen ? " open" : ""}>` +
-        `<summary class="ko-kopf" aria-label="${block.titel} ein- oder ausklappen" title="${block.titel} ein- oder ausklappen"><span class="ko-art">${block.titel}</span>` +
-        `<span class="ko-zaehler">${block.zaehler}</span>` +
-        `<span class="ko-kurztitel">${escapeText(block.kurz)}</span></summary>` +
-        `<div class="ko-inhalt">${inhalt}</div></details>`;
-    }).join("");
+    return this.abschnitte(optionen).map((abschnitt) => abschnitt.html).join("");
   }
+}
+
+// Ein Block als HTML. `block` ist die rohe Zutat des Servers und wird nicht angefasst.
+function maleBlock(block) {
+  if (block.schicht === "block") return block.zeilen[0] || "";
+  const inhalt = block.zeilen.map((z) => `<div class="ko-zeile">${z}</div>`).join("");
+  if (!block.zusammenfaltbar) {
+    // Die Antwort ist Fließtext. Alles andere — ein einzelner Werkzeugaufruf, eine
+    // einzeilige Ausgabe, ein einzelner Gedanke — behält seine Schicht als Klasse,
+    // damit die Fläche stimmt, ohne einen Ordner aufzumachen.
+    return block.schicht === "antwort"
+      ? `<div class="ko-antwort">${inhalt}</div>`
+      : `<div class="ko-einzeln ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}">${inhalt}</div>`;
+  }
+  return `<details class="ko-block ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}"` +
+    ` data-schluessel="${block.schluessel}"${block.offen ? " open" : ""}>` +
+    `<summary class="ko-kopf" aria-label="${block.titel} ein- oder ausklappen" title="${block.titel} ein- oder ausklappen"><span class="ko-art">${block.titel}</span>` +
+    `<span class="ko-zaehler">${block.zaehler}</span>` +
+    `<span class="ko-kurztitel">${escapeText(block.kurz)}</span></summary>` +
+    `<div class="ko-inhalt">${inhalt}</div></details>`;
 }
 
 function escapeText(text) {
