@@ -1001,6 +1001,29 @@ function setupRunPanes() {
       stream.falten[schluessel] = ordner.open;
     }, true);
 
+    // Eine Rückfrage aus dem Lauf ist beantwortbar. Ein Lauf ist headless: eine Antwort
+    // kann nicht in den laufenden Prozess zurück, und der Lauf, der gefragt hat, ist
+    // ohnehin beendet. Der Knopf übernimmt deshalb seinen Auftragstext in das
+    // Eingabefeld dieses Feldes — der Auftrag ist damit die Fortsetzung derselben
+    // Sitzung im selben Projekt. Gesendet wird erst mit Enter: ein Klick soll keinen
+    // Lauf starten, den niemand abgeschickt hat.
+    pane.body.addEventListener('click', (e) => {
+      const knopf = e.target.closest?.('.ko-frage-option');
+      if (!knopf || !knopf.isConnected) return;
+      const antwort = knopf.dataset.antwort || '';
+      if (!antwort) return;
+      pane.input.value = antwort;
+      pane.input.focus();
+      pane.input.setSelectionRange(antwort.length, antwort.length);
+      pane.root.querySelector('.run-pane-frage-hinweis')?.remove();
+      const hinweis = document.createElement('span');
+      hinweis.className = 'run-pane-frage-hinweis';
+      hinweis.setAttribute('role', 'status');
+      hinweis.textContent = 'Antwort übernommen — Enter sendet sie als Fortsetzung.';
+      pane.input.parentElement?.insertBefore(hinweis, pane.input);
+      setTimeout(() => hinweis.remove(), 5000);
+    });
+
     pane.copy.addEventListener('click', async () => {
       const feedback = (name, label) => {
         pane.copy.innerHTML = `<span aria-hidden="true">${icon(name)}</span>`;

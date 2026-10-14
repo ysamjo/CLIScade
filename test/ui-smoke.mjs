@@ -740,12 +740,12 @@ pruefe("Werkzeugaufruf und ⎿-Zeile sammeln sich in einem Ordner",
 pruefe("der Werkzeugordner ist zu und zählt seine Zeilen",
   werkzeug && !werkzeug.hasAttribute("open") && /2 Zeilen/.test(werkzeug.querySelector(".ko-kopf")?.textContent || ""),
   werkzeug?.querySelector(".ko-kopf")?.textContent);
-pruefe("die [thinking]-Zeile kommt in einen Gedankengang-Ordner",
-  [...(body()?.querySelectorAll("details.ko-denke") || [])].some((d) => /Analysing build config/.test(d.textContent)),
-  [...(body()?.querySelectorAll("details.ko-denke") || [])].map((d) => d.textContent).join(" | "));
+pruefe("die [thinking]-Zeile kommt in die Gedankenschicht",
+  [...(body()?.querySelectorAll(".ko-denke") || [])].some((d) => /Analysing build config/.test(d.textContent)),
+  [...(body()?.querySelectorAll(".ko-denke") || [])].map((d) => d.textContent).join(" | "));
 pruefe("Tokens-Zeile wird Randnotiz",
-  /Tokens: 4,090/.test(body()?.querySelector("details.ko-notiz")?.textContent || ""),
-  body()?.querySelector("details.ko-notiz")?.textContent);
+  /Tokens: 4,090/.test(body()?.querySelector(".ko-notiz")?.textContent || ""),
+  body()?.querySelector(".ko-notiz")?.textContent);
 pruefe("die Zwischentexte bleiben sichtbar",
   inKeinemOrdner("ZWISCHENTEXT-EIN") && inKeinemOrdner("ZWISCHENTEXT-ZWEI"));
 
@@ -790,15 +790,74 @@ pruefe("Nach der Antwort erneut geöffnete Werkzeuge bleiben offen", [...body().
 // Konsole leer, obwohl der Harness gerade denkt.
 sag({ type: "output", taskId: "task_l", html: "&lt;think&gt;offener Gedanke ohne Ende<br/>" });
 await ruhen(4);
-pruefe("ein wachsender Gedankengang-Ordner ist als lebendig markiert",
-  body()?.querySelector("details.ko-denke.ko-wachsend") !== null,
+pruefe("ein wachsender Gedankengang ist als lebendig markiert",
+  body()?.querySelector(".ko-denke.ko-wachsend") !== null,
   [...(body()?.querySelectorAll("details") || [])].map((d) => d.className).join(" | "));
 sag({ type: "done", taskId: "task_l", exitCode: 0, message: "Fertig" });
 await ruhen(4);
-pruefe("nach dem Lauf ist kein Ordner mehr lebendig",
-  body()?.querySelector("details.ko-wachsend") === null);
+pruefe("nach dem Lauf ist nichts mehr lebendig",
+  body()?.querySelector(".ko-wachsend") === null);
 pruefe("nach dem Lauf bleiben die Ordner zugeklappt, die der Nutzer nicht öffnete",
   [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).every(d => [ersterDenk.dataset.schluessel, finishedTool.dataset.schluessel].includes(d.dataset.schluessel)));
+
+// --- 13b. Einzeiliges bleibt Zeile, die Ausgabe bekommt eine eigene Fläche ---
+// Ein Ordner mit dem Zähler "1 Zeile" behauptet etwas, das er nicht hat: das
+// Aufklappen zeigt genau die Zeile, die im Kopf schon steht.
+sag({ type: "output", taskId: "task_l", html: `<div data-console-layer="werkzeug">Werkzeug: run_commands</div>\n` });
+await ruhen(4);
+const einzeilig = [...body().querySelectorAll(".ko-einzeln.ko-werkzeug")].at(-1);
+pruefe("ein einzelner Werkzeugaufruf steht als Zeile, nicht als Ordner",
+  Boolean(einzeilig) && /run_commands/.test(einzeilig.textContent),
+  body()?.innerHTML?.slice(-300));
+pruefe("der einzeilige Aufruf trägt keinen Zähler",
+  Boolean(einzeilig) && einzeilig.querySelector(".ko-zaehler") === null);
+
+sag({ type: "output", taskId: "task_l", html: `<div data-console-layer="ausgabe">pwd\n/tmp/projekt\ntotal 48</div>\n` });
+await ruhen(4);
+const ausgabeFeld = body()?.querySelector("details.ko-ausgabe");
+pruefe("die Werkzeugausgabe bekommt einen eigenen Ordner",
+  Boolean(ausgabeFeld) && /total 48/.test(ausgabeFeld.textContent),
+  body()?.innerHTML?.slice(-300));
+pruefe("die Ausgabe hängt nicht im Werkzeugaufruf",
+  ![...body().querySelectorAll("details.ko-werkzeug")].some((d) => /total 48/.test(d.textContent)));
+
+// --- 13c. Eine Rückfrage ist anklickbar ----------------------------------
+// Ein Lauf ist headless: eine Antwort kann nicht in den laufenden Prozess zurück.
+// Der Knopf übernimmt deshalb den Auftragstext in das Eingabefeld; gesendet wird
+// erst mit Enter, damit ein Klick keinen Lauf startet, den niemand abgeschickt hat.
+const FRAGE_KARTE = `<div class="ko-frage">` +
+  `<div class="ko-frage-kopf"><span class="ko-art">Rückfrage</span>` +
+  `<span class="ko-frage-hinweis">Antwort anklicken — sie landet im Eingabefeld</span></div>` +
+  `<div class="ko-frage-text">Was soll ich bauen?</div>` +
+  `<div class="ko-frage-optionen">` +
+  `<button type="button" class="ko-frage-option" data-antwort="Antwort auf die Rückfrage „Was soll ich bauen?&quot;: Variante A — Der kleine Weg">` +
+  `<span class="ko-frage-label">Variante A</span><span class="ko-frage-beschreibung">Der kleine Weg</span></button>` +
+  `<button type="button" class="ko-frage-option" data-antwort="Antwort auf die Rückfrage „Was soll ich bauen?&quot;: Variante B">` +
+  `<span class="ko-frage-label">Variante B</span></button>` +
+  `</div></div>\n`;
+sag({ type: "output", taskId: "task_l", html: FRAGE_KARTE });
+await ruhen(4);
+const karte = body()?.querySelector(".ko-frage");
+pruefe("die Rückfrage steht als eigener Block", Boolean(karte), body()?.innerHTML?.slice(-300));
+pruefe("die Frage steht im Klartext", /Was soll ich bauen\?/.test(karte?.textContent || ""));
+pruefe("jede Option ist ein anklickbarer Knopf",
+  karte?.querySelectorAll("button.ko-frage-option").length === 2);
+pruefe("die Beschreibung der Option bleibt sichtbar", /Der kleine Weg/.test(karte?.textContent || ""));
+pruefe("die Rückfrage wird nicht zu einem Ordner",
+  ![...(body()?.querySelectorAll("details") || [])].some((d) => /Was soll ich bauen/.test(d.textContent)));
+
+const feldEingabe = feld()?.querySelector(".run-pane-input");
+if (feldEingabe) feldEingabe.value = "";
+karte?.querySelectorAll("button.ko-frage-option")[0].click();
+await ruhen(2);
+pruefe("ein Klick übernimmt die Antwort in das Eingabefeld",
+  /Variante A/.test(feldEingabe?.value || "") && /Der kleine Weg/.test(feldEingabe?.value || ""),
+  feldEingabe?.value);
+pruefe("die Antwort trägt die Frage mit, damit sie als Auftrag lesbar ist",
+  /Was soll ich bauen\?/.test(feldEingabe?.value || ""), feldEingabe?.value);
+pruefe("der Klick quittiert sich und sendet nicht selbst",
+  /Enter sendet/.test(feld()?.querySelector(".run-pane-frage-hinweis")?.textContent || ""),
+  feld()?.querySelector(".run-pane-frage-hinweis")?.textContent);
 
 // --- 14. Ein Klick auf einen Auftrag zeigt sein Feld ---------------------
 // Zwei Konsolen desselben Harness waren nicht zu unterscheiden: der Titel trug nur

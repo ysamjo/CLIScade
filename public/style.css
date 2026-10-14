@@ -3338,3 +3338,187 @@ body, .app-layout { height:100dvh; }
   font-size: 11.5px;
 }
 .banner-erfolg.hidden { display: none; }
+
+/* ========================================== */
+/* KONSOLE: AUSGABE, EINZEILIGES, RÜCKFRAGE   */
+/* ========================================== */
+/* Bis hierher sahen Gedankengang, Werkzeugaufruf und Ausgabe gleich aus: ein Rahmen,
+   eine Schrift, nur der Titel unterschied sie. Jetzt trägt jede Schicht ihre eigene
+   Fläche. Der Gedankengang ist Selbstgespräch und tritt zurück, die Ausgabe ist das,
+   was tatsächlich passiert ist, und bekommt Grund und Kante. */
+
+.ko-block.ko-denke {
+  border-bottom: 1px dashed var(--border-soft);
+  margin: 2px 0;
+}
+
+.ko-denke > .ko-inhalt .ko-zeile {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.ko-block.ko-ausgabe {
+  background: var(--bg-sunken);
+  border-left: 2px solid var(--border-focus);
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin: 3px 0 6px;
+}
+
+.ko-ausgabe > .ko-kopf {
+  padding: 3px 7px;
+}
+
+.ko-ausgabe > .ko-kopf .ko-art {
+  color: var(--text-muted);
+}
+
+.ko-ausgabe > .ko-inhalt {
+  padding: 5px 8px 6px;
+  max-height: 360px;
+}
+
+.ko-ausgabe .ko-zeile {
+  font-size: 11px;
+  line-height: 1.42;
+}
+
+/* Eine einzeilige Ausgabe ist kein Ordner, soll aber wie eine aussehen. */
+.ko-einzeln.ko-ausgabe {
+  background: var(--bg-sunken);
+  border-left: 2px solid var(--border-focus);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 2px 0 2px 7px;
+  margin: 3px 0;
+}
+
+/* Ein einzelner Werkzeugaufruf oder Gedanke: eine Zeile, sehr leise. */
+.ko-einzeln {
+  margin: 2px 0;
+}
+
+.ko-einzeln.ko-werkzeug .ko-zeile,
+.ko-einzeln.ko-denke .ko-zeile {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+/* Der Werkzeugaufruf ist die Überschrift zur Ausgabe: leise, aber präsenter als der
+   Gedankengang, der bloßes Selbstgespräch ist. */
+.ko-einzeln.ko-werkzeug .ko-zeile {
+  color: var(--text-muted);
+}
+
+.ko-einzeln.ko-denke .ko-zeile {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.ko-einzeln.ko-notiz .ko-zeile {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* Eine Rückfrage ist keine Protokollzeile. Sie ist eine Frage an den Nutzer, und die
+   Optionen sind anklickbar. Ein Lauf ist headless — eine Antwort kann nicht in den
+   laufenden Prozess zurück; der Knopf übernimmt deshalb den Auftragstext in das
+   Eingabefeld, und Enter schickt ihn als Fortsetzung derselben Sitzung. */
+.ko-frage {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px 7px;
+  margin: 6px 0;
+}
+
+.ko-frage-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.ko-frage-kopf .ko-art {
+  color: var(--accent);
+}
+
+.ko-frage-hinweis {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.ko-frage-text {
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-main);
+  margin-bottom: 5px;
+}
+
+.ko-frage-optionen {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ko-frage-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.ko-frage-option:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-focus);
+}
+
+.ko-frage-option:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.ko-frage-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.ko-frage-beschreibung {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* Die Übernahme in das Eingabefeld wird quittiert, damit der Klick nicht ins Leere geht. */
+.run-pane-frage-hinweis {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  padding: 0 2px 2px;
+}
+
+@media (pointer: coarse) {
+  .ko-frage-option { padding: 8px 10px; }
+  .ko-frage-label { font-size: 13px; }
+  .ko-frage-beschreibung { font-size: 12px; }
+}
+
+/* Ein einzeiliger Block, der noch wächst, atmet wie ein offener Ordner: die Zeile ist
+   vollständig sichtbar, aber der Lauf arbeitet noch. */
+.ko-einzeln.ko-wachsend .ko-zeile {
+  animation: koAtmen 1.3s infinite ease-in-out;
+}

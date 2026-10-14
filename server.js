@@ -1802,22 +1802,51 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
   });
 }
 
+// Eine Auswahlabfrage ist keine Protokollzeile, sondern eine Frage an den Nutzer.
+// Sie wird als eigener Block gemalt, mit einem Knopf je Option. Ein Lauf ist headless —
+// eine Antwort kann nicht in den laufenden Prozess zurück, deshalb trägt jeder Knopf den
+// vollständigen Auftragstext, den die Oberfläche in das Eingabefeld des Feldes übernimmt.
+function renderFrage(question, options) {
+  const liste = Array.isArray(options) ? options : [];
+  const knopf = (option) => {
+    const label = String(option.label || '');
+    const beschreibung = String(option.description || '');
+    const antwort = beschreibung
+      ? `Antwort auf die Rückfrage „${question}": ${label} — ${beschreibung}`
+      : `Antwort auf die Rückfrage „${question}": ${label}`;
+    return `<button type="button" class="ko-frage-option" data-antwort="${escapeHtml(antwort)}">` +
+      `<span class="ko-frage-label">${escapeHtml(label)}</span>` +
+      (beschreibung ? `<span class="ko-frage-beschreibung">${escapeHtml(beschreibung)}</span>` : '') +
+      `</button>`;
+  };
+  return `\n<div class="ko-frage">` +
+    `<div class="ko-frage-kopf"><span class="ko-art">Rückfrage</span>` +
+    `<span class="ko-frage-hinweis">Antwort anklicken — sie landet im Eingabefeld</span></div>` +
+    `<div class="ko-frage-text">${escapeHtml(question)}</div>` +
+    (liste.length ? `<div class="ko-frage-optionen">${liste.map(knopf).join('')}</div>` : '') +
+    `</div>\n`;
+}
+
 function renderRuntimeEvent(event, renderChunk) {
   let raw = '';
   if (event.type === 'text') raw = event.text || '';
   else if (event.type === 'thinking') raw = `[thinking] ${event.text || ''}\n`;
   else if (event.type === 'warning') raw = event.text || '';
   else if (event.type === 'tool_start') raw = `Werkzeug: ${event.name || 'unbekannt'}\n`;
-  else if (event.type === 'tool_result') raw = `⎿ ${event.text || ''}\n`;
+  // Ohne das ⎿: die Ausgabe hat eine eigene Schicht, die sie schon markiert.
+  else if (event.type === 'tool_result') raw = `${event.text || ''}\n`;
+  else if (event.type === 'question') raw = `Rückfrage: ${event.question || ''}\n`;
   else if (event.type === 'session_lost') raw = `${event.message}\n`;
   else if (event.type === 'error') raw = `${event.message}\n`;
   if (!raw) return null;
   const layer = event.type === 'thinking' ? 'denke'
-    : ['tool_start', 'tool_result'].includes(event.type) ? 'werkzeug' : null;
-  const html = layer ? `\n<div data-console-layer="${layer}">${renderChunk(raw)}</div>
+    : event.type === 'tool_start' ? 'werkzeug'
+      : event.type === 'tool_result' ? 'ausgabe' : null;
+  const html = event.type === 'question' ? renderFrage(event.question || '', event.options)
+    : layer ? `\n<div data-console-layer="${layer}">${renderChunk(raw)}</div>
 `
-    : event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
-      ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
+      : event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
+        ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
   return { raw, html };
 }
 

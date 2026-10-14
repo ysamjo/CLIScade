@@ -24,7 +24,7 @@ const fs=require('node:fs');
 const args=process.argv.slice(2);
 if(args.includes('--version')){console.log('test-1.0');process.exit(0);}
 fs.appendFileSync(${JSON.stringify(path.join(root,'calls.jsonl'))},JSON.stringify({id:${JSON.stringify(id)},args,cwd:process.cwd(),model:process.env.VIBE_ACTIVE_MODEL})+'\\n');
-${mode === 'layers' ? `process.stdout.write(${JSON.stringify([{type:'reasoning',part:{text:'Gedanke eins\nGedanke zwei'}},{type:'tool_use',part:{tool:'shell',callID:'test-tool',state:{status:'completed',output:'Ergebnis eins\nErgebnis zwei',metadata:{exit:0}}}},{type:'text',part:{text:'FERTIGE_ANTWORT'}}].map(JSON.stringify).join('\n')+'\n')});` : mode === 'idle' ? "console.log('Please select [1/2]');setInterval(()=>{},1000);" : mode === 'interactive' ? "console.log('Error: Cannot prompt in non-interactive mode');" : mode === 'permission' ? "console.error('Permission denied');process.exit(1);" : mode === 'quota' ? "console.error('quota exceeded');process.exit(1);" : `process.stdout.write(${JSON.stringify(response(id))});`}
+${mode === 'layers' ? `process.stdout.write(${JSON.stringify([{type:'reasoning',part:{text:'Gedanke eins\nGedanke zwei'}},{type:'tool_use',part:{tool:'shell',callID:'test-tool',state:{status:'completed',output:'Ergebnis eins\nErgebnis zwei',metadata:{exit:0}}}},{type:'text',part:{text:'FERTIGE_ANTWORT'}}].map(JSON.stringify).join('\n')+'\n')});` : mode === 'frage' ? `process.stdout.write(${JSON.stringify([{type:'hook_event',hookEventName:'agent_start',taskId:'cline-frage'},{type:'agent_event',event:{type:'content_end',contentType:'text',text:'Ich brauche eine Entscheidung.'}},{type:'agent_event',event:{type:'content_start',contentType:'tool',toolName:'ask_question',toolCallId:'q1',input:{question:'Was soll ich bauen?',options:[{label:'Variante A',description:'Der kleine Weg'},{label:'Variante B',description:'Der große Weg'}]}}},{type:'agent_event',event:{type:'content_end',contentType:'tool',toolCallId:'q1',output:[{query:'Was soll ich bauen?',result:'Variante A',success:true}]}},{type:'run_result',finishReason:'completed',text:'FRAGE_GESTELLT'}].map(JSON.stringify).join('\n')+'\n')});` : mode === 'idle' ? "console.log('Please select [1/2]');setInterval(()=>{},1000);" : mode === 'interactive' ? "console.log('Error: Cannot prompt in non-interactive mode');" : mode === 'permission' ? "console.error('Permission denied');process.exit(1);" : mode === 'quota' ? "console.error('quota exceeded');process.exit(1);" : `process.stdout.write(${JSON.stringify(response(id))});`}
 `, { mode: 0o755 });
 }
 async function api(url, body) {
@@ -108,8 +108,31 @@ test('Strukturierte Denk- und Werkzeugausgaben bleiben mehrzeilig im passenden K
   const output=messages.filter(m=>m.type==='output').map(m=>m.html).join('');
   assert.match(output,/<div data-console-layer="denke">[\s\S]*Gedanke zwei[\s\S]*<\/div>/);
   assert.match(output,/<div data-console-layer="werkzeug">Werkzeug: shell/);
-  assert.match(output,/<div data-console-layer="werkzeug">[\s\S]*Ergebnis zwei[\s\S]*<\/div>/);
+  // Die Ausgabe bekommt eine eigene Schicht, damit sie sich vom Gedankengang
+  // unterscheidet und nicht mit dem Aufruf in einem Kasten verschwindet.
+  assert.match(output,/<div data-console-layer="ausgabe">[\s\S]*Ergebnis zwei[\s\S]*<\/div>/);
+  const werkzeugInhalte=[...output.matchAll(/<div data-console-layer="werkzeug">([\s\S]*?)<\/div>/g)].map(m=>m[1]);
+  assert.ok(werkzeugInhalte.length>0,'der Werkzeugaufruf fehlt');
+  assert.ok(werkzeugInhalte.every(inhalt=>!/Ergebnis zwei/.test(inhalt)),
+    'die Ausgabe darf nicht im Werkzeugaufruf hängen: '+werkzeugInhalte.join(' | '));
   assert.match(output,/FERTIGE_ANTWORT/);
+});
+
+test('Eine Auswahlabfrage wird als klickbare Fragekarte gemalt',async()=>{
+  stub('cline','frage');
+  await api('/api/config',{clis:[{harnessId:'cline',name:'Cline',enabled:true}]});
+  const messages=await dispatch('FRAGE_TEST');
+  assert.equal(messages.at(-1).type,'done');
+  const output=messages.filter(m=>m.type==='output').map(m=>m.html).join('');
+  assert.ok(!/\[object Object\]/.test(output),'die Ausgabe darf keinen Platzhalter zeigen');
+  assert.match(output,/class="ko-frage"/,'die Frage braucht eine eigene Darstellung');
+  assert.match(output,/Was soll ich bauen\?/,'die Frage steht im Klartext');
+  assert.match(output,/data-antwort="[^"]*Variante A[^"]*"/,'jede Option ist ein anklickbarer Knopf');
+  assert.match(output,/data-antwort="[^"]*Variante B[^"]*"/);
+  assert.match(output,/Der kleine Weg/,'die Beschreibung der Option bleibt erhalten');
+  assert.match(output,/<button[^>]*class="ko-frage-option"/);
+  // Die Antwort trägt die Frage mit: allein ist ein Optionslabel kein Auftrag.
+  assert.match(output,/data-antwort="Antwort auf die Rückfrage[^"]*"/);
 });
 
 test('Quota-Kaskade wechselt durch alle fünf zum bestehenden Harness ohne Kontextverlust',async()=>{
