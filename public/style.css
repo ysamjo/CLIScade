@@ -152,7 +152,7 @@ body {
 
 /* SIDEBAR */
 .sidebar {
-  width: 244px;
+  width: 228px;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -322,11 +322,13 @@ body {
 
 .folder-icon {
   font-size: 13px;
+  line-height: 1;
 }
 
 .project-title {
   font-size: 12px;
   font-weight: 500;
+  line-height: 1.15;
   color: var(--text-main);
   flex: 1;
   white-space: nowrap;
@@ -367,8 +369,10 @@ body {
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 14px;
+  height: 18px;
+  padding: 0 4px;
+  line-height: 1;
+  font-size: 13px;
   border-radius: 4px;
   opacity: 0;
   transition: all 0.15s;
@@ -504,12 +508,12 @@ body {
 }
 
 .task-prompt {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .task-badge {
@@ -662,7 +666,7 @@ body {
   width: 100%;
   max-width: 1240px;
   margin: 0 auto;
-  padding: 8px 10px 10px;
+  padding: 4px 6px 6px;
   gap: 6px;
   overflow: hidden;
 }
@@ -1712,13 +1716,13 @@ kbd {
 
 /* SIDEBAR WORKSPACE BAR */
 .sidebar-workspace-bar {
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-sunken);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 5px;
 }
 
 .workspace-pill-group {
@@ -3118,8 +3122,8 @@ kbd {
 /* Die optionale Aufgabenwahl lässt Platz für Eingabe und Senden, auch in schmalen Konsolen. */
 .run-pane-composer { flex-wrap:wrap; }
 .run-pane-composer textarea { flex:1 0 100%; order:-1; resize:vertical; }
-.run-pane-tool, .run-pane-send { flex:0 0 30px; width:30px; height:30px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
-.run-pane-tool .svg-icon { width:17px; height:17px; }
+.run-pane-tool, .run-pane-send { flex:0 0 26px; width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+.run-pane-tool .svg-icon { width:15px; height:15px; }
 .run-pane-tool:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
 @media (pointer:coarse) { .run-pane-tool, .run-pane-send { flex-basis:44px; width:44px; height:44px; } }
 .run-pane-beads { flex:0 1 140px; min-width:0; max-width:140px; font-size:11.5px; }
@@ -3154,34 +3158,37 @@ kbd {
    Was bleibt, trennt Bedeutung: 2px innerhalb einer Zeile, 6px zwischen
    Gruppen, 10px zwischen Bereichen. */
 body, .app-layout { height:100dvh; }
-.logo-text { font-size:14px; letter-spacing:-.3px; }
-.logo-icon { width:24px; height:24px; border-radius:var(--radius-sm); }
-.sidebar-header { padding:8px 10px; border-bottom-color:var(--border-color); }
-.sidebar-section:not(.projects-section) { padding:8px; }
-.projects-section { padding:6px; }
-.section-title-row { margin-bottom:6px; }
+.logo-text { font-size:13px; letter-spacing:-.3px; }
+.logo-icon { width:22px; height:22px; border-radius:var(--radius-sm); }
+.sidebar-header { padding:5px 8px; border-bottom-color:var(--border-color); }
+.sidebar-section:not(.projects-section) { padding:5px; }
+.projects-section { padding:4px; }
+.section-title-row { margin-bottom:3px; }
 .section-title { font-size:10px; letter-spacing:0.8px; color:var(--text-dim); }
-.project-header { min-height:22px; padding:2px 6px; gap:5px; }
+.project-header { min-height:18px; padding:1px 5px; gap:4px; }
 .project-node.active > .project-header { background:var(--bg-elevated); box-shadow:none; }
 .project-node.active .folder-icon { color:var(--text-main); }
-.task-item { padding-block:2px; border-radius:var(--radius-sm); }
-.sidebar-footer { padding:6px 8px; background:var(--bg-sunken); }
-.sidebar-settings-btn { min-height:28px; border-radius:var(--radius-md); }
-.run-split { gap:8px; }
+.task-item { padding-block:1px; border-radius:var(--radius-sm); }
+.sidebar-footer { padding:3px 6px; background:var(--bg-sunken); }
+.sidebar-settings-btn { min-height:22px; border-radius:var(--radius-md); }
+.run-split { gap:6px; }
 .run-pane { background:var(--bg-card); box-shadow:none; border:1px solid var(--border-color); border-radius:var(--radius-md); }
 .run-pane-title { font-size:12px; font-weight:600; color:var(--text-main); }
-.terminal-body { padding:10px 12px; line-height:1.45; }
-.terminal-placeholder { color:var(--text-muted); font-style:normal; font-size:12.5px; }
+.terminal-body { padding:6px 8px; line-height:1.4; }
+/* Der leere Körper beginnt oben links, wo die Ausgabe erscheint. Mittig gesetzt
+   ließ er die Fläche noch leerer wirken, als sie ist. `.composer-empty` stellt
+   auf Spalte um, dort trägt `justify-content` die Senkrechte. */
+.terminal-placeholder { color:var(--text-muted); font-style:normal; font-size:12.5px; justify-content:flex-start; align-items:flex-start; text-align:left; padding:0 2px; }
 .composer-empty { flex-direction:column; gap:4px; opacity:0.8; }
 .composer-empty > [data-icon] { display:none; }
 .composer-empty strong { color:var(--text-muted); font-size:12.5px; font-weight:600; letter-spacing:0; }
 .composer-empty small { max-width:40ch; font-size:11.5px; line-height:1.45; color:var(--text-dim); }
 .run-pane-context { padding:4px 10px; font-size:11px; }
-.run-pane-composer { margin:0 6px 6px; padding:6px 8px; gap:6px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); }
+.run-pane-composer { margin:0 4px 4px; padding:3px 6px; gap:4px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); }
 .run-pane-composer:focus-within { border-color:var(--border-focus); }
-.run-pane-composer textarea { background:transparent; border:0; padding:4px 2px; }
+.run-pane-composer textarea { background:transparent; border:0; padding:2px; }
 .run-pane-composer textarea::placeholder { color:var(--text-muted); }
-.run-pane-composer .custom-select { height:30px; background:var(--bg-secondary); border-color:transparent; }
+.run-pane-composer .custom-select { height:26px; font-size:12px; background:var(--bg-secondary); border-color:transparent; }
 .run-pane-composer .run-pane-tool { color:var(--text-muted); border:1px solid transparent; }
 .run-pane-composer .run-pane-tool:hover:not(:disabled) { background:var(--bg-elevated); color:var(--text-main); }
 .run-pane-send { margin-inline-start:auto; border-radius:var(--radius-md); }
@@ -3190,23 +3197,26 @@ body, .app-layout { height:100dvh; }
 .settings-dialog-title h3 { font-size:15px; }
 .settings-nav-item { border-radius:var(--radius-md); }
 @media (min-width:769px) {
-  .sidebar { width:244px; }
-  .studio-container { max-width:1800px; padding:8px 10px 10px; }
+  .sidebar { width:228px; }
+  .studio-container { max-width:1800px; padding:4px 6px 6px; }
 }
 @media (max-width:768px) {
-  .run-split { gap:8px; }
-  .terminal-body { padding:10px; }
+  .run-split { gap:6px; }
+  .terminal-body { padding:6px; }
   .composer-empty { gap:4px; opacity:0.75; }
   .composer-empty > [data-icon] { display:none; }
   .composer-empty strong { font-size:12px; }
   .composer-empty small { font-size:11px; }
-  .run-pane-context { padding:4px 10px; }
-  .run-pane-composer { margin:0 6px 6px; padding:6px; gap:6px; }
+  .run-pane-context { padding:3px 8px; }
+  .run-pane-composer { margin:0 3px 3px; padding:3px 5px; gap:4px; }
 }
+
+/* Der Plus-Knopf gibt die Zeilenhöhe vor. Am Finger bleibt er greifbar. */
+@media (pointer:coarse) { .add-task-btn { height:26px; padding:0 8px; } }
 
 /* Eingabe und Werkzeugleiste sind feste Gruppen; Senden bleibt bei den Icons. */
 .run-pane-composer { display:block; }
-.run-pane-composer textarea { display:block; width:100%; margin-bottom:4px; font-size:13.5px; min-height:52px; max-height:200px; }
+.run-pane-composer textarea { display:block; width:100%; margin-bottom:2px; font-size:13px; line-height:1.35; min-height:36px; max-height:200px; }
 .run-pane-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
 .run-pane-targets { display:flex; flex:1 1 120px; gap:6px; min-width:0; }
 .run-pane-targets .custom-select { flex:1 1 0; width:0; min-width:0; max-width:none; }
@@ -3215,7 +3225,7 @@ body, .app-layout { height:100dvh; }
 .run-pane-actions .run-pane-send { margin-inline-start:0; }
 /* Auf dem Handy bleibt die Eingabe bei 16px: darunter zoomt iOS beim Antippen. */
 @media (max-width:768px) {
-  .run-pane-composer textarea { font-size:16px; min-height:64px; }
+  .run-pane-composer textarea { font-size:16px; min-height:44px; }
 }
 /* Projektgedächtnis: die Bedienung liegt im Einstellungsdialog, nicht mehr im
    Arbeitsbereich — dort kostete sie eine Zeile und sagte im Regelfall nichts. */
@@ -3245,7 +3255,7 @@ body, .app-layout { height:100dvh; }
 /* Eine Konsole zu Beginn; der Ordner ist die Auswahl im Kopf des Felds. */
 .run-pane[hidden], .memory-pane[hidden] { display:none; }
 .run-pane-heading { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:1px; grid-area:heading; }
-.run-pane-head { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"heading close" "harness harness" "folder folder"; gap:2px; height:auto; min-height:42px; flex:0 0 auto; padding:5px 8px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); }
+.run-pane-head { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"heading close" "harness harness" "folder folder"; gap:1px; height:auto; min-height:32px; flex:0 0 auto; padding:3px 6px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); }
 .run-pane-head .run-pane-harness { display:flex; align-items:center; gap:5px; width:fit-content; max-width:100%; min-width:0; padding:2px 5px; grid-area:harness; }
 .run-pane-head .run-pane-harness:empty { display:none; }
 .run-pane-folder { grid-area:folder; }
@@ -3266,7 +3276,7 @@ body, .app-layout { height:100dvh; }
 #pane-close-dialog p { margin: 0 0 16px; color: var(--text-muted); }
 .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .run-pane-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.run-pane-head .run-pane-target { width:100%; max-width:none; min-width:0; height:30px; flex:none; padding:3px 4px; border:1px solid transparent; background:transparent; font-size:14px; font-weight:600; color:var(--text-main); }
+.run-pane-head .run-pane-target { width:100%; max-width:none; min-width:0; height:26px; flex:none; padding:2px 4px; border:1px solid transparent; background:transparent; font-size:13px; font-weight:600; color:var(--text-main); }
 .run-pane-head .run-pane-target:hover { background:var(--bg-card); }
 .run-pane-heading .run-pane-title { min-width:0; padding-inline:4px; font-size:11px; font-weight:400; color:var(--text-muted); }
 .run-pane-targets .run-pane-routing { flex:0 1 180px; width:100%; }
