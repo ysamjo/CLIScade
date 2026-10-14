@@ -2,7 +2,20 @@ import AppKit
 import WebKit
 import UniformTypeIdentifiers
 
-public final class MainWindowController: NSWindowController, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
+/// Fensterhintergrund, der dem Erscheinungsbild folgt. Ein festes CGColor bleibt
+/// beim Wechsel zwischen Hell und Dunkel stehen und blitzt dann als dunkler
+/// Kasten hinter der Oberfläche durch.
+final class Themenhintergrund: NSView {
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    }
+}
+
+public final class MainWindowController: NSWindowController, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate, WKScriptMessageHandler {
+    /// Kanal, über den die Oberfläche ihr Erscheinungsbild meldet.
+    public static let erscheinungsbildKanal = "erscheinungsbild"
+
     public private(set) var webView: WKWebView!
     private var loadingView: NSView!
     private var spinner: NSProgressIndicator!
@@ -18,8 +31,14 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
         )
         window.minSize = NSSize(width: 800, height: 550)
         window.title = "CLIscade"
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.backgroundColor = NSColor(calibratedRed: 0.043, green: 0.047, blue: 0.063, alpha: 1.0) // #0b0c10
+        // Bewusst kein festes .darkAqua. window.appearance bestimmt auch
+        // prefers-color-scheme im WebView: erzwungenes Dunkel macht den Hellmodus der
+        // Oberfläche unerreichbar, und die App sieht aus wie vor der Überarbeitung
+        // (gemessen am 14. Oktober 2026: macOS hell, Seite trotzdem dunkel). Ohne
+        // eigene Wahl in der Oberfläche bleibt es beim System, danach folgt das
+        // Fenster der gemeldeten Wahl.
+        window.appearance = nil
+        window.backgroundColor = .windowBackgroundColor
         window.setFrameAutosaveName("CLIScadeMainWindow")
         window.center()
 
@@ -43,6 +62,7 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         config.websiteDataStore = WKWebsiteDataStore.default()
+        config.userContentController.add(self, name: MainWindowController.erscheinungsbildKanal)
 
         webView = WKWebView(frame: contentView.bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
@@ -51,11 +71,10 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
         webView.setValue(false, forKey: "drawsBackground") // Transparent bis Seite geladen ist
         contentView.addSubview(webView)
 
-        // 2. Elegante Ladeanzeige im Design der Web-App
-        loadingView = NSView(frame: contentView.bounds)
+        // 2. Ladeanzeige, die dem Erscheinungsbild folgt
+        loadingView = Themenhintergrund(frame: contentView.bounds)
         loadingView.autoresizingMask = [.width, .height]
         loadingView.wantsLayer = true
-        loadingView.layer?.backgroundColor = NSColor(calibratedRed: 0.043, green: 0.047, blue: 0.063, alpha: 1.0).cgColor
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -66,7 +85,7 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
 
         let titleLabel = NSTextField(labelWithString: "CLIscade")
         titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .bold)
-        titleLabel.textColor = NSColor(calibratedRed: 0.9, green: 0.92, blue: 0.95, alpha: 1.0)
+        titleLabel.textColor = .labelColor
         stack.addArrangedSubview(titleLabel)
 
         spinner = NSProgressIndicator()
@@ -77,7 +96,7 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
 
         statusLabel = NSTextField(labelWithString: "Server startet…")
         statusLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        statusLabel.textColor = NSColor(calibratedRed: 0.6, green: 0.65, blue: 0.75, alpha: 1.0)
+        statusLabel.textColor = .secondaryLabelColor
         stack.addArrangedSubview(statusLabel)
 
         retryButton = NSButton(title: "Erneut versuchen", target: self, action: #selector(onRetryClicked))
@@ -168,6 +187,21 @@ public final class MainWindowController: NSWindowController, WKNavigationDelegat
     public func toggleDevTools() {
         // Öffnet den Web Inspector falls Entwickler-Werkzeuge aktiv sind
         webView.evaluateJavaScript("console.log('CLIscade DevTools getriggert');", completionHandler: nil)
+    }
+
+    // MARK: - Erscheinungsbild aus der Oberfläche
+
+    /// Die Oberfläche meldet nach jedem Wechsel ihr Erscheinungsbild. Solange sie
+    /// dem System folgt, bleibt das Fenster beim System — sonst würde ein späterer
+    /// Systemwechsel nicht mehr durchkommen.
+    public func userContentController(_ userContentController: WKUserContentController,
+                                      didReceive message: WKScriptMessage) {
+        guard message.name == MainWindowController.erscheinungsbildKanal,
+              let daten = message.body as? [String: Any],
+              let wahl = daten["theme"] as? String,
+              wahl == "light" || wahl == "dark" else { return }
+        let folgtSystem = daten["folgtSystem"] as? Bool ?? true
+        window?.appearance = folgtSystem ? nil : NSAppearance(named: wahl == "light" ? .aqua : .darkAqua)
     }
 
     // MARK: - WKNavigationDelegate

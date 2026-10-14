@@ -166,6 +166,8 @@ Das Bündel enthält eine **eingefrorene Kopie** von `public/` und `server.js` (
 grep -oE 'style.css\?v=[0-9]+' /Applications/CLIScade.app/Contents/Resources/app/public/index.html
 ```
 
+Das Fenster folgt dem Erscheinungsbild der Oberfläche: ohne eigene Wahl dem System, danach der Wahl aus dem Umschalter. Die Oberfläche meldet sie über eine WebKit-Brücke. Ein festes dunkles Fenster ist der klassische Grund, warum der Hellmodus nie zu sehen ist — `window.appearance` legt auch `prefers-color-scheme` im WebView fest. Nach einem Neubau die App mit ⌘Q beenden und neu starten; das Schließen des Fensters blendet sie nur aus, die alte Seite bleibt dann stehen.
+
 ### Nutzerkonfiguration und portable Installation
 
 CLIscade verwendet die Login-Shell des aktuellen Nutzers. Neben `ANTHROPIC_*` werden Claude-Provider-Schalter, `CLAUDE_CONFIG_DIR`, AWS-/Vertex-/Foundry-Einstellungen sowie Proxy- und Zertifikatseinstellungen übernommen. Bereits beim direkten Serverstart gesetzte Werte haben Vorrang. Der bereinigte Mac-Launcher entfernt Gateway-Werte der aufrufenden Agentensitzung; der Server liest danach die Nutzershell. Unter **Einstellungen → CLI-Diagnose → Terminal-Konfiguration neu laden** wird der Shell-Stand ohne Serverneustart erneuert. Neue Läufe verwenden ihn; laufende Aufträge behalten ihren Stand. Die Rückmeldung enthält nur eine Anzahl, keine Zugangsdaten. Shell-Aliase und Funktionen sind keine registrierten ausführbaren CLIs.

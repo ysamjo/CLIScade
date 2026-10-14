@@ -64,6 +64,19 @@ function gemerktesErscheinungsbild() {
   return null;
 }
 
+// Die Mac-App hält Fensterrahmen und Titelleiste nach: sie erzwang früher dauerhaft
+// Dunkel und legte damit auch prefers-color-scheme im WebView fest — der Hellmodus
+// war nie zu sehen. Jetzt meldet die Oberfläche ihre Wahl über die WebKit-Brücke,
+// sofern es sie gibt. Im Browser fehlt sie; dann bleibt der Aufruf folgenlos.
+function meldeErscheinungsbild(theme) {
+  const bruecke = window.webkit && window.webkit.messageHandlers
+    && window.webkit.messageHandlers.erscheinungsbild;
+  if (!bruecke || typeof bruecke.postMessage !== 'function') return;
+  try {
+    bruecke.postMessage({ theme: theme, folgtSystem: gemerktesErscheinungsbild() === null });
+  } catch {}
+}
+
 function setzeErscheinungsbild(wahl, merken = true) {
   const theme = wahl === 'light' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', theme);
@@ -82,6 +95,7 @@ function setzeErscheinungsbild(wahl, merken = true) {
     delete knopf.dataset.iconHydrated;
   });
   hydrateIcons();
+  meldeErscheinungsbild(theme);
   return theme;
 }
 

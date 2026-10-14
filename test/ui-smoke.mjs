@@ -1240,5 +1240,39 @@ const reste = Object.entries(quelltext).flatMap(([datei, text]) =>
     .map((spur) => `${datei}:${spur}`));
 pruefe("Keine Spur der Marke in HTML, Stil oder Skript", reste.length === 0, reste.join(", "));
 
+// --- 19. Das Erscheinungsbild erreicht den Fensterrahmen -------------------
+// Die Mac-App setzte im Fenster fest .darkAqua. Das legt auch prefers-color-scheme
+// im WebView fest: der Hellmodus war nie zu sehen, die App sah aus wie vor der
+// Überarbeitung. Jetzt meldet die Oberfläche ihre Wahl über die WebKit-Brücke,
+// und das Fenster folgt ihr — solange keine eigene Wahl gemerkt ist, bleibt es
+// beim System, damit ein Systemwechsel weiter durchkommt.
+const gemeldet = [];
+window.webkit = { messageHandlers: { erscheinungsbild: { postMessage: (wert) => gemeldet.push(wert) } } };
+window.localStorage.removeItem('cliscade_theme');
+window.setzeErscheinungsbild('dark', false);
+await ruhen(2);
+pruefe('Ohne eigene Wahl meldet die Oberfläche: es entscheidet das System',
+  gemeldet.length === 1 && gemeldet[0].theme === 'dark' && gemeldet[0].folgtSystem === true,
+  JSON.stringify(gemeldet[0]));
+window.setzeErscheinungsbild('light');
+await ruhen(2);
+pruefe('Nach eigener Wahl meldet sie die Wahl selbst',
+  gemeldet.length === 2 && gemeldet[1].theme === 'light' && gemeldet[1].folgtSystem === false,
+  JSON.stringify(gemeldet[1]));
+
+// Eine Brücke, die scheitert, darf den Wechsel nicht verhindern.
+window.webkit = { messageHandlers: { erscheinungsbild: { postMessage: () => { throw new Error('kein Empfänger'); } } } };
+const trotzBruecke = window.setzeErscheinungsbild('dark');
+await ruhen(2);
+pruefe('Eine fehlerhafte Brücke blockiert den Wechsel nicht',
+  trotzBruecke === 'dark' && document.documentElement.dataset.theme === 'dark');
+
+// Im Browser gibt es keine Brücke. Das darf weder werfen noch den Wechsel stören.
+delete window.webkit;
+const ohneBruecke = window.setzeErscheinungsbild('light');
+await ruhen(2);
+pruefe('Ohne Brücke bleibt der Wechsel folgenlos und fehlerfrei',
+  ohneBruecke === 'light' && document.documentElement.dataset.theme === 'light');
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;
