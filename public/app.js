@@ -1497,7 +1497,12 @@ function renderHarnessConfigList() {
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
-      <div><code title="${escapeHtml(item.capabilities?.limitations || '')}">${escapeHtml(item.command || item.harness || 'cli')}</code></div>
+      <div><code title="${escapeHtml(item.capabilities?.limitations || '')}">${escapeHtml(item.command || item.harness || 'cli')}</code>
+        ${item.capabilities?.acp ? `<select class="harness-transport" data-idx="${index}" title="Ausführungsprotokoll (ACP benötigt einen installierten Agent-Adapter)">
+          <option value="headless" ${(item.transport || 'headless') !== 'acp' ? 'selected' : ''}>Headless</option>
+          <option value="acp" ${item.transport === 'acp' ? 'selected' : ''}>ACP v1</option>
+        </select>` : ''}
+      </div>
       <div>
         <div class="model-select-wrapper">
           <select class="model-dropdown" data-idx="${index}">
@@ -1541,6 +1546,15 @@ function renderHarnessConfigList() {
         renderHarnessConfigList();
         renderHarnessOverrideSelect();
       }
+    });
+  });
+
+  dom.harnessConfigList.querySelectorAll('.harness-transport').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = parseInt(sel.dataset.idx, 10);
+      state.clis[idx].transport = sel.value === 'acp' ? 'acp' : 'headless';
+      renderHarnessConfigList();
+      renderHarnessOverrideSelect();
     });
   });
 
@@ -1612,7 +1626,7 @@ const MODEL_TEST_LABELS = {
 // Results are keyed by command+model instead of by row, so the dynamic model
 // refresh (and route reordering) can re-render the list without losing a test.
 function modelTestKey(item) {
-  return `${item.command || item.harness || ''}|${item.model || 'Standard'}`;
+  return `${item.command || item.harness || ''}|${item.model || 'Standard'}|${item.transport || 'headless'}`;
 }
 
 function paintModelTest(row) {
@@ -1649,7 +1663,7 @@ async function runModelTest(btn) {
     const res = await fetch('/api/harness/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ harnessId: route.harnessId, model })
+      body: JSON.stringify({ harnessId: route.harnessId, model, transport: route.transport || 'headless' })
     });
     data = await res.json();
   } catch (err) {

@@ -5,6 +5,7 @@ const { canonicalEvent } = require('./events');
 const { classifyError } = require('./errors');
 const { hasSession, acquireSession } = require('./session-store');
 const { prepareHeadlessPrompt } = require('./headless-prompt');
+const { runAcp } = require('./acp-runner');
 
 const ADAPTERS = Object.freeze({
   claude: require('./adapters/claude'), codex: require('./adapters/codex'),
@@ -35,13 +36,21 @@ function availableCommand(entry, env) {
   return null;
 }
 
-async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previousSessionId, signal, env = process.env,
+async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previousSessionId, previousSessionTransport,
+  transport = 'headless', signal, env = process.env,
   execution = {}, idleTimeoutMs = 180000, timeoutMs = 30 * 60 * 1000, onEvent, onSpawn, onIdle } = {}) {
   const entry = HARNESS_REGISTRY[harnessId];
   if (!entry || !entry.dispatchable) return {
     status: 'failed', finalText: '', sessionId: null, model,
     error: { kind: 'harness_failure', retryability: 'never', message: 'Harness ist nicht für Headless-Läufe freigegeben' }, events: [], exitCode: null
   };
+  if (transport === 'acp' && entry.acp) {
+    const acp = await runAcp({ harnessId, model, prompt, cwd, previousSessionId, previousSessionTransport,
+      signal, env: childEnv(env), idleTimeoutMs, timeoutMs, onEvent, onIdle });
+    // Only startup failure may fall back. Never replay a prompt after possible file changes.
+    if (acp.error?.kind !== 'acp_unavailable') return acp;
+    try { onEvent?.(canonicalEvent({ type: 'warning', text: acp.error.message + '; Headless-Fallback.\n' }, harnessId)); } catch {}
+  }
   const adapter = ADAPTERS[harnessId];
   const runEnv = childEnv(env);
   const events = [];
@@ -117,6 +126,7 @@ async function runHarness({ harnessId, model = 'Standard', prompt, cwd, previous
         ? { kind: 'harness_failure', retryability: 'next_harness', message: 'Harness endete ohne Ergebnis' } : null);
     return {
       status: error?.kind === 'cancelled' ? 'cancelled' : error ? 'failed' : 'completed',
+      transport: 'headless',
       finalText, sessionId, model, error, events, exitCode: processResult.exitCode,
       rawTail: raw.slice(-64 * 1024)
     };

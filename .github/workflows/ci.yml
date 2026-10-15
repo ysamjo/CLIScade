@@ -1,0 +1,20 @@
+name: ACP and application tests
+on:
+  push:
+    branches: [feature/acp-transport-v1]
+  pull_request:
+    branches: [main]
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Existing UI tests expect a locally installed jsdom outside package.json.
+      - run: npm install --no-save jsdom@26
+      - run: echo "JSDOM_MODULE=$PWD/node_modules/jsdom/lib/api.js" >> "$GITHUB_ENV"
+      - run: npm test
