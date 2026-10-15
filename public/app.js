@@ -1553,6 +1553,7 @@ function renderHarnessConfigList() {
     sel.addEventListener('change', () => {
       const idx = parseInt(sel.dataset.idx, 10);
       state.clis[idx].transport = sel.value === 'acp' ? 'acp' : 'headless';
+      renderHarnessConfigList();
       renderHarnessOverrideSelect();
     });
   });
@@ -1625,7 +1626,7 @@ const MODEL_TEST_LABELS = {
 // Results are keyed by command+model instead of by row, so the dynamic model
 // refresh (and route reordering) can re-render the list without losing a test.
 function modelTestKey(item) {
-  return `${item.command || item.harness || ''}|${item.model || 'Standard'}`;
+  return `${item.command || item.harness || ''}|${item.model || 'Standard'}|${item.transport || 'headless'}`;
 }
 
 function paintModelTest(row) {
