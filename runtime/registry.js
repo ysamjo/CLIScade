@@ -115,7 +115,7 @@ const CLI_INSTALL_REGISTRY = {
     package: 'Kiro CLI', installCmd: 'curl -fsSL https://cli.kiro.dev/install | bash',
     description: 'Kiro CLI für nichtinteraktive Coding-Aufträge',
     category: 'Coding Agent', iconKey: 'kiro_cli',
-    docsUrl: 'https://kiro.dev/docs/cli/headless/', limitations: 'Benötigt aktuelle CLI mit V3/stream-json und Headless-Authentifizierung. Werkzeugrechte über permissions.yaml konfigurieren; keine pauschale Freigabe.'
+    docsUrl: 'https://kiro.dev/docs/cli/headless/', limitations: 'Benötigt aktuelle CLI mit V3/stream-json und Headless-Authentifizierung. Headless-Läufe nutzen --trust-all-tools.'
   },
   vibe_cli: {
     id: 'vibe_cli', name: 'Mistral Vibe CLI', cmd: 'vibe',
