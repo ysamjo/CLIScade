@@ -1,6 +1,7 @@
 'use strict';
 // ACP v1 stdio client for CLIScade. No shell, no arbitrary executable arguments.
 const { spawn, execFileSync } = require('node:child_process');
+const { StringDecoder } = require('node:string_decoder');
 const { canonicalEvent } = require('./events');
 const { acquireSession } = require('./session-store');
 const { prepareHeadlessPrompt } = require('./headless-prompt');
@@ -79,7 +80,8 @@ function runAcp({ harnessId, model = 'Standard', prompt, cwd, previousSessionId,
 
   return new Promise(resolve => {
     let child, nextId = 0, closed = false, done = false, stopped = false;
-    let cancelled = false, timedOut = false, idleHit = false, prompted = false;
+    let cancelled = false, prompted = false, permissionDenied = false;
+    const decoder = new StringDecoder('utf8');
     let idleTimer, wallTimer, killTimer, input = '', reason = null;
     const pending = new Map();
     const cleanup = () => {
@@ -127,7 +129,6 @@ function runAcp({ harnessId, model = 'Standard', prompt, cwd, previousSessionId,
       if (!idleTimeoutMs || done) return;
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        idleHit = true;
         try { onIdle?.(idleTimeoutMs); } catch {}
         if (sessionId) notify('session/cancel', { sessionId });
         finish('failed', acpError('ACP: keine Ausgabe innerhalb der Frist', 'timeout'));
@@ -154,6 +155,7 @@ function runAcp({ harnessId, model = 'Standard', prompt, cwd, previousSessionId,
         if (message.method === 'session/request_permission') {
           // No automatic trust. The current task UI cannot answer a live ACP request.
           // Explicitly cancel instead of blocking the queue indefinitely.
+          permissionDenied = true;
           emit({ type: 'warning', text: 'ACP: Tool-Freigabe erforderlich; im unbeaufsichtigten Lauf abgelehnt.\n' });
           send({ id: message.id, result: { outcome: { outcome: 'cancelled' } } });
         } else {
@@ -163,7 +165,7 @@ function runAcp({ harnessId, model = 'Standard', prompt, cwd, previousSessionId,
     };
     const onData = bytes => {
       armIdle();
-      input += bytes.toString('utf8');
+      input += decoder.write(bytes);
       if (input.length > MAX_LINE) {
         finish('failed', acpError('ACP-Protokollzeile überschreitet Limit', 'protocol'));
         return;
@@ -199,7 +201,6 @@ function runAcp({ harnessId, model = 'Standard', prompt, cwd, previousSessionId,
     armIdle();
     if (timeoutMs > 0) {
       wallTimer = setTimeout(() => {
-        timedOut = true;
         if (sessionId) notify('session/cancel', { sessionId });
         finish('failed', acpError('ACP-Gesamtzeitlimit überschritten', 'timeout'));
       }, timeoutMs);
@@ -241,6 +242,8 @@ function runAcp({ harnessId, model = 'Standard', prompt, cwd, previousSessionId,
         const stopReason = answer?.stopReason;
         if (cancelled || stopReason === 'cancelled') {
           finish('cancelled', acpError('Abgebrochen', 'cancelled', 'never'));
+        } else if (permissionDenied) {
+          finish('failed', acpError('ACP-Werkzeugfreigabe wurde verweigert; interaktive Genehmigung noch nicht verfügbar', 'permission', 'never'));
         } else if (stopReason === 'end_turn' && finalText.trim()) {
           finish('completed', null, 0);
         } else {
