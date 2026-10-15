@@ -3,6 +3,7 @@ const readline = require('node:readline');
 const mode = process.env.MOCK_ACP_MODE || 'ok';
 const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n');
 let sessionId = 'session-one';
+let promptId;
 const calls = [];
 readline.createInterface({ input: process.stdin }).on('line', line => {
   const message = JSON.parse(line);
@@ -16,6 +17,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     sessionId = message.params.sessionId;
     send({ id: message.id, result: {} });
   } else if (message.method === 'session/prompt') {
+    promptId = message.id;
     if (mode === 'broken') {
       process.stdout.write('not-json\n');
     } else if (mode === 'permission') {
@@ -37,7 +39,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   } else if (message.id === 901 && message.result) {
     send({ method: 'session/update', params: { sessionId, update: {
       sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Permission denied' } } } });
-    send({ id: calls.length - 1, result: { stopReason: 'end_turn' } });
+    send({ id: promptId, result: { stopReason: 'end_turn' } });
   } else if (message.method === 'session/cancel' && mode === 'hang') {
     process.exit(0);
   }
