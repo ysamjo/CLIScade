@@ -1265,8 +1265,9 @@ pruefe("„Auftrag abbrechen“ schickt cancel und schließt das Feld",
   frames.some((f) => f.type === "cancel" && f.taskId === abbrechTask.id) && konsole(abbrechSlot)?.hidden === true,
   JSON.stringify(frames));
 
-// --- 16. Dreier-Raster: dritte Konsole füllt die volle Breite ----------------
-// Bei genau 3 sichtbaren Feldern zieht die dritte Konsole über beide Spalten (run-pane-wide).
+// --- 16. Dreier-Raster: zwei untereinander, eins in voller Höhe -------------
+// Bei genau 3 sichtbaren Feldern stehen die beiden ersten untereinander und das
+// dritte zieht über beide Zeilen (run-pane-hoch), nicht über beide Spalten.
 [0, 1, 2].forEach((i) => { if (konsole(i)) konsole(i).hidden = false; });
 if (konsole(3)) konsole(3).hidden = true;
 window.layoutPanes();
@@ -1274,17 +1275,23 @@ await ruhen(2);
 const dreiSichtbar = [0, 1, 2, 3].map((i) => konsole(i)).filter((k) => k && !k.hidden);
 pruefe("bei genau 3 Konsolen ist dataset.panes auf 3",
   document.querySelector("#run-split")?.dataset.panes === "3");
-pruefe("bei 3 Konsolen füllt das 3. Feld die volle Breite (run-pane-wide)",
-  dreiSichtbar.length === 3 && dreiSichtbar[2]?.classList.contains("run-pane-wide")
-  && !dreiSichtbar[0]?.classList.contains("run-pane-wide")
-  && !dreiSichtbar[1]?.classList.contains("run-pane-wide"));
+pruefe("bei 3 Konsolen trägt das 3. Feld die Höhenklasse, die beiden anderen nicht",
+  dreiSichtbar.length === 3 && dreiSichtbar[2]?.classList.contains("run-pane-hoch")
+  && !dreiSichtbar[0]?.classList.contains("run-pane-hoch")
+  && !dreiSichtbar[1]?.classList.contains("run-pane-hoch"));
+pruefe("die Höhenklasse spannt über Zeilen, nicht über Spalten",
+  !/run-pane-wide/.test(readFileSync(join(PUBLIC, "style.css"), "utf8")));
+const dreierRegel = readFileSync(join(PUBLIC, "style.css"), "utf8")
+  .match(/\.run-split\[data-panes="3"\][^{]*\{[^}]*\}/)?.[0] ?? "";
+pruefe("die Dreier-Regel spannt das Sonderfeld über beide Zeilen in der zweiten Spalte",
+  /grid-row:\s*1\s*\/\s*-1/.test(dreierRegel) && /grid-column:\s*2\b/.test(dreierRegel), dreierRegel);
 
-// Bei 4 Konsolen wird das 2x2-Quadrat genutzt und run-pane-wide entfernt.
+// Bei 4 Konsolen wird das 2x2-Quadrat genutzt und run-pane-hoch entfernt.
 if (konsole(3)) konsole(3).hidden = false;
 window.layoutPanes();
 await ruhen(2);
-pruefe("bei 4 Konsolen verliert das 3. Feld die Sonderbreite",
-  !konsole(2)?.classList.contains("run-pane-wide") && document.querySelector("#run-split")?.dataset.panes === "4");
+pruefe("bei 4 Konsolen verliert das 3. Feld die Sonderhöhe",
+  !konsole(2)?.classList.contains("run-pane-hoch") && document.querySelector("#run-split")?.dataset.panes === "4");
 
 // --- 17. Erscheinungsbild: hell und dunkel --------------------------------
 // Ein Umschalter, ein Attribut am Wurzelelement, ein gemerkter Wert. Der

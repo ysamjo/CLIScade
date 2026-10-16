@@ -671,7 +671,8 @@ body {
   overflow: hidden;
 }
 
-/* RASTER: 1 Konsole füllt die Fläche, 2 stehen nebeneinander, 3–4 im 2×2-Quadrat.
+/* RASTER: 1 Konsole füllt die Fläche, 2 stehen nebeneinander, 3 = zwei links
+   untereinander und die dritte über die ganze Höhe rechts, 4 im 2×2-Quadrat.
    Die Zahl sichtbarer Felder setzt app.js als data-panes. */
 .run-split {
   flex: 1;
@@ -682,13 +683,15 @@ body {
 }
 .run-split[data-panes="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 .run-split[data-panes="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 1fr; }
-.run-split[data-panes="3"],
-.run-split[data-panes="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.run-split:is([data-panes="3"], [data-panes="4"]) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
 
-/* Bei 3 Konsolen füllt die dritte Konsole automatisch die volle Breite (beide Spalten). */
-.run-split[data-panes="3"] > .run-pane.run-pane-wide,
-.run-split[data-panes="3"] > .run-pane:not([hidden]):nth-child(3 of :not([hidden])) {
-  grid-column: 1 / -1;
+/* Bei 3 Konsolen stehen die beiden ersten untereinander in der linken Spalte,
+   die dritte füllt die rechte Spalte über beide Zeilen. Die Einordnung der
+   beiden anderen besorgt die automatische Platzierung: sie weicht den
+   besetzten Zellen aus und landet in Zeile 2 der ersten Spalte. */
+.run-split[data-panes="3"] > .run-pane.run-pane-hoch {
+  grid-column: 2;
+  grid-row: 1 / -1;
 }
 
 .run-pane {

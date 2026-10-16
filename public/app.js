@@ -932,7 +932,8 @@ function revealPane(slot) {
 
 // --- RASTER & SEITENLEISTE ---
 // Das Raster richtet sich nach der Zahl sichtbarer Felder: 1 = volle Fläche,
-// 2 = nebeneinander, 3–4 = 2×2. Der ×-Knopf erscheint erst, wenn mehr als ein
+// 2 = nebeneinander, 3 = zwei links untereinander und eins rechts in voller
+// Höhe, 4 = 2×2. Der ×-Knopf erscheint erst, wenn mehr als ein
 // Feld offen ist — die letzte Konsole lässt sich nicht schließen.
 function visiblePaneCount() {
   return dom.runPanes.filter((pane) => pane && !pane.root.hidden).length;
@@ -945,10 +946,10 @@ function layoutPanes() {
   dom.runPanes.forEach((pane) => {
     if (!pane) return;
     if (pane.close) pane.close.hidden = count <= 1;
-    pane.root.classList.remove('run-pane-wide');
+    pane.root.classList.remove('run-pane-hoch');
   });
   if (count === 3 && visible[2]) {
-    visible[2].root.classList.add('run-pane-wide');
+    visible[2].root.classList.add('run-pane-hoch');
   }
   updateSidebarMode();
 }
