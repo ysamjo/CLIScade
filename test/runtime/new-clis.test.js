@@ -4,7 +4,7 @@ const { HARNESS_REGISTRY, CLI_INSTALL_REGISTRY, normalizeRoutes } = require('../
 const additions = { junie: 'junie', kilo: 'kilo', copilot: 'copilot', kiro: 'kiro-cli', vibe: 'vibe' };
 
 for (const [id, command] of Object.entries(additions)) {
-  test(`${id}: feste Registry, Headless und keine pauschale Berechtigungsfreigabe`, () => {
+  test(`${id}: feste Registry, Headless und sichere Berechtigungsfreigabe`, () => {
     const entry = HARNESS_REGISTRY[id];
     assert.ok(entry, id);
     assert.deepEqual(entry.commands, [command]);
@@ -16,9 +16,14 @@ for (const [id, command] of Object.entries(additions)) {
     const prompt = '--help\nAuftrag mit "Zitat", $HOME und `Befehl`';
     const args = adapter.build({ prompt, model: 'Standard', cwd: '/tmp/project' });
     assert.ok(args.includes(prompt) || args.includes(`--prompt=${prompt}`));
+    const allowed = id === 'kiro' ? ['--trust-all-tools'] : id === 'kilo' ? ['--auto'] : [];
     for (const flag of ['--auto', '--allow-all', '--allow-all-tools', '--allow-all-paths', '--trust-all-tools', '--auto-approve', '--yolo', '--brave', '--trust']) {
-      assert.ok(!args.includes(flag), `${id}: ${flag}`);
+      if (!allowed.includes(flag)) {
+        assert.ok(!args.includes(flag), `${id}: ${flag}`);
+      }
     }
+    if (id === 'kiro') assert.ok(args.includes('--trust-all-tools'), 'kiro benötigt --trust-all-tools');
+    if (id === 'kilo') assert.ok(args.includes('--auto'), 'kilo benötigt --auto');
     assert.ok(!args.includes('--model'));
   });
 }
@@ -50,6 +55,10 @@ test('Kiro verarbeitet ACP-Nachrichten und verweigerte Werkzeugaufrufe', () => {
   const update = update => ({ method: 'session/update', params: { sessionId: 's', update } });
   assert.equal(adapter.normalize(update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'OK' } })).find(e => e.type === 'text').text, 'OK');
   assert.ok(adapter.normalize(update({ sessionUpdate: 'tool_call_update', toolCallId: 't', status: 'failed', content: [{ type: 'content', content: { type: 'text', text: 'Permission denied' } }] })).some(e => e.type === 'error'));
+  const okEvents = adapter.normalize(update({ sessionUpdate: 'tool_call_update', toolCallId: 't', status: 'completed', rawOutput: { output: 'hello\n', exitCode: 0 } }));
+  const toolResult = okEvents.find(e => e.type === 'tool_result');
+  assert.equal(toolResult.exitCode, 0);
+  assert.equal(toolResult.text, 'hello\n');
 });
 
 test('Vibe liest aktuelle History-Einträge und verweigerte Freigaben ohne erfundene Exit-Codes', () => {

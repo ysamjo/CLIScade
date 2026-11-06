@@ -81,8 +81,7 @@ const CLI_INSTALL_REGISTRY = {
   cursor_cli: {
     id: 'cursor_cli',
     name: 'Cursor CLI',
-    cmd: 'agent',
-    altCmd: 'cursor-agent',
+    cmd: 'cursor-agent',
     package: 'cursor-agent',
     installCmd: 'curl https://cursor.com/install -fsS | bash',
     description: 'Cursor Agent CLI für Terminal und GitHub Actions',
@@ -116,7 +115,7 @@ const CLI_INSTALL_REGISTRY = {
     package: 'Kiro CLI', installCmd: 'curl -fsSL https://cli.kiro.dev/install | bash',
     description: 'Kiro CLI für nichtinteraktive Coding-Aufträge',
     category: 'Coding Agent', iconKey: 'kiro_cli',
-    docsUrl: 'https://kiro.dev/docs/cli/headless/', limitations: 'Benötigt aktuelle CLI mit V3/stream-json und Headless-Authentifizierung. Werkzeugrechte über permissions.yaml konfigurieren; keine pauschale Freigabe.'
+    docsUrl: 'https://kiro.dev/docs/cli/headless/', limitations: 'Benötigt aktuelle CLI mit V3/stream-json und Headless-Authentifizierung. Headless-Läufe nutzen --trust-all-tools.'
   },
   vibe_cli: {
     id: 'vibe_cli', name: 'Mistral Vibe CLI', cmd: 'vibe',
@@ -127,6 +126,8 @@ const CLI_INSTALL_REGISTRY = {
   }
 };
 
+const { acpProgram } = require('./acp-runner');
+
 const HARNESS_DEFINITIONS = {
   claude: { installId: 'claude_code_cli', aliases: ['claude_code'], transport: 'headless', resumable: true, structuredOutput: true },
   codex: { installId: 'codex_cli', aliases: [], transport: 'headless', resumable: true, structuredOutput: true },
@@ -134,7 +135,7 @@ const HARNESS_DEFINITIONS = {
   opencode: { installId: 'opencode_cli', aliases: [], transport: 'headless', resumable: true, structuredOutput: true },
   antigravity: { installId: 'antigravity_cli', aliases: ['antigravity_cli'], transport: 'headless', resumable: false, structuredOutput: false },
   qoder: { installId: 'qoder_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
-  codebuddy: { installId: 'codebuddy_cli', aliases: ['cbc'], transport: 'headless', resumable: false, structuredOutput: false },
+  codebuddy: { installId: 'codebuddy_cli', aliases: ['cbc'], transport: 'headless', resumable: false, structuredOutput: true },
   cursor: { installId: 'cursor_cli', aliases: [], transport: 'headless', resumable: false, structuredOutput: false },
   junie: { installId: 'junie_cli', aliases: ['junie_cli'], transport: 'headless', resumable: false, structuredOutput: false, strictOutput: true, requiresText: true },
   kilo: { installId: 'kilo_cli', aliases: ['kilo_cli'], transport: 'headless', resumable: false, structuredOutput: true, strictOutput: true, requiresText: true },
@@ -153,6 +154,7 @@ const HARNESS_REGISTRY = Object.freeze(Object.fromEntries(
       transport: definition.transport, dispatchable: headless, consensus: headless,
       scheduler: headless, telegramDispatch: headless, modelTest: headless,
       resumable: definition.resumable, structuredOutput: definition.structuredOutput,
+      acp: Boolean(acpProgram(id)), acpExecutable: acpProgram(id)?.command || null,
       strictOutput: definition.strictOutput === true, requiresText: definition.requiresText === true,
       ...(install.limitations ? { limitations: install.limitations } : {})
     })];
@@ -180,7 +182,8 @@ function normalizeRoutes(routes, { strict = true } = {}) {
       name: typeof name === 'string' && name.trim() ? name.trim() : entry.name,
       harnessId: entry.id,
       ...(model !== undefined ? { model } : {}),
-      ...(enabled !== undefined || !entry.dispatchable ? { enabled: entry.dispatchable && enabled !== false } : {})
+      ...(enabled !== undefined || !entry.dispatchable ? { enabled: entry.dispatchable && enabled !== false } : {}),
+      ...(route.transport === 'acp' && entry.acp ? { transport: 'acp' } : {})
     };
   }).filter(Boolean);
 }

@@ -124,12 +124,14 @@ pruefe("ein Werkzeug über mehrere Zeilen bleibt ein Ordner",
   JSON.stringify(f.bloecke.map((b) => [b.schicht, b.text])));
 
 // --- 3. Klappen: wachsender Ordner offen, fertiger zu --------------------
+// Die Vorlagen sind bewusst mehrzeilig: ein einzeiliger Block wird gar nicht erst
+// zum Ordner (siehe Abschnitt 5), also ließe sich an ihm nichts klappen.
 
-f = new KonsoleFormatierer().mal({ html: "TEXT<br/>&lt;think&gt;ein Gedanke", lebt: true });
+f = new KonsoleFormatierer().mal({ html: "TEXT<br/>&lt;think&gt;ein Gedanke<br/>und noch einer", lebt: true });
 pruefe("ein Denkordner im Lauf bleibt offen",
   f.blocks[0]?.offen === true && f.blocks[0]?.wachsend === true, JSON.stringify(f.blocks[0]));
 pruefe("ein fertiger Denkordner schliesst",
-  new KonsoleFormatierer().mal({ html: "TEXT<br/>&lt;think&gt;G1<br/><br/><br/>ANS", lebt: false })
+  new KonsoleFormatierer().mal({ html: "TEXT<br/>&lt;think&gt;G1<br/>G2<br/><br/><br/>ANS", lebt: false })
     .blocks[0]?.offen === false);
 pruefe("Antworten werden nie zugeklappt",
   f.bloecke.filter((b) => b.schicht === "antwort").every((b) => b.zusammenfaltbar === false),
@@ -137,12 +139,12 @@ pruefe("Antworten werden nie zugeklappt",
 // Der Wunsch des Nutzers steht über der Regel: wer einem wachsenden Faden zustimmt
 // oder ihn zudrückt, entscheidet — das bloße Melden eines offenen Ordners nicht.
 f = new KonsoleFormatierer().mal({
-  html: "TEXT<br/>&lt;think&gt;ein Gedanke", lebt: true, offen: { "denke:1": false }
+  html: "TEXT<br/>&lt;think&gt;ein Gedanke<br/>und noch einer", lebt: true, offen: { "denke:1": false }
 });
 pruefe("ein zugeknöpfter Wachsender bleibt zu",
   f.blocks[0]?.offen === false, JSON.stringify(f.blocks[0]));
 f = new KonsoleFormatierer().mal({
-  html: "TEXT<br/>&lt;think&gt;ein Gedanke", lebt: true, offen: { "denke:9": true }
+  html: "TEXT<br/>&lt;think&gt;ein Gedanke<br/>und noch einer", lebt: true, offen: { "denke:9": true }
 });
 pruefe("ein Wunsch für einen fremden Ordner schadet nicht",
   f.blocks[0]?.offen === true, JSON.stringify(f.blocks[0]));
@@ -162,8 +164,8 @@ pruefe("beide Zeilen bleiben sichtbar",
 
 // --- 5. Schluessel halten ueber Chunks ----------------------------------
 
-const EINS = "TEXT<br/>&lt;think&gt;G1";
-const ZWEI = "TEXT<br/>&lt;think&gt;G1 und mehr Text";
+const EINS = "TEXT<br/>&lt;think&gt;G1<br/>G2";
+const ZWEI = "TEXT<br/>&lt;think&gt;G1 und mehr Text<br/>G2";
 const erster = new KonsoleFormatierer().mal({ html: EINS, lebt: true });
 const zweiter = new KonsoleFormatierer().mal({ html: EINS, lebt: true });
 const dritter = new KonsoleFormatierer().mal({ html: ZWEI, lebt: true });
@@ -211,6 +213,102 @@ pruefe("Die Antwort klappt zuvor geöffnete Arbeit automatisch zu", live.blocks.
 live.mal({html:typed+'Antwort ist da',lebt:true,offen:choices});
 pruefe("Nach der Antwort lassen sich Bereiche wieder öffnen", live.blocks.every(b=>b.offen));
 pruefe("Historische Werkzeugköpfe werden als Werkzeug erkannt", zeileKlassifizieren("Werkzeug: shell") === "werkzeug");
+
+// --- 5. Einzeilige Blöcke sind keine Ordner ------------------------------
+// Ein Ordner mit dem Zähler "1 Zeile" ist eine Behauptung ohne Inhalt: das
+// Aufklappen zeigt genau die Zeile, die im Kopf ohnehin schon steht.
+
+const EINZEILIG_WERKZEUG = '<div data-console-layer="werkzeug">Werkzeug: run_commands</div>\n';
+const kurz = new KonsoleFormatierer().mal({ html: EINZEILIG_WERKZEUG, lebt: false });
+pruefe("ein einzeiliger Werkzeugblock ist kein Ordner",
+  kurz.bloecke.length === 1 && kurz.bloecke[0].zusammenfaltbar === false && kurz.blocks.length === 0,
+  JSON.stringify(kurz.bloecke.map((b) => [b.schicht, b.zusammenfaltbar])));
+pruefe("ein einzeiliger Block trägt keinen Zähler",
+  kurz.bloecke[0]?.zaehler === "", kurz.bloecke[0]?.zaehler);
+const kurzHtml = new KonsoleFormatierer().HTML({ html: EINZEILIG_WERKZEUG, lebt: false });
+pruefe("ein einzeiliger Block wird nicht als details gemalt",
+  !/<details/.test(kurzHtml) && /Werkzeug: run_commands/.test(kurzHtml), kurzHtml);
+pruefe("der einzeilige Block behält seine Schicht als Klasse",
+  /ko-einzeln/.test(kurzHtml) && /ko-werkzeug/.test(kurzHtml), kurzHtml);
+
+const kurzDenke = new KonsoleFormatierer().HTML({ html:
+  '<div data-console-layer="denke">[thinking] Nur ein Gedanke</div>\n', lebt: false });
+pruefe("ein einzeiliger Gedanke ist ebenso kein Ordner", !/<details/.test(kurzDenke), kurzDenke);
+
+const langDenke = new KonsoleFormatierer().HTML({ html:
+  '<div data-console-layer="denke">[thinking] Zeile eins\nZeile zwei</div>\n', lebt: false });
+pruefe("ab zwei Zeilen bleibt der Ordner",
+  /<details/.test(langDenke) && /2 Zeilen/.test(langDenke), langDenke);
+
+// --- 6. Die Ausgabe ist eine eigene Schicht ------------------------------
+// Vorher lag der Werkzeugaufruf mit seinem Ergebnis in einem Kasten; das Ergebnis
+// war vom Gedankengang nur am Titel zu unterscheiden. Jetzt hat es eine eigene
+// Schicht mit eigener Fläche.
+
+const AUSGABE = '<div data-console-layer="werkzeug">Werkzeug: run_commands</div>\n' +
+  '<div data-console-layer="ausgabe">pwd\n/tmp/projekt\ntotal 48</div>\n';
+const getrennt = new KonsoleFormatierer().mal({ html: AUSGABE, lebt: false });
+pruefe("die Ausgabe ist ein eigener Block",
+  getrennt.blocks.some((b) => b.schicht === "ausgabe"),
+  JSON.stringify(getrennt.blocks.map((b) => b.schicht)));
+pruefe("Aufruf und Ausgabe sind verschiedene Blöcke",
+  getrennt.bloecke.filter((b) => ["werkzeug", "ausgabe"].includes(b.schicht)).length === 2,
+  JSON.stringify(getrennt.bloecke.map((b) => b.schicht)));
+const ausgabeHtml = new KonsoleFormatierer().HTML({ html: AUSGABE, lebt: false });
+pruefe("die Ausgabe trägt ihren eigenen Titel",
+  /ko-art">Ausgabe</.test(ausgabeHtml), ausgabeHtml);
+pruefe("die Ausgabe zählt ihre Zeilen", /3 Zeilen/.test(ausgabeHtml), ausgabeHtml);
+pruefe("die Ausgabe wird vor dem Werkzeugaufruf nicht verschluckt",
+  ausgabeHtml.indexOf("ko-werkzeug") < ausgabeHtml.indexOf("ko-ausgabe"), ausgabeHtml);
+
+// --- 12. Blöcke einzeln: die Oberfläche malt nur, was sich geändert hat -----
+//
+// Vorher setzte jeder Chunk das ganze Feld neu. Gemessen an 37 echten Protokollen
+// (35.804 Blöcke): beim Anhängen bleibt jeder frühere Block Zeichen für Zeichen
+// gleich, nur das Ende wächst. Die Oberfläche darf frühere Knoten deshalb stehen
+// lassen — sonst stirbt bei jedem Chunk die Textauswahl, und ein Lauf mit 487
+// Chunks baut den DOM 487-mal auf.
+
+const GESETZT = "ANTWORT-EINS<br/><br/>" +
+  "ANTWORT-ZWEI<br/>" +
+  '<span style="color:#7fa3ad">[run_commands]</span> ls -la<br/>' +
+  "&#x23BF; total 496<br/><br/>" +
+  "Tokens: 4,090<br/>";
+
+const teile = new KonsoleFormatierer().abschnitte({ html: GESETZT, lebt: false });
+pruefe("abschnitte liefert je Block einen Eintrag",
+  teile.length === new KonsoleFormatierer().mal({ html: GESETZT, lebt: false }).bloecke.length,
+  `${teile.length} Einträge`);
+pruefe("abschnitte ergibt zusammengesetzt genau HTML()",
+  teile.map((t) => t.html).join("") === new KonsoleFormatierer().HTML({ html: GESETZT, lebt: false }));
+pruefe("jeder Abschnitt trägt seinen Schlüssel",
+  teile.every((t) => typeof t.schluessel === "string" && /^[a-z]+:\d+$/.test(t.schluessel)),
+  JSON.stringify(teile.map((t) => t.schluessel)));
+
+// Die eigentliche Zusage: anbauen ändert nur das Ende.
+const stufen = [
+  "ANTWORT-EINS<br/><br/>",
+  "ANTWORT-EINS<br/><br/>ANTWORT-ZWEI<br/>",
+  "ANTWORT-EINS<br/><br/>ANTWORT-ZWEI<br/><br/>ANTWORT-DREI<br/>"
+].map((s) => new KonsoleFormatierer().abschnitte({ html: s, lebt: false }).map((t) => t.html));
+pruefe("beim Anhängen bleibt der erste Block unverändert",
+  stufen[1][0] === stufen[0][0] && stufen[2][0] === stufen[0][0],
+  JSON.stringify(stufen.map((s) => s[0])));
+pruefe("und der zweite ebenso",
+  stufen[2][1] === stufen[1][1], JSON.stringify([stufen[1][1], stufen[2][1]]));
+pruefe("nur der letzte Block wächst",
+  stufen[1].length === 2 && stufen[2].length === 3,
+  JSON.stringify(stufen.map((s) => s.length)));
+
+// Gegenprobe: eine Antwort klappt die vorherige Arbeit zu. Das ist der eine Fall,
+// in dem sich ein früherer Block doch ändert — die Oberfläche muss ihn dann neu malen.
+// Zwei freie Zeilen, weil eine Denkregion erst danach endet (Claude schreibt keine
+// Schlussmarke).
+const waehrend = new KonsoleFormatierer().abschnitte({ html: "&lt;think&gt;G1<br/>G2<br/>", lebt: true });
+const danach = new KonsoleFormatierer().abschnitte({ html: "&lt;think&gt;G1<br/>G2<br/><br/><br/>ANTWORT<br/>", lebt: true });
+pruefe("der fertige Gedankenblock meldet sich als geändert",
+  waehrend[0].html !== danach[0].html && /open/.test(waehrend[0].html) && !/open/.test(danach[0].html),
+  `${waehrend[0].html.slice(0, 60)}  ->  ${danach[0].html.slice(0, 60)}`);
 
 const fehl = tests.filter((t) => !t.ok);
 console.log(`\n${tests.length - fehl.length} bestanden, ${fehl.length} fehlgeschlagen`);

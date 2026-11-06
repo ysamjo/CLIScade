@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0c10">
+  <meta name="theme-color" content="#0c0d10">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>CLIscade</title>
+  <!-- Erscheinungsbild vor dem ersten Zeichnen setzen. Ohne diesen Kopf blitzt
+       beim Laden kurz das andere auf, weil app.js erst am Ende laeuft. -->
+  <script>
+    (function () {
+      var wahl = null;
+      try { wahl = localStorage.getItem('cliscade_theme'); } catch (e) {}
+      if (wahl !== 'light' && wahl !== 'dark') {
+        wahl = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      document.documentElement.setAttribute('data-theme', wahl);
+    })();
+  </script>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=43">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -21,6 +33,9 @@
     <!-- MOBILE DRAWER BACKDROP -->
     <div id="mobile-drawer-overlay" class="mobile-drawer-overlay"></div>
 
+    <!-- Griff zum Ausklappen, wenn die Seitenleiste eingeklappt ist (nur Desktop) -->
+    <button id="sidebar-expand" class="icon-btn" title="Seitenleiste ausklappen" aria-label="Seitenleiste ausklappen" data-icon="chevron-right" hidden></button>
+
     <!-- SIDEBAR (PROJECTS & TASKS EXPLORER) -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
@@ -28,6 +43,7 @@
           <span class="logo-icon" data-icon="logo"></span>
           <span class="logo-text">CLIscade</span>
         </div>
+        <button id="sidebar-collapse" class="icon-btn" title="Seitenleiste einklappen" aria-label="Seitenleiste einklappen" data-icon="chevron-left"></button>
       </div>
 
       <!-- WORKSPACE INFO BAR -->
@@ -35,9 +51,6 @@
         <div class="workspace-pill-group">
           <div id="root-dir-display" class="workspace-root-badge" title="Root-Ordner in Einstellungen ändern">
             <span data-icon="folder"></span> <span id="root-dir-text">Developer</span>
-          </div>
-          <div id="root-agents-badge" class="workspace-agents-badge" title="Übergeordnete Richtlinien in Einstellungen öffnen">
-            <span id="root-agents-text">AGENTS.md (8.7 KB)</span>
           </div>
         </div>
         <button id="refresh-tree-btn" class="icon-btn" title="Projekte & Tasks neu laden" data-icon="refresh"></button>
@@ -59,63 +72,44 @@
         </div>
       </div>
 
-      <!-- SIDEBAR FOOTER: SETTINGS -->
+      <!-- SIDEBAR FOOTER: SETTINGS & ERSCHEINUNGSBILD -->
       <div class="sidebar-footer">
         <button id="sidebar-settings-btn" class="sidebar-settings-btn" title="Einstellungen öffnen (⌘,)">
           <span data-icon="settings"></span>
           <span>Einstellungen</span>
         </button>
+        <button id="theme-toggle" class="icon-btn theme-toggle" type="button" data-icon="moon"
+                aria-pressed="true" aria-label="Zu hellem Erscheinungsbild wechseln"
+                title="Erscheinungsbild: hell / dunkel (T)"></button>
       </div>
     </aside>
 
     <!-- MAIN STUDIO WORKSPACE -->
     <main class="main-content">
       <section id="tab-studio" class="tab-pane active">
-        <!-- Nur mobil: die Seitenleiste ist hier off-canvas, also braucht sie einen Griff. -->
+        <!-- Nur mobil: die Seitenleiste ist hier off-canvas, also braucht sie einen Griff.
+             Der Umschalter fürs Erscheinungsbild sitzt daneben — im off-canvas-Fuß
+             wäre er zwei Handgriffe entfernt. -->
         <div class="studio-bar">
           <button id="mobile-sidebar-toggle" class="btn-icon-mobile" title="Projekte anzeigen" data-icon="menu"></button>
+          <button class="icon-btn theme-toggle" type="button" data-icon="moon"
+                  aria-pressed="true" aria-label="Zu hellem Erscheinungsbild wechseln"
+                  title="Erscheinungsbild: hell / dunkel (T)"></button>
         </div>
 
         <!-- AUTO-ROUTE (KI-DISPATCH) -->
         <div id="dispatch-panel" class="studio-container">
-          <details id="project-memory" class="project-memory">
-            <summary><span data-icon="file" aria-hidden="true"></span><span>Projektgedächtnis</span><span id="memory-summary" role="status" aria-live="polite">Wird geprüft…</span></summary>
-            <div class="memory-details">
-              <p>Beads arbeitet automatisch. Eine feste Aufgabe ist optional; bei einem Fehler kannst du hier bewusst ohne Projektgedächtnis fortsetzen.</p>
-              <section id="memory-pane-0" class="memory-pane">
-                <h4 class="memory-pane-title">Konsole 1</h4>
-                <div class="run-pane-context">
-                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
-                  <span class="run-pane-backup-status"></span>
-                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
-                </div>
-                <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe für Konsole 1" hidden></select>
-                </label>
-              </section>
-              <section id="memory-pane-1" class="memory-pane" hidden>
-                <h4 class="memory-pane-title">Konsole 2</h4>
-                <div class="run-pane-context">
-                  <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
-                  <span class="run-pane-backup-status"></span>
-                  <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
-                </div>
-                <label class="memory-task-label" hidden>Optional: feste Aufgabe
-                  <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe für Konsole 2" hidden></select>
-                </label>
-              </section>
-            </div>
-          </details>
-          <!-- KONSOLEN: zwei Aufträge nebeneinander, je einer pro Feld -->
+          <!-- KONSOLEN: bis zu vier Aufträge im Raster, je einer pro Feld -->
           <div id="run-split" class="run-split">
             <div class="run-pane" id="run-pane-0">
               <div class="run-pane-head">
                 <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
                 <span class="run-pane-harness"></span>
                 <span class="run-pane-folder" hidden></span>
               </div>
               <div class="run-pane-body terminal-body">
-                <div class="terminal-placeholder composer-empty"><span data-icon="sparkles" aria-hidden="true"></span><strong>Platz für deine nächste Idee</strong><small>Projekt wählen, Aufgabe beschreiben und starten.</small></div>
+                <div class="terminal-placeholder composer-empty"><strong>Bereit für Aufgaben</strong><small>Projekt auswählen und Prompt eingeben.</small></div>
               </div>
               <div class="run-pane-attachment" hidden>
                 <img class="run-pane-image-preview" alt="Eingefügtes Bild">
@@ -123,7 +117,7 @@
               </div>
               <span class="run-pane-image-status" role="status" aria-live="polite"></span>
               <div class="run-pane-composer">
-                <textarea class="run-pane-input" rows="3" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
+                <textarea class="run-pane-input" rows="2" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
                 <div class="run-pane-toolbar">
                   <div class="run-pane-targets">
                     <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
@@ -146,11 +140,12 @@
             <div class="run-pane" id="run-pane-1" hidden>
               <div class="run-pane-head">
                 <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
                 <span class="run-pane-harness"></span>
                 <span class="run-pane-folder" hidden></span>
               </div>
               <div class="run-pane-body terminal-body">
-                <div class="terminal-placeholder composer-empty"><span data-icon="sparkles" aria-hidden="true"></span><strong>Platz für deine nächste Idee</strong><small>Projekt wählen, Aufgabe beschreiben und starten.</small></div>
+                <div class="terminal-placeholder composer-empty"><strong>Bereit für Aufgaben</strong><small>Projekt auswählen und Prompt eingeben.</small></div>
               </div>
               <div class="run-pane-attachment" hidden>
                 <img class="run-pane-image-preview" alt="Eingefügtes Bild">
@@ -158,7 +153,79 @@
               </div>
               <span class="run-pane-image-status" role="status" aria-live="polite"></span>
               <div class="run-pane-composer">
-                <textarea class="run-pane-input" rows="3" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
+                <textarea class="run-pane-input" rows="2" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
+                <div class="run-pane-toolbar">
+                  <div class="run-pane-targets">
+                    <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
+                  <option value="auto">Auto-Route</option>
+                  <option value="consensus">Konsens</option>
+                  <!-- Populated dynamically with available harnesses -->
+                </select>
+                  </div>
+                  <div class="run-pane-actions">
+                    <button type="button" class="btn-text run-pane-copy run-pane-tool" aria-label="Ausgabe kopieren" title="Ausgabe kopieren"><span data-icon="copy" aria-hidden="true"></span></button>
+                    <button type="button" class="btn-text btn-text-danger run-pane-cancel run-pane-tool" aria-label="Auftrag abbrechen" title="Nur diesen Auftrag abbrechen" hidden><span data-icon="x" aria-hidden="true"></span></button>
+                    <input class="run-pane-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="btn-text run-pane-image-select run-pane-tool" aria-label="Foto oder Bild auswählen" title="Foto oder Bild auswählen"><span data-icon="image" aria-hidden="true"></span></button>
+                <button type="button" class="btn-text run-pane-context-preview run-pane-tool" aria-label="Kontext ansehen" title="Kontext ansehen"><span data-icon="file" aria-hidden="true"></span></button>
+                <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="run-pane" id="run-pane-2" hidden>
+              <div class="run-pane-head">
+                <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
+                <span class="run-pane-harness"></span>
+                <span class="run-pane-folder" hidden></span>
+              </div>
+              <div class="run-pane-body terminal-body">
+                <div class="terminal-placeholder composer-empty"><strong>Bereit für Aufgaben</strong><small>Projekt auswählen und Prompt eingeben.</small></div>
+              </div>
+              <div class="run-pane-attachment" hidden>
+                <img class="run-pane-image-preview" alt="Eingefügtes Bild">
+                <button type="button" class="btn-text run-pane-image-remove">Bild entfernen</button>
+              </div>
+              <span class="run-pane-image-status" role="status" aria-live="polite"></span>
+              <div class="run-pane-composer">
+                <textarea class="run-pane-input" rows="2" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
+                <div class="run-pane-toolbar">
+                  <div class="run-pane-targets">
+                    <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
+                  <option value="auto">Auto-Route</option>
+                  <option value="consensus">Konsens</option>
+                  <!-- Populated dynamically with available harnesses -->
+                </select>
+                  </div>
+                  <div class="run-pane-actions">
+                    <button type="button" class="btn-text run-pane-copy run-pane-tool" aria-label="Ausgabe kopieren" title="Ausgabe kopieren"><span data-icon="copy" aria-hidden="true"></span></button>
+                    <button type="button" class="btn-text btn-text-danger run-pane-cancel run-pane-tool" aria-label="Auftrag abbrechen" title="Nur diesen Auftrag abbrechen" hidden><span data-icon="x" aria-hidden="true"></span></button>
+                    <input class="run-pane-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                <button type="button" class="btn-text run-pane-image-select run-pane-tool" aria-label="Foto oder Bild auswählen" title="Foto oder Bild auswählen"><span data-icon="image" aria-hidden="true"></span></button>
+                <button type="button" class="btn-text run-pane-context-preview run-pane-tool" aria-label="Kontext ansehen" title="Kontext ansehen"><span data-icon="file" aria-hidden="true"></span></button>
+                <button class="btn btn-primary run-pane-send" title="Auftrag in dieser Konsole starten" aria-label="Senden"><span data-icon="send"></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="run-pane" id="run-pane-3" hidden>
+              <div class="run-pane-head">
+                <div class="run-pane-heading"><select class="run-pane-target custom-select" aria-label="Projektordner" title="Projektordner auswählen"></select><span class="run-pane-title" hidden></span></div>
+                <button type="button" class="btn-text run-pane-close" aria-label="Konsole schließen" title="Konsole schließen"><span data-icon="close-pane" aria-hidden="true"></span></button>
+                <span class="run-pane-harness"></span>
+                <span class="run-pane-folder" hidden></span>
+              </div>
+              <div class="run-pane-body terminal-body">
+                <div class="terminal-placeholder composer-empty"><strong>Bereit für Aufgaben</strong><small>Projekt auswählen und Prompt eingeben.</small></div>
+              </div>
+              <div class="run-pane-attachment" hidden>
+                <img class="run-pane-image-preview" alt="Eingefügtes Bild">
+                <button type="button" class="btn-text run-pane-image-remove">Bild entfernen</button>
+              </div>
+              <span class="run-pane-image-status" role="status" aria-live="polite"></span>
+              <div class="run-pane-composer">
+                <textarea class="run-pane-input" rows="2" aria-label="Auftrag" placeholder="Was möchtest du erledigen?" title="Enter sendet · Umschalt+Enter: neue Zeile · ⌘V / Strg+V: Bild einfügen"></textarea>
                 <div class="run-pane-toolbar">
                   <div class="run-pane-targets">
                     <select class="run-pane-routing custom-select" title="Routing für diese Konsole — Standard Auto, umstellbar auf ein Harness">
@@ -225,6 +292,13 @@
             <div class="item-text">
               <span class="item-title">AGENTS.md Richtlinien</span>
               <span class="item-desc">Globale & Projekt-Regeln</span>
+            </div>
+          </button>
+          <button class="settings-nav-item" data-section="memory">
+            <span class="item-icon" data-icon="box"></span>
+            <div class="item-text">
+              <span class="item-title">Projektgedächtnis</span>
+              <span class="item-desc">Beads & Sicherungen</span>
             </div>
           </button>
           <button class="settings-nav-item" data-section="skills">
@@ -321,7 +395,7 @@
               </div>
             </div>
 
-            <div id="models-refresh-banner" class="settings-card hidden" style="padding:10px 14px; margin-bottom:12px; background:rgba(99,102,241,0.08); border-color:var(--accent);">
+            <div id="models-refresh-banner" class="settings-card hidden" style="padding:10px 14px; margin-bottom:12px; border-color:var(--accent);">
               <span id="models-refresh-text" style="font-size:12px; color:var(--text-main);"></span>
             </div>
 
@@ -399,7 +473,7 @@
             </div>
 
             <!-- Sync feedback banner -->
-            <div id="skills-sync-banner" class="hidden" style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:rgba(79,157,127,0.12); border:1px solid rgba(79,157,127,0.3); color:var(--success); font-size:12px; display:flex; align-items:center; justify-content:space-between;">
+            <div id="skills-sync-banner" class="banner-erfolg hidden">
               <span id="skills-sync-text">Skills erfolgreich synchronisiert!</span>
               <button id="close-skills-sync-banner-btn" style="background:transparent; border:none; color:inherit; cursor:pointer;">✕</button>
             </div>
@@ -498,7 +572,7 @@
             <div class="settings-card" id="omniroute-details-card">
               <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>OmniRoute Proxy & Kostenaufstellung (omniroute cost)</span>
-                <span id="omniroute-card-badge" class="order-badge" style="background:rgba(99,102,241,0.15); color:var(--accent);">Live CLI</span>
+                <span id="omniroute-card-badge" class="order-badge" style="background:var(--accent-light); color:var(--accent);">Live CLI</span>
               </h5>
               <div id="omniroute-providers-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
                 <!-- Populated dynamically -->
@@ -508,7 +582,7 @@
             <div class="settings-card" id="opencode-details-card">
               <h5 class="card-subtitle" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>OpenCode Telemetrie & Tokens (opencode stats --cost)</span>
-                <span id="opencode-card-badge" class="order-badge" style="background:rgba(79,157,127,0.15); color:var(--success);">Live CLI</span>
+                <span id="opencode-card-badge" class="order-badge" style="background:var(--success-soft-bg); color:var(--success);">Live CLI</span>
               </h5>
               <div id="opencode-models-list" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
                 <!-- Populated dynamically -->
@@ -701,6 +775,69 @@
               </div>
             </div>
           </div>
+
+          <!-- SECTION 9: PROJEKTGEDÄCHTNIS (BEADS) -->
+          <!-- Die Bedienung liegt hier und nicht im Arbeitsbereich: sie kostete
+               dort eine Zeile und sagte im Regelfall nur, dass alles läuft. -->
+          <div id="settings-sec-memory" class="settings-section">
+            <div class="settings-section-header">
+              <h4>Projektgedächtnis (Beads)</h4>
+              <p>Beads arbeitet in eingerichteten Projekten automatisch. Eine feste Aufgabe ist optional; bei einem Fehler kannst du hier bewusst ohne Projektgedächtnis fortsetzen. Je Konsole im Arbeitsbereich steht ein eigener Eintrag.</p>
+            </div>
+
+            <div class="settings-card">
+              <div class="memory-head">
+                <h5 class="card-subtitle">Kontext je Konsole</h5>
+                <span id="memory-summary" role="status" aria-live="polite">Wird geprüft…</span>
+              </div>
+              <div class="memory-details">
+                <section id="memory-pane-0" class="memory-pane">
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+                <section id="memory-pane-1" class="memory-pane" hidden>
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+                <section id="memory-pane-2" class="memory-pane" hidden>
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+                <section id="memory-pane-3" class="memory-pane" hidden>
+                  <h4 class="memory-pane-title"></h4>
+                  <div class="run-pane-context">
+                    <span class="run-pane-memory-status" role="status" aria-live="polite">Projektgedächtnis wird geprüft…</span>
+                    <span class="run-pane-backup-status"></span>
+                    <label class="run-pane-memory-recovery" hidden><input class="run-pane-without-beads" type="checkbox"> Ohne Beads fortsetzen</label>
+                  </div>
+                  <label class="memory-task-label" hidden>Optional: feste Aufgabe
+                    <select class="run-pane-beads custom-select" aria-label="Beads-Aufgabe" hidden></select>
+                  </label>
+                </section>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -885,6 +1022,15 @@
     <p id="context-preview-summary" role="status"></p>
     <pre id="context-preview-content"></pre>
     <button type="button" id="context-preview-close" class="btn">Schließen</button>
+  </dialog>
+  <dialog id="pane-close-dialog" aria-labelledby="pane-close-title">
+    <h2 id="pane-close-title">Konsole schließen</h2>
+    <p>Der Auftrag läuft noch. Soll er weiterlaufen oder abgebrochen werden?</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="pane-close-dismiss">Nicht schließen</button>
+      <button type="button" class="btn" id="pane-close-keep">Im Hintergrund weiterlaufen</button>
+      <button type="button" class="btn btn-primary btn-text-danger" id="pane-close-abort">Auftrag abbrechen</button>
+    </div>
   </dialog>
   <script src="image-composer.js"></script>
   <script src="app.js"></script>

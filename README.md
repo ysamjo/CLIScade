@@ -15,6 +15,32 @@ HOST=127.0.0.1 npm start
 
 Öffne anschließend [localhost:3000](http://localhost:3000), wähle den Workspace und aktiviere die gewünschten Harnesses in den Einstellungen.
 
+## ACP v1 (optional, auch in der macOS-App)
+
+CLIscade kann einzelne Routen optional über das Agent Client Protocol (ACP v1, JSON-RPC über stdio) statt als Headless-Einmalaufruf ausführen. Das bestehende Task-Board, SQLite, Beads-Projektkontext, automatische Kaskade, Abbruch und die Swift/WebKit-Desktop-App bleiben erhalten. ACP benötigt keinen zusätzlichen Port.
+
+In **Einstellungen → Harnesses** bei einer unterstützten Route das Protokoll **ACP v1** wählen und speichern. Nur diese Route wird umgestellt; alle anderen bleiben Headless. Der Protokollwechsel gilt auch für Modelltests dieser Route. Der Runner nutzt eine feste Allowlist; in der Konfiguration sind keine beliebigen Kommandos ausführbar.
+
+| Harness | ACP-Aufruf | Installation/Voraussetzung |
+| --- | --- | --- |
+| OpenCode | opencode acp | Aktuelle OpenCode-CLI installieren und authentifizieren |
+| Kiro | kiro-cli acp | Aktuelle Kiro-CLI installieren und authentifizieren |
+| Claude Code | claude-agent-acp | Separaten ACP-Adapter @agentclientprotocol/claude-agent-acp installieren und Claude-Zugang einrichten |
+| Codex | codex-acp | Separaten ACP-Adapter @agentclientprotocol/codex-acp installieren und Codex-Zugang einrichten |
+
+Die betreffenden Programme müssen im **PATH des laufenden Servers** vorhanden sein, nicht nur in deinem Terminal. Bei fehlendem ACP-Executable fällt die Route vor dem ersten Prompt sichtbar auf den bestehenden Headless-Adapter zurück. Bei Protokoll-, Auth- oder Ausführungsfehlern findet kein automatischer zweiter Aufruf desselben Agenten statt: Der normale CLIscade-Router kann anschließend zur nächsten Route wechseln.
+
+**Grenzen der ersten ACP-Stufe:**
+
+- Der Client implementiert ACP v1 über stdio (keine v2-Draft-Funktionen). Unterstützt werden Initialisierung, neue Sessions, Capability-geprüftes Resume/Load, Prompt-Streaming, Tool-Events, Abbruch und Timeouts. Persistiert wird die ACP-Session-ID mit Transportart pro Task/Attempt. Eine Headless-Session wird nie als ACP-Session fortgesetzt.
+- Die App unterstützt **noch keine interaktiven ACP-Berechtigungsdialoge**, kein vom Agenten beim Client angefordertes Terminal und keine Client-Dateisystemmethoden. ACP-Permission-Requests werden mit cancelled beantwortet und als Fehler sichtbar; es gibt keine automatische Vollfreigabe. ACP ist hier zunächst ein alternativer, kontrollierter Runner und noch kein vollständiger TUI-Ersatz.
+- Bei ACP muss die Modellauswahl vorerst **Standard** sein. Eine explizite Modell-ID wird statt einer stillschweigenden Fehlauswahl abgelehnt. Die ACL/Berechtigungen werden weiterhin vom Anbieter kontrolliert.
+- Resume funktioniert nur, wenn der Anbieter sessionCapabilities.resume oder loadSession unterstützt. Bei fehlender Session startet ein neuer Thread mit dem von CLIscade ohnehin aufgebauten Task-/Beads-/Git-Kontext. Ein erfolgreicher Agent-Text ist weiterhin kein unabhängig bestätigter Testbeleg.
+- Der ACP-Client bleibt zunächst pro Task ein eigener Subprozess. Lang laufende, interaktive Agentenprozesse und UI-Permission-Requests sind ein separater Ausbau.
+- Ohne installierten/verifizierten CLI-Adapter sind die Vertragstests Mock-Tests; Live-Tests mit authentifizierten Anbieteraccounts bleiben notwendig.
+
+Protokoll: https://agentclientprotocol.com/protocol/v1/overview
+
 ## Funktionen
 
 - Priorisierte Harness-Kaskade mit automatischem Fallback und Kontextübergabe.
@@ -23,12 +49,16 @@ HOST=127.0.0.1 npm start
 - Optionales Beads-Projektgedächtnis mit relevanten Erkenntnissen, Prüfbelegen und geprüften Sicherungen.
 - Browser-Oberfläche, abgesicherter LAN-Zugang, Zeitpläne und Telegram-Steuerung.
 - Die Seitenleiste merkt sich eingeklappte Ordner und den Filter für Ordner ohne Aufgaben; AGENTS-Marken öffnen den Projektregel-Editor. Archiv-Icons erscheinen am Desktop bei Hover oder Tastaturfokus und bleiben auf Touch-Geräten sichtbar.
-- Moderne dunkle Oberfläche mit abgestuften Flächen, klarer Schrift, ruhigem Akzent und zusammenhängenden Eingabekarten; Desktop und Mobilansicht bleiben bedienbar.
-- Beads arbeitet in eingerichteten Projekten automatisch. Status, optionale Aufgabenbindung und bewusste Fehlerausnahme stehen ausschließlich im aufklappbaren Bereich **Projektgedächtnis** oberhalb der Konsolen. Die Eingabe braucht keine Beads-Auswahl.
+- Nüchterne, dichte Oberfläche in **zwei Erscheinungsbildern**: dunkel und hell aus derselben Palette. Ohne eigene Wahl folgt sie dem System, der Umschalter im Seitenleisten-Fuß (am Telefon in der Kopfleiste) merkt die Entscheidung, `T` wechselt ebenfalls. Farbe steht ausschließlich in den beiden Variablenblöcken von `public/style.css` — `test/theme.test.js` hält das fest. Die Dichte ist Absicht: 228 px Seitenleiste, 20 px Projektzeile, 33 px Aufgabenzeile, 32 px Konsolenkopf, 36 px Eingabefeld (zwei Zeilen, wächst beim Tippen), 26 px Werkzeugknöpfe.
+- Enge Zeilen statt Luft: die Seitenleiste ist 228 px breit und zeigt damit deutlich mehr Ordner und Aufträge gleichzeitig; auf Touch-Geräten bleiben Knöpfe und Eingabe groß genug. Die Zahlen hält `test/dichte.test.js` fest.
+- Beads arbeitet in eingerichteten Projekten automatisch. Status, optionale Aufgabenbindung und bewusste Fehlerausnahme stehen ausschließlich im Einstellungsbereich **Projektgedächtnis**, je Konsole ein Eintrag. Der Arbeitsbereich trägt dafür keine Leiste; die Eingabe braucht keine Beads-Auswahl.
 - Zu Beginn eine breite Konsole; erst ein zweiter geöffneter Auftrag oder neuer Task zeigt die zweite Konsole. Der auswählbare Projektordner ist der Konsolentitel, der Auftrag erscheint als Unterzeile.
 - Task-Zeilen zeigen lokale Hersteller-Icons für alle 13 CLIs und daneben das Modell; der CLI-Name bleibt als Tooltip und Alternativtext erhalten.
 - Abgeschlossene, fehlgeschlagene, abgebrochene und unterbrochene Tasks zeigen beim Hover die Archivaktion. Laufende und wartende Aufträge bleiben davon ausgenommen.
 - Reasoning und Werkzeugausgaben bleiben während der Arbeit aufklappbar sichtbar und klappen beim Erscheinen der Antwort automatisch zu; anschließend lassen sie sich wieder öffnen. Aufgeklappt entfällt die doppelte Kopfzeile; ein kleiner Pfeil bleibt zum Zuklappen. Mehrzeilige strukturierte Ereignisse bleiben vollständig im passenden Bereich.
+- Vier Leseschichten statt einer Textwüste: die **Antwort** ist Fließtext, der **Gedankengang** tritt gedämpft und kursiv zurück, der **Werkzeugaufruf** ist eine leise Zeile, und die **Ausgabe** bekommt eine eigene Fläche mit linker Kante und eigenem Grund — man sieht auf einen Blick, was der Agent gedacht hat und was tatsächlich passiert ist. Ein Block mit nur einer Zeile wird gar nicht erst eingeklappt: das Aufklappen zeigte genau die Zeile, die im Kopf schon steht.
+- Erkennt ein Lauf eine **Rückfrage** mit Auswahlmöglichkeiten, steht sie als eigener Block mit anklickbaren Optionen samt Beschreibung da. Ein Klick übernimmt die vollständige Antwort (Frage + Option) in das Eingabefeld des Feldes; Enter schickt sie als Fortsetzung derselben Sitzung. Läufe sind headless — eine Antwort kann nicht in den laufenden Prozess zurück, deshalb dieser Weg statt eines Rückkanals.
+- Die Konsole verhält sich wie eine Konsole: **solange der Prozess läuft, blinkt unten der Cursor**; das Ende trägt eine **Schlusszeile** mit Rückgabewert und Dauer (`Code 0 · 4,2 s`, bei Fehlschlag mit Grund); und wer während des Laufs hochscrollt, bekommt unten rechts eine **Sprungmarke ans Ende**, statt ziehen zu müssen. Der Verlauf wird dabei **nur dort neu gemalt, wo er sich ändert** — eine Textauswahl im Protokoll überlebt den nächsten Ausgabeschub.
 - Mehrzeilige Auftragseingabe über die ganze Konsolenbreite; Kopieren, Abbrechen, Bildauswahl und Kontextvorschau unten als Icons mit Tooltip und Tastaturbedienung.
 
 
@@ -100,6 +130,12 @@ node test/ui-smoke.mjs           # Oberfläche in jsdom
 
 Die neuen CLI-Vertragstests (`test/runtime/new-clis.test.js`) prüfen Argumente, Ereignisse und Fehler mit echten Stub-Kindprozessen. `test/new_clis_server.test.js` prüft die fünf Modell-Endpunkte, Erkennung, Konfigurationspersistenz und die vollständige Quota-Kaskade einschließlich Regel-/Auftragskontext; sein Server verwendet einen freien Port.
 
+`test/theme.test.js` liest `public/style.css` als Text und hält die Erscheinungsbilder zusammen: beide `:root`-Blöcke tragen denselben Variablensatz, außerhalb dieser Blöcke steht kein Farbliteral, und `index.html` verdrahtet `data-theme`, den Umschalter, `theme-color` und den Cache-Buster. Der Abschnitt „Erscheinungsbild: hell und dunkel" in `test/ui-smoke.mjs` prüft das Umschalten in jsdom.
+
+`test/dichte.test.js` macht dasselbe für die Dichte: es sammelt alle Regeln zu einem Selektoren in Quellreihenfolge — der letzte Treffer außerhalb einer Medienabfrage ist der wirksame — und hält Obergrenzen für Seitenleiste, Zeilen, Konsolenkopf, Eingabefeld und Werkzeugknöpfe fest. Zwei Ausnahmen sind ausdrücklich geprüft: das Eingabefeld bleibt am Telefon bei 16 px Schrift (sonst zoomt iOS hinein) und der Plus-Knopf bei 24 px Höhe (sonst ist er mit dem Finger nicht zu treffen).
+
+`test/runtime/events.test.js` prüft den Ereignis-Trichter: kein Adapter darf ein Objekt als Text durchreichen (sonst steht in der Konsole „[object Object]“), die Optionen einer Auswahlabfrage kommen immer als Liste aus `{label, description}` an, und ein Wagenrücklauf vor dem Umbruch verschwindet. `test/konsole_schichten.test.js` fährt die 58 Behauptungen der Leseschichten ohne Browser — darunter, dass ein einzeiliger Block kein Ordner wird, dass die Ausgabe eine eigene Schicht neben dem Werkzeugaufruf bildet, und dass beim Anhängen nur der letzte Block wächst (darauf ruht das teilweise Neuzeichnen). `test/new_clis_server.test.js` belegt mit echten Kindprozessen, dass der Server Aufruf und Ausgabe in getrennte Schichten legt und eine Rückfrage als anklickbare Karte malt; `test/ui-smoke.mjs` klickt eine Option an und prüft, dass der Auftragstext im Eingabefeld landet, ohne den Lauf zu starten — und hält dort fest, dass ein früherer Block beim nächsten Chunk **denselben DOM-Knoten** behält.
+
 Die Kettentests starten eigene Server auf 3911 und 3912 mit Wegwerf-`HOME` und Stub-CLIs. Sie berühren den Nutzer-Server auf Port 3000 nicht. Für eine manuelle Browser-Prüfung einen eigenen Server auf einem anderen Port und mit eigenem `HOME` starten. Änderungen an `server.js` oder `runtime/` werden erst nach dessen Neustart wirksam; Änderungen in `public/` nach einem Reload.
 
 ## Grenzen
@@ -158,6 +194,14 @@ Das Skills-Inventar (`GET /api/skills`) liest nur. Verlinken geschieht ausdrück
 In die Auftragseingabe klicken und mit **⌘V** (Mac) oder **Strg+V** ein Bild einsetzen. Jede Konsole zeigt eine eigene Vorschau mit „Bild entfernen“. Unterstützt werden PNG, JPEG, GIF und WebP bis 10 MB. Erst beim Senden wird das Bild lokal hochgeladen und für den Agenten in den gewählten Projektordner kopiert. Ohne Text lautet der Auftrag „Analysiere das beigefügte Bild.“ Bei Übertragungsfehlern bleiben Bild und Text erhalten.
 
 Die native Mac-App wandelt auch TIFF-Screenshots aus der Zwischenablage in PNG um. Bauen: `npm run build:mac`; installieren: `npm run install:mac`. Node.js ab 22.13 und Python müssen lokal verfügbar sein. Lokale Beads-Daten werden nicht in das App-Bundle aufgenommen.
+
+Das Bündel enthält eine **eingefrorene Kopie** von `public/` und `server.js` (`Contents/Resources/app`, dorthin kopiert per `rsync`). Die App liest ausschließlich daraus. Änderungen an der Oberfläche erscheinen in der installierten App deshalb erst nach `npm run install:mac` — ein Reload genügt nicht, und `build/` ist von Git ausgenommen, sodass nichts von selbst nachzieht. Nachprüfen lässt sich der Stand der installierten App so:
+
+```bash
+grep -oE 'style.css\?v=[0-9]+' /Applications/CLIScade.app/Contents/Resources/app/public/index.html
+```
+
+Das Fenster folgt dem Erscheinungsbild der Oberfläche: ohne eigene Wahl dem System, danach der Wahl aus dem Umschalter. Die Oberfläche meldet sie über eine WebKit-Brücke. Ein festes dunkles Fenster ist der klassische Grund, warum der Hellmodus nie zu sehen ist — `window.appearance` legt auch `prefers-color-scheme` im WebView fest. Nach einem Neubau die App mit ⌘Q beenden und neu starten; das Schließen des Fensters blendet sie nur aus, die alte Seite bleibt dann stehen.
 
 ### Nutzerkonfiguration und portable Installation
 

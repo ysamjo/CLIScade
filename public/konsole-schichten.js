@@ -77,7 +77,7 @@ function inZeilen(html) {
   const waege = (text) =>
     (text.match(BLOCK_ZAEHLEN) || []).length - (text.match(BLOCK_ZU) || []).length;
   const nimmBlock = (inhalt) => {
-    const layer = inhalt.match(/^<div data-console-layer="(denke|werkzeug)">/);
+    const layer = inhalt.match(/^<div data-console-layer="(denke|werkzeug|ausgabe)">/);
     zeilen.push({ schicht: layer ? layer[1] : "block", typed: Boolean(layer), html: inhalt, text: textLesen(inhalt) });
   };
 
@@ -193,6 +193,9 @@ function kürzen(text, laenge) {
 const ART = {
   denke: { titel: "Gedankengang", ordner: true },
   werkzeug: { titel: "Werkzeug", ordner: true },
+  // Die Ausgabe des Werkzeugs: eigener Kasten, eigene Fläche. Vorher hing sie im
+  // Werkzeugkasten und war vom Gedankengang nur am Titel zu unterscheiden.
+  ausgabe: { titel: "Ausgabe", ordner: true },
   notiz: { titel: "Randnotiz", ordner: true },
   antwort: { titel: "", ordner: false },
   block: { titel: "", ordner: false }
@@ -227,7 +230,7 @@ class KonsoleFormatierer {
     this.bloecke = parsed.map((block, idx) => {
       const schluessel = `${block.schicht}:${idx}`;
       const art = ART[block.schicht];
-      const process = block.schicht === "denke" || block.schicht === "werkzeug";
+      const process = block.schicht === "denke" || block.schicht === "werkzeug" || block.schicht === "ausgabe";
       const erledigt = process && (!lebt || parsed.slice(idx + 1).some(next => next.schicht === "antwort"));
       const wachsend = process && !erledigt;
       const autoClose = erledigt && previous.get(schluessel)?.erledigt === false;
@@ -235,42 +238,65 @@ class KonsoleFormatierer {
       const zeilenHtml = block.zeilen.filter((z) => z.html && z.html.trim()).map((z) => z.html);
       const lineCount = block.zeilen.reduce((count, line) => count + (line.typed
         ? line.html.split(UMBRUCH).filter(part => textLesen(part)).length : (line.html.trim() ? 1 : 0)), 0);
+      // Ein Ordner mit dem Zähler "1 Zeile" behauptet etwas, das er nicht hat: das
+      // Aufklappen zeigt genau die Zeile, die im Kopf schon steht. Einzeiliges bleibt
+      // deshalb inline stehen und trägt keinen Zähler.
+      const faltbar = art.ordner && lineCount > 1;
       return {
         idx,
         schicht: block.schicht,
         schluessel,
         wachsend,
         erledigt,
-        zusammenfaltbar: art.ordner,
-        offen: art.ordner ? (autoClose ? false : (wunsch(schluessel) ?? wachsend)) : true,
-        gezaehlt: art.ordner,
+        zusammenfaltbar: faltbar,
+        offen: faltbar ? (autoClose ? false : (wunsch(schluessel) ?? wachsend)) : true,
+        gezaehlt: faltbar,
         zeilen: zeilenHtml,
         text: block.text,
         titel: art.titel,
-        zaehler: art.ordner ? `${lineCount} ${lineCount === 1 ? "Zeile" : "Zeilen"}` : "",
-        kurz: art.ordner ? kürzen(block.text.replace(DENKE_KOPF, "").replace(DENKE_MARKER, "").replace(/^\[[a-z_]+\]\s*/, "").trim(), 90) : ""
+        zaehler: faltbar ? `${lineCount} ${lineCount === 1 ? "Zeile" : "Zeilen"}` : "",
+        kurz: faltbar ? kürzen(block.text.replace(DENKE_KOPF, "").replace(DENKE_MARKER, "").replace(/^\[[a-z_]+\]\s*/, "").trim(), 90) : ""
       };
     });
     this.blocks = this.bloecke.filter((b) => b.zusammenfaltbar);
     return this;
   }
 
+  // Die Blöcke einzeln statt als ein langer Faden. Die Oberfläche vergleicht sie mit
+  // dem letzten Stand und malt nur ab dem ersten geänderten Block — vorher baute jeder
+  // Chunk das ganze Feld neu, und ein Lauf hat bis zu 487 davon. Gemessen an 37 echten
+  // Protokollen (35.804 Blöcke): beim Anhängen bleibt jeder frühere Block Zeichen für
+  // Zeichen gleich, der Vergleich trifft also fast immer erst am Ende daneben.
+  abschnitte(optionen) {
+    this.mal(optionen);
+    return this.bloecke.map((block) => ({ schluessel: block.schluessel, html: maleBlock(block) }));
+  }
+
   // HTML für die Konsole. Zugeklappte Ordner tragen den Schluessel als Datenwert,
   // damit die Oberflaeche den Zustand des Nutzers ueber die naechsten Chunks halten kann.
   HTML(optionen) {
-    this.mal(optionen);
-    return this.bloecke.map((block) => {
-      if (block.schicht === "block") return block.zeilen[0] || "";
-      const inhalt = block.zeilen.map((z) => `<div class="ko-zeile">${z}</div>`).join("");
-      if (!block.zusammenfaltbar) return `<div class="ko-antwort">${inhalt}</div>`;
-      return `<details class="ko-block ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}"` +
-        ` data-schluessel="${block.schluessel}"${block.offen ? " open" : ""}>` +
-        `<summary class="ko-kopf" aria-label="${block.titel} ein- oder ausklappen" title="${block.titel} ein- oder ausklappen"><span class="ko-art">${block.titel}</span>` +
-        `<span class="ko-zaehler">${block.zaehler}</span>` +
-        `<span class="ko-kurztitel">${escapeText(block.kurz)}</span></summary>` +
-        `<div class="ko-inhalt">${inhalt}</div></details>`;
-    }).join("");
+    return this.abschnitte(optionen).map((abschnitt) => abschnitt.html).join("");
   }
+}
+
+// Ein Block als HTML. `block` ist die rohe Zutat des Servers und wird nicht angefasst.
+function maleBlock(block) {
+  if (block.schicht === "block") return block.zeilen[0] || "";
+  const inhalt = block.zeilen.map((z) => `<div class="ko-zeile">${z}</div>`).join("");
+  if (!block.zusammenfaltbar) {
+    // Die Antwort ist Fließtext. Alles andere — ein einzelner Werkzeugaufruf, eine
+    // einzeilige Ausgabe, ein einzelner Gedanke — behält seine Schicht als Klasse,
+    // damit die Fläche stimmt, ohne einen Ordner aufzumachen.
+    return block.schicht === "antwort"
+      ? `<div class="ko-antwort">${inhalt}</div>`
+      : `<div class="ko-einzeln ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}">${inhalt}</div>`;
+  }
+  return `<details class="ko-block ko-${block.schicht}${block.wachsend ? " ko-wachsend" : ""}"` +
+    ` data-schluessel="${block.schluessel}"${block.offen ? " open" : ""}>` +
+    `<summary class="ko-kopf" aria-label="${block.titel} ein- oder ausklappen" title="${block.titel} ein- oder ausklappen"><span class="ko-art">${block.titel}</span>` +
+    `<span class="ko-zaehler">${block.zaehler}</span>` +
+    `<span class="ko-kurztitel">${escapeText(block.kurz)}</span></summary>` +
+    `<div class="ko-inhalt">${inhalt}</div></details>`;
 }
 
 function escapeText(text) {

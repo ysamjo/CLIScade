@@ -8,6 +8,13 @@ test('Registry enthält genau die bekannten Harnesses, alle dispatchbar', () => 
   assert.ok(Object.values(HARNESS_REGISTRY).every((entry) => entry.dispatchable && entry.modelTest));
 });
 
+test('Kein Harness beansprucht ein doppeltes oder fremdes Executable', () => {
+  const commands = Object.values(HARNESS_REGISTRY).flatMap((entry) => entry.commands);
+  assert.equal(new Set(commands).size, commands.length, 'Executable-Namen müssen eindeutig sein');
+  // `agent` gehört der Grok-CLI und steht im PATH vor Cursor; Cursor installiert ausschließlich `cursor-agent`.
+  assert.deepEqual(HARNESS_REGISTRY.cursor.commands, ['cursor-agent']);
+});
+
 test('Konfigurationsrouten verwenden feste IDs und ignorieren frei gesetzte Executables', () => {
   assert.equal(resolveHarness({ command: 'codex' }).id, 'codex');
   assert.equal(resolveHarness({ harnessId: 'codex', command: 'evil' }).commands[0], 'codex');

@@ -30,20 +30,95 @@ function saveShowTasklessFolders() {
   } catch {}
 }
 
+// --- ERSCHEINUNGSBILD (HELL / DUNKEL) -------------------------------------
+// Ein Attribut am Wurzelelement, ein gemerkter Wert, zwei Umschalter. Der
+// Inline-Kopf in index.html setzt das Attribut schon vor dem ersten Zeichnen;
+// hier zieht nur der Umschalter nach und der Wert wird gemerkt.
+const STORAGE_KEY_THEME = 'cliscade_theme';
+const THEME_FARBEN = { dark: '#0c0d10', light: '#f7f8fa' };
+
+function systemErscheinungsbild() {
+  try {
+    if (typeof window.matchMedia === 'function') {
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+  } catch {}
+  return 'dark';
+}
+
+// Ohne gemerkte Wahl folgt die Oberfläche dem System — der Nutzer hat nichts
+// entschieden, also entscheidet das Betriebssystem.
+function leseErscheinungsbild() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_THEME);
+    if (raw === 'light' || raw === 'dark') return raw;
+  } catch {}
+  return systemErscheinungsbild();
+}
+
+function gemerktesErscheinungsbild() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_THEME);
+    if (raw === 'light' || raw === 'dark') return raw;
+  } catch {}
+  return null;
+}
+
+// Die Mac-App hält Fensterrahmen und Titelleiste nach: sie erzwang früher dauerhaft
+// Dunkel und legte damit auch prefers-color-scheme im WebView fest — der Hellmodus
+// war nie zu sehen. Jetzt meldet die Oberfläche ihre Wahl über die WebKit-Brücke,
+// sofern es sie gibt. Im Browser fehlt sie; dann bleibt der Aufruf folgenlos.
+function meldeErscheinungsbild(theme) {
+  const bruecke = window.webkit && window.webkit.messageHandlers
+    && window.webkit.messageHandlers.erscheinungsbild;
+  if (!bruecke || typeof bruecke.postMessage !== 'function') return;
+  try {
+    bruecke.postMessage({ theme: theme, folgtSystem: gemerktesErscheinungsbild() === null });
+  } catch {}
+}
+
+function setzeErscheinungsbild(wahl, merken = true) {
+  const theme = wahl === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  if (merken) {
+    try { localStorage.setItem(STORAGE_KEY_THEME, theme); } catch {}
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_FARBEN[theme]);
+  document.querySelectorAll('.theme-toggle').forEach((knopf) => {
+    knopf.setAttribute('data-icon', theme === 'dark' ? 'sun' : 'moon');
+    knopf.setAttribute('aria-pressed', String(theme === 'dark'));
+    knopf.setAttribute('aria-label', theme === 'dark'
+      ? 'Zu hellem Erscheinungsbild wechseln'
+      : 'Zu dunklem Erscheinungsbild wechseln');
+    knopf.innerHTML = '';
+    delete knopf.dataset.iconHydrated;
+  });
+  hydrateIcons();
+  meldeErscheinungsbild(theme);
+  return theme;
+}
+
+function wechsleErscheinungsbild() {
+  return setzeErscheinungsbild(
+    document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'
+  );
+}
+
 let state = {
   rootDirectory: '',
   projects: [],
   activeProject: '',
   tasks: [],
-  // Zwei Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
+  // Bis zu vier Konsolenfelder: pro Auftrag ein Stream, ein Feld. `panes` hält die Task-IDs.
   streams: new Map(),
-  panes: [null, null],
+  panes: [null, null, null, null],
   // Das Feld, in dem der Nutzer zuletzt Maus oder Tastatur benutzt hat. Dorthin zieht
   // der nächste Auftrag — nicht in das, in dem er gerade liest.
   letztesFeld: null,
   // Jeder Composer gehört zu einem Feld: Zielordner und das zuletzt angefasste Feld.
-  paneTarget: [null, null],
-  paneRouting: ['auto', 'auto'],
+  paneTarget: [null, null, null, null],
+  paneRouting: ['auto', 'auto', 'auto', 'auto'],
   // Das Protokoll eines fortgesetzten Auftrags: der neue Lauf zieht zurück in sein Feld.
   fortsetzung: [],
   // Auftrag => Feld, in dessen Ordner er wartet. Er bekommt kein eigenes Feld.
@@ -58,6 +133,12 @@ let state = {
   collapsedProjects: loadCollapsedProjects(),
   // Gemerkte Sichtbarkeit von Ordnern ohne Aufgaben.
   showTasklessFolders: loadShowTasklessFolders(),
+  // Seitenleiste: ab zwei Konsolen eingeklappt. `sidebarMode` merkt den Modus, damit
+  // die Automatik nur beim Wechsel zwischen „einzeln" und „mehrspaltig" greift.
+  sidebarCollapsed: false,
+  sidebarMode: null,
+  // Das Feld, dessen Schließen gerade im Dialog zur Wahl steht.
+  pendingCloseSlot: null,
   // Archivierte Aufträge sind eingepackt, nicht gelöscht — erst der Schalter zeigt sie.
   showArchived: false,
   activeAgentsTab: 'rootDev',
@@ -78,17 +159,16 @@ const dom = {
   // Root Directory & Tree
   rootDirDisplay: document.getElementById('root-dir-display'),
   rootDirText: document.getElementById('root-dir-text'),
-  rootAgentsBadge: document.getElementById('root-agents-badge'),
-  rootAgentsText: document.getElementById('root-agents-text'),
   refreshTreeBtn: document.getElementById('refresh-tree-btn'),
   projectTree: document.getElementById('project-tree'),
   projectsCountBadge: document.getElementById('projects-count-badge'),
 
   // Studio & Konsolen (Split-View, zwei Felder — je eines zum Tippen)
-  runPanes: [0, 1].map((i) => {
+  runPanes: [0, 1, 2, 3].map((i) => {
     const root = document.getElementById(`run-pane-${i}`);
     if (!root) return null;
     const memoryPanel = document.getElementById(`memory-pane-${i}`);
+    if (!memoryPanel) return null;
     return {
       root, memoryPanel,
       title: root.querySelector('.run-pane-title'),
@@ -97,6 +177,7 @@ const dom = {
       body: root.querySelector('.run-pane-body'),
       copy: root.querySelector('.run-pane-copy'),
       cancel: root.querySelector('.run-pane-cancel'),
+      close: root.querySelector('.run-pane-close'),
       target: root.querySelector('.run-pane-target'),
       routing: root.querySelector('.run-pane-routing'),
       beads: memoryPanel.querySelector('.run-pane-beads'),
@@ -105,9 +186,17 @@ const dom = {
       memoryRecovery: memoryPanel.querySelector('.run-pane-memory-recovery'),
       withoutBeads: memoryPanel.querySelector('.run-pane-without-beads'),
       input: root.querySelector('.run-pane-input'),
+      composer: root.querySelector('.run-pane-composer'),
       send: root.querySelector('.run-pane-send')
     };
   }),
+  runSplit: document.getElementById('run-split'),
+  sidebarCollapse: document.getElementById('sidebar-collapse'),
+  sidebarExpand: document.getElementById('sidebar-expand'),
+  paneCloseDialog: document.getElementById('pane-close-dialog'),
+  paneCloseDismiss: document.getElementById('pane-close-dismiss'),
+  paneCloseKeep: document.getElementById('pane-close-keep'),
+  paneCloseAbort: document.getElementById('pane-close-abort'),
   archiveFilterBtn: document.getElementById('archive-filter-btn'),
   archiveCountText: document.getElementById('archive-count-text'),
 
@@ -256,6 +345,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   iconObserver.observe(document.body, { childList: true, subtree: true });
+  // Erscheinungsbild anwenden, ohne es zu merken: erst eine bewusste Wahl des
+  // Nutzers wird gespeichert, bis dahin folgt die Oberfläche dem System.
+  setzeErscheinungsbild(leseErscheinungsbild(), false);
+  // Solange nichts gemerkt ist, zieht ein Wechsel des Systemmodus mit.
+  if (typeof window.matchMedia === 'function') {
+    try {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (!gemerktesErscheinungsbild()) setzeErscheinungsbild(systemErscheinungsbild(), false);
+      });
+    } catch {}
+  }
   if (!await ensureAccess()) return;
   setupWebSocket();
   setupEventListeners();
@@ -529,10 +629,7 @@ function setupWebSocket() {
         }
         stream.status = status === 'completed' ? 'done' : status;
         stream.cancelling = false;
-        if (data.message) {
-          const color = status === 'completed' ? 'var(--success)' : status === 'cancelled' ? 'var(--warning)' : 'var(--danger)';
-          stream.buffer += `\n<div style="color:${color}; font-weight:600; margin-top:8px;">[${escapeHtml(data.message)}]</div>\n`;
-        }
+        stream.buffer += schlussHtml(status, data.exitCode, stream.startedAt, data.message);
         renderRunPane(stream.slot, stream.taskId);
       }
       const task = state.tasks.find(t => t.id === data.taskId);
@@ -582,15 +679,13 @@ function setupWebSocket() {
 // --- KONSOLEN-LESART ---
 // Der Stream ist reiner Text; die Leseschichten stecken in den Markern, die die
 // Harnesses selbst schreiben. Das Zerlegen wohnt in konsole-schichten.js, damit es
-// ohne Browser prüfbar bleibt. Der Puffer malt bei jedem Chunk alles neu, also muss
-// sich der Lauf merken, was der Nutzer selbst aufgemacht hat — sonst fällt jeder
-// Ordner beim nächsten Textstück wieder zu.
-function konsoleHtml(stream) {
-  if (!stream.buffer) return '';
+// ohne Browser prüfbar bleibt.
+function konsoleAbschnitte(stream) {
+  if (!stream.buffer) return [];
   if (!stream.formatierer) stream.formatierer = new KonsoleSchichten.KonsoleFormatierer();
-  const html = stream.formatierer.HTML({
+  const abschnitte = stream.formatierer.abschnitte({
     html: stream.buffer,
-    lebt: stream.status === 'running' || stream.status === 'queued',
+    lebt: lebtDerLauf(stream),
     offen: stream.falten
   });
   // Eine Antwort beendet die vorherige Arbeit; alte Wünsche gelten danach nicht mehr.
@@ -601,15 +696,120 @@ function konsoleHtml(stream) {
   // eines offenen Ordners ebenfalls als toggle. Nur die Abweichung zählt.
   stream.faltenspuren = {};
   for (const block of stream.formatierer.blocks) stream.faltenspuren[block.schluessel] = block.offen;
-  return html;
+  return abschnitte.map((abschnitt) => abschnitt.html);
+}
+
+function lebtDerLauf(stream) {
+  return stream.status === 'running' || stream.status === 'queued';
+}
+
+// Der Puffer wächst, die Blöcke davor stehen fest. Vorher setzte jeder Chunk das
+// ganze Feld neu zusammen — bei bis zu 487 Chunks je Lauf und 1,1 MB größtem Puffer
+// hieß das: quadratisch wachsende Arbeit, und jede Textauswahl im Verlauf starb beim
+// nächsten Textstück. Gemessen an 37 echten Protokollen (35.804 Blöcke) bleibt beim
+// Anhängen jeder frühere Block Zeichen für Zeichen gleich, also wird nur ab dem
+// ersten geänderten Block gemalt. Geändert sich doch einmal etwas weiter vorn — eine
+// Antwort klappt die Arbeit davor zu —, wird ab dort neu gemalt.
+function maleVerlauf(pane, stream) {
+  const stand = pane.malstand;
+  const teile = konsoleAbschnitte(stream);
+  let ab = 0;
+  while (ab < teile.length && ab < stand.teile.length && teile[ab] === stand.teile[ab]) ab += 1;
+  for (let i = stand.teile.length - 1; i >= ab; i -= 1) {
+    for (const knoten of stand.knoten[i]) knoten.remove();
+    stand.teile.pop();
+    stand.knoten.pop();
+  }
+  for (let i = ab; i < teile.length; i += 1) {
+    const vorlage = document.createElement('template');
+    vorlage.innerHTML = teile[i];
+    const knoten = [...vorlage.content.childNodes];
+    for (const kind of knoten) pane.verlauf.appendChild(kind);
+    stand.teile.push(teile[i]);
+    stand.knoten.push(knoten);
+  }
+  pane.malstand = stand;
+}
+
+// Ein neuer Auftrag im selben Feld: der Verlauf gehört nicht ihm.
+function leereVerlauf(pane, taskId) {
+  if (pane.malstand.taskId === taskId) return;
+  pane.malstand = { taskId, teile: [], knoten: [] };
+  pane.verlauf.replaceChildren();
+}
+
+// Der Platzhalter steht neben dem Verlauf, nicht in ihm — sonst würde ihn der
+// nächste Chunk mit wegräumen.
+function zeigePlatzhalter(pane, text) {
+  const vorhanden = pane.body.querySelector('.terminal-placeholder');
+  if (!text) { vorhanden?.remove(); return; }
+  const platzhalter = vorhanden || document.createElement('div');
+  if (!vorhanden) {
+    platzhalter.className = 'terminal-placeholder';
+    pane.body.insertBefore(platzhalter, pane.verlauf);
+  }
+  platzhalter.textContent = text;
+}
+
+function zeigeWartende(pane, stream) {
+  const html = wartendeHtml(stream);
+  if (pane.wartendHtml === html) return;
+  pane.wartendHtml = html;
+  pane.wartend.innerHTML = html;
+}
+
+// Eine echte Konsole ist nie fertig, solange der Prozess läuft: unten blinkt der
+// Cursor. Ohne ihn sieht ein laufender Auftrag aus wie ein abgeschlossener.
+function zeigeLebt(pane, stream) {
+  pane.body.classList.toggle('ko-lebt', Boolean(stream) && lebtDerLauf(stream));
+}
+
+// Wer hochscrollt, verliert die Verfolgung — und ohne Weg zurück müsste er ziehen.
+// Der Knopf sitzt über dem Eingabebereich; dessen Höhe hängt an der Zahl der
+// Werkzeuge und an einem eingefügten Bild, also wird sie gemessen statt geraten.
+function zeigeSprungmarke(slot) {
+  const pane = dom.runPanes[slot];
+  if (!pane) return;
+  const zeigen = Boolean(streamAtSlot(slot)) && !runPaneFollow[slot];
+  if (zeigen) {
+    const hoehe = pane.composer?.offsetHeight || 0;
+    pane.jump.style.bottom = `${(hoehe || 76) + 8}px`;
+  }
+  pane.jump.hidden = !zeigen;
+}
+
+// Eine echte Konsole sagt am Ende, wie es ausging: Rückgabewert und Dauer. Vorher
+// stand dort nur ein eingefärbtes "[Fertig]" — ohne beides.
+function dauerText(ms) {
+  const ganz = Math.max(0, Math.round(ms));
+  if (ganz < 1000) return `${ganz} ms`;
+  if (ganz < 60000) return `${(ganz / 1000).toFixed(1).replace('.', ',')} s`;
+  return `${Math.floor(ganz / 60000)} min ${Math.round((ganz % 60000) / 1000)} s`;
+}
+
+function schlussHtml(status, exitCode, gestartet, nachricht) {
+  const art = status === 'completed' ? 'ok' : status === 'cancelled' ? 'abbruch' : 'fehler';
+  const kopf = status === 'completed' ? '' : status === 'cancelled' ? 'abgebrochen' : 'fehlgeschlagen';
+  const teile = [
+    kopf,
+    Number.isInteger(exitCode) ? `Code ${exitCode}` : '',
+    dauerText(Date.now() - (gestartet || Date.now()))
+  ].filter(Boolean);
+  // Bei einem Fehlschlag trägt die Meldung den Grund — sie gehört in die Schlusszeile
+  // statt als eigene Zeile darüber. Bei Erfolg ist sie generisch und fällt weg.
+  const grund = status === 'completed' ? '' : String(nachricht || '').trim();
+  return `\n<div class="ko-schluss ko-schluss-${art}">` +
+    `<span class="ko-schluss-text">${escapeHtml(teile.join(' · '))}</span>` +
+    (grund ? `<span class="ko-schluss-grund">${escapeHtml(grund)}</span>` : '') +
+    `</div>\n`;
 }
 
 // --- RUN PANES (SPLIT-VIEW) ---
-// Zwei Konsolenfelder nebeneinander. Ein Auftrag zieht in das Feld, das leer ist oder
-// einen beendeten Lauf zeigt; Meldungen sind über die Task-ID zugeordnet, deshalb
+// Bis zu vier Konsolenfelder im Raster. Ein Auftrag zieht in das Feld, das leer ist
+// oder einen beendeten Lauf zeigt; Meldungen sind über die Task-ID zugeordnet, deshalb
 // schreibt ein Lauf nie in die Konsole eines anderen.
-const RUN_PANE_COUNT = 2;
-const runPaneFollow = [true, true];
+const RUN_PANE_COUNT = 4;
+const runPaneFollow = [true, true, true, true];
 
 const RUN_LEERTEXT = {
   queued: 'Wartet auf einen freien Platz…',
@@ -644,26 +844,32 @@ function freeSlot() {
   const leer = state.panes.findIndex((id) => id === null);
   if (leer !== -1) return leer;
 
-  // Streng auf 0/1 prüfen: `null >= 0` ist in JS wahr, ein ungesetztes Feld würde
-  // sonst als gültige Wahl durchgehen.
+  // Streng auf gültige Indizes prüfen: `null >= 0` ist in JS wahr, ein ungesetztes
+  // Feld würde sonst als gültige Wahl durchgehen.
   const gewaehlt = state.letztesFeld;
-  if (gewaehlt === 0 || gewaehlt === 1) return gewaehlt;
+  if (typeof gewaehlt === 'number' && gewaehlt >= 0 && gewaehlt < state.panes.length) return gewaehlt;
 
   const beendet = state.panes.findIndex((id) => isBeendet(id));
   if (beendet !== -1) return beendet;
-  const links = state.streams.get(state.panes[0]);
-  const rechts = state.streams.get(state.panes[1]);
-  return (links?.startedAt ?? 0) <= (rechts?.startedAt ?? 0) ? 0 : 1;
+  // Ohne beendeten Lauf weicht der älteste gestartete Auftrag.
+  let aeltester = 0;
+  let aeltesteZeit = Infinity;
+  state.panes.forEach((id, i) => {
+    const zeit = state.streams.get(id)?.startedAt ?? 0;
+    if (zeit < aeltesteZeit) { aeltesteZeit = zeit; aeltester = i; }
+  });
+  return aeltester;
 }
 
 // Ein Ordner gehört in eine Konsole: arbeitet dort schon ein Auftrag, wartet der
-// nächste unter ihm in demselben Feld, statt in das andere zu wandern.
+// nächste unter ihm in demselben Feld, statt in ein anderes zu wandern.
 function slotFuerOrdner(path) {
   if (!path) return undefined;
-  return [0, 1].find((i) => {
+  for (let i = 0; i < state.panes.length; i += 1) {
     const s = streamAtSlot(i);
-    return s && s.path === path && !TaskState.terminal(s.status);
-  });
+    if (s && s.path === path && !TaskState.terminal(s.status)) return i;
+  }
+  return undefined;
 }
 
 function wartendeHtml(stream) {
@@ -721,6 +927,93 @@ function revealPane(slot) {
   pane.root.hidden = false;
   pane.memoryPanel.hidden = false;
   renderMemorySummary();
+  layoutPanes();
+}
+
+// --- RASTER & SEITENLEISTE ---
+// Das Raster richtet sich nach der Zahl sichtbarer Felder: 1 = volle Fläche,
+// 2 = nebeneinander, 3 = zwei links untereinander und eins rechts in voller
+// Höhe, 4 = 2×2. Der ×-Knopf erscheint erst, wenn mehr als ein
+// Feld offen ist — die letzte Konsole lässt sich nicht schließen.
+function visiblePaneCount() {
+  return dom.runPanes.filter((pane) => pane && !pane.root.hidden).length;
+}
+
+function layoutPanes() {
+  const visible = dom.runPanes.filter((pane) => pane && !pane.root.hidden);
+  const count = visible.length;
+  if (dom.runSplit) dom.runSplit.dataset.panes = String(count);
+  dom.runPanes.forEach((pane) => {
+    if (!pane) return;
+    if (pane.close) pane.close.hidden = count <= 1;
+    pane.root.classList.remove('run-pane-hoch');
+  });
+  if (count === 3 && visible[2]) {
+    visible[2].root.classList.add('run-pane-hoch');
+  }
+  updateSidebarMode();
+}
+
+// Ab zwei Konsolen klappt die Seitenleiste ein. Die Automatik greift nur beim Wechsel
+// zwischen „einzeln" und „mehrspaltig", damit ein manuelles Ausklappen erhalten bleibt,
+// wenn eine dritte Konsole dazukommt.
+function updateSidebarMode() {
+  const mode = visiblePaneCount() >= 2 ? 'mehrspaltig' : 'einzeln';
+  if (mode === state.sidebarMode) return;
+  state.sidebarMode = mode;
+  setSidebarCollapsed(mode === 'mehrspaltig');
+}
+
+function setSidebarCollapsed(collapsed) {
+  state.sidebarCollapsed = Boolean(collapsed);
+  document.querySelector('.app-layout')?.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
+  if (dom.sidebarExpand) dom.sidebarExpand.hidden = !state.sidebarCollapsed;
+}
+
+function toggleSidebar() {
+  setSidebarCollapsed(!state.sidebarCollapsed);
+}
+
+// Ein Feld schließen: die Ausgabe verschwindet, der Lauf bleibt als Stream erhalten und
+// landet normal in der Historie. Läuft der Auftrag noch, entscheidet der Dialog.
+function hideRunPane(slot) {
+  state.panes[slot] = null;
+  const pane = dom.runPanes[slot];
+  if (pane) {
+    pane.root.hidden = true;
+    pane.memoryPanel.hidden = true;
+  }
+  renderRunPane(slot);
+  renderMemorySummary();
+  renderProjectTree();
+  layoutPanes();
+}
+
+function closeRunPane(slot) {
+  const stream = streamAtSlot(slot);
+  if (!stream || TaskState.terminal(stream.status)) {
+    hideRunPane(slot);
+    return;
+  }
+  state.pendingCloseSlot = slot;
+  if (dom.paneCloseDialog && typeof dom.paneCloseDialog.showModal === 'function') {
+    dom.paneCloseDialog.showModal();
+  } else {
+    // Ohne Dialog (z. B. im Test) läuft der Auftrag im Hintergrund weiter — nie abbrechen.
+    hideRunPane(slot);
+  }
+}
+
+function confirmClosePane(abbrechen) {
+  const slot = state.pendingCloseSlot;
+  if (slot === null || slot === undefined) return;
+  if (abbrechen) {
+    const taskId = state.panes[slot];
+    if (taskId && state.ws) state.ws.send(JSON.stringify({ type: 'cancel', taskId }));
+  }
+  hideRunPane(slot);
+  state.pendingCloseSlot = null;
+  if (dom.paneCloseDialog?.open) dom.paneCloseDialog.close();
 }
 
 function scrollRunPaneToBottom(slot) {
@@ -760,18 +1053,27 @@ function renderRunPane(slot, expectedTaskId) {
   pane.cancel.disabled = Boolean(stream.cancelling);
   pane.cancel.setAttribute('aria-label', stream.cancelling ? 'Bricht ab…' : 'Auftrag abbrechen');
   pane.cancel.title = stream.cancelling ? 'Bricht ab…' : 'Nur diesen Auftrag abbrechen';
-  const grund = konsoleHtml(stream)
-    || `<div class="terminal-placeholder">${RUN_LEERTEXT[stream.status] || 'Kein Auftrag.'}</div>`;
-  pane.body.innerHTML = grund + wartendeHtml(stream);
+  const grund = !stream.buffer ? (RUN_LEERTEXT[stream.status] || 'Kein Auftrag.') : null;
+  leereVerlauf(pane, stream.taskId);
+  zeigePlatzhalter(pane, grund);
+  if (!grund) maleVerlauf(pane, stream);
+  zeigeWartende(pane, stream);
+  zeigeLebt(pane, stream);
   scrollRunPaneToBottom(slot);
+  zeigeSprungmarke(slot);
 }
 
 function appendRunOutput(stream, htmlContent) {
   const pane = dom.runPanes[stream.slot];
   stream.buffer += htmlContent;
   if (!pane || state.panes[stream.slot] !== stream.taskId) return;
-  pane.body.innerHTML = konsoleHtml(stream) + wartendeHtml(stream);
+  leereVerlauf(pane, stream.taskId);
+  zeigePlatzhalter(pane, null);
+  maleVerlauf(pane, stream);
+  zeigeWartende(pane, stream);
+  zeigeLebt(pane, stream);
   scrollRunPaneToBottom(stream.slot);
+  zeigeSprungmarke(stream.slot);
   // Ersetzt der Chunk den Inhalt, wird neu umgebrochen: die Endhöhe kennt das Layout
   // erst im nächsten Frame, also einmal nachziehen.
   requestAnimationFrame(() => {
@@ -788,7 +1090,36 @@ function setupRunPanes() {
     pane.body.addEventListener('scroll', () => {
       const b = pane.body;
       runPaneFollow[slot] = b.scrollHeight - b.scrollTop - b.clientHeight < 40;
+      zeigeSprungmarke(slot);
     });
+
+    // Der Verlauf ist ein eigener Kasten: nur in ihm wird gemalt, damit Platzhalter,
+    // wartende Aufträge und die Sprungmarke unberührt bleiben. Er liegt als einziges
+    // Kind fest, damit ein neuer Auftrag ihn leeren kann, ohne den Rest anzufassen.
+    pane.verlauf = document.createElement('div');
+    pane.verlauf.className = 'ko-verlauf';
+    pane.wartend = document.createElement('div');
+    pane.wartend.className = 'ko-wartend';
+    pane.body.append(pane.verlauf, pane.wartend);
+    pane.malstand = { taskId: null, teile: [], knoten: [] };
+    pane.wartendHtml = '';
+
+    // Eine echte Konsole lässt einen nicht im Nichts stehen: wer hochscrollt, bekommt
+    // unten den Sprung ans Ende angeboten. Ein Klick holt ihn zurück und nimmt die
+    // Verfolgung wieder auf.
+    pane.jump = document.createElement('button');
+    pane.jump.type = 'button';
+    pane.jump.className = 'btn-text run-pane-jump';
+    pane.jump.hidden = true;
+    pane.jump.title = 'Ans Ende springen';
+    pane.jump.setAttribute('aria-label', 'Ans Ende springen');
+    pane.jump.innerHTML = `<span aria-hidden="true">${icon('arrow-down')}</span>`;
+    pane.jump.addEventListener('click', () => {
+      runPaneFollow[slot] = true;
+      scrollRunPaneToBottom(slot);
+      zeigeSprungmarke(slot);
+    });
+    pane.root.appendChild(pane.jump);
 
     // Welches Feld der Nutzer zuletzt angefasst hat, ist sein Feld: dorthin zieht der
     // nächste Auftrag. Nur echte Maus- und Tastaturereignisse zählen — ein Klick im
@@ -809,6 +1140,29 @@ function setupRunPanes() {
       if (stream.faltenspuren?.[schluessel] === ordner.open) return;
       stream.falten[schluessel] = ordner.open;
     }, true);
+
+    // Eine Rückfrage aus dem Lauf ist beantwortbar. Ein Lauf ist headless: eine Antwort
+    // kann nicht in den laufenden Prozess zurück, und der Lauf, der gefragt hat, ist
+    // ohnehin beendet. Der Knopf übernimmt deshalb seinen Auftragstext in das
+    // Eingabefeld dieses Feldes — der Auftrag ist damit die Fortsetzung derselben
+    // Sitzung im selben Projekt. Gesendet wird erst mit Enter: ein Klick soll keinen
+    // Lauf starten, den niemand abgeschickt hat.
+    pane.body.addEventListener('click', (e) => {
+      const knopf = e.target.closest?.('.ko-frage-option');
+      if (!knopf || !knopf.isConnected) return;
+      const antwort = knopf.dataset.antwort || '';
+      if (!antwort) return;
+      pane.input.value = antwort;
+      pane.input.focus();
+      pane.input.setSelectionRange(antwort.length, antwort.length);
+      pane.root.querySelector('.run-pane-frage-hinweis')?.remove();
+      const hinweis = document.createElement('span');
+      hinweis.className = 'run-pane-frage-hinweis';
+      hinweis.setAttribute('role', 'status');
+      hinweis.textContent = 'Antwort übernommen — Enter sendet sie als Fortsetzung.';
+      pane.input.parentElement?.insertBefore(hinweis, pane.input);
+      setTimeout(() => hinweis.remove(), 5000);
+    });
 
     pane.copy.addEventListener('click', async () => {
       const feedback = (name, label) => {
@@ -831,6 +1185,8 @@ function setupRunPanes() {
       if (!taskId || !state.ws) return;
       state.ws.send(JSON.stringify({ type: 'cancel', taskId }));
     });
+
+    pane.close?.addEventListener('click', () => closeRunPane(slot));
 
     // Der Composer gehört zum Feld: hier tippen, hier senden, hierher der Auftrag.
     window.HarnessImages.setup(pane.root);
@@ -1106,6 +1462,11 @@ function getHarnessKey(item) {
   if (item.command === 'qodercli' || item.command === 'qoder') return 'qoder';
   if (item.command === 'codebuddy' || item.command === 'cbc') return 'codebuddy';
   if (item.command === 'agent' || item.command === 'cursor-agent') return 'cursor';
+  if (item.command === 'kilo') return 'kilo';
+  if (item.command === 'kiro-cli' || item.command === 'kiro') return 'kiro';
+  if (item.command === 'junie') return 'junie';
+  if (item.command === 'copilot') return 'copilot';
+  if (item.command === 'vibe') return 'vibe';
   return 'claude_code';
 }
 
@@ -1138,7 +1499,12 @@ function renderHarnessConfigList() {
       <div>
         <input type="text" class="custom-select" style="width: 100%; font-size:12px; padding:4px 6px;" value="${escapeHtml(item.name || '')}" data-name-idx="${index}" title="Routenname bearbeiten" />
       </div>
-      <div><code title="${escapeHtml(item.capabilities?.limitations || '')}">${escapeHtml(item.command || item.harness || 'cli')}</code></div>
+      <div><code title="${escapeHtml(item.capabilities?.limitations || '')}">${escapeHtml(item.command || item.harness || 'cli')}</code>
+        ${item.capabilities?.acp ? `<select class="harness-transport" data-idx="${index}" title="Ausführungsprotokoll (ACP benötigt einen installierten Agent-Adapter)">
+          <option value="headless" ${(item.transport || 'headless') !== 'acp' ? 'selected' : ''}>Headless</option>
+          <option value="acp" ${item.transport === 'acp' ? 'selected' : ''}>ACP v1</option>
+        </select>` : ''}
+      </div>
       <div>
         <div class="model-select-wrapper">
           <select class="model-dropdown" data-idx="${index}">
@@ -1182,6 +1548,15 @@ function renderHarnessConfigList() {
         renderHarnessConfigList();
         renderHarnessOverrideSelect();
       }
+    });
+  });
+
+  dom.harnessConfigList.querySelectorAll('.harness-transport').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = parseInt(sel.dataset.idx, 10);
+      state.clis[idx].transport = sel.value === 'acp' ? 'acp' : 'headless';
+      renderHarnessConfigList();
+      renderHarnessOverrideSelect();
     });
   });
 
@@ -1253,7 +1628,7 @@ const MODEL_TEST_LABELS = {
 // Results are keyed by command+model instead of by row, so the dynamic model
 // refresh (and route reordering) can re-render the list without losing a test.
 function modelTestKey(item) {
-  return `${item.command || item.harness || ''}|${item.model || 'Standard'}`;
+  return `${item.command || item.harness || ''}|${item.model || 'Standard'}|${item.transport || 'headless'}`;
 }
 
 function paintModelTest(row) {
@@ -1290,7 +1665,7 @@ async function runModelTest(btn) {
     const res = await fetch('/api/harness/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ harnessId: route.harnessId, model })
+      body: JSON.stringify({ harnessId: route.harnessId, model, transport: route.transport || 'headless' })
     });
     data = await res.json();
   } catch (err) {
@@ -1357,10 +1732,6 @@ function updateWorkspaceUI() {
   };
 
   syncPaneTargets();
-
-  if (dom.rootAgentsText) {
-    dom.rootAgentsText.textContent = `AGENTS.md aktiv`;
-  }
 
   // Update Stats in Settings Dialog
   if (dom.statRootPath) dom.statRootPath.textContent = state.rootDirectory || '-';
@@ -1438,23 +1809,13 @@ function renderProjectTree() {
     taskList.className = `task-list ${isExpanded ? '' : 'hidden'}`;
 
     projectTasks.forEach(task => {
-      const konsole = state.panes.indexOf(task.id);
-      const isTaskActive = konsole !== -1;
+      const isTaskActive = state.panes.includes(task.id);
       const taskItem = document.createElement('div');
       taskItem.className = `task-item ${isTaskActive ? 'active' : ''}`;
       taskItem.dataset.taskId = task.id;
 
       const timeStr = formatTimestamp(task.timestamp);
       const statusIcon = task.status === 'completed' ? '●' : (task.status === 'running' ? '◐' : '○');
-
-      let usageMeta = '';
-      if (task.usage && task.usage.totalTokens) {
-        const tokK = Math.round(task.usage.totalTokens / 100) / 10;
-        usageMeta = `<span style="color:var(--text-main);">${tokK}k Tok</span>`;
-        if (task.usage.remainingPercent !== undefined) {
-          usageMeta += ` <span style="color:var(--text-dim); font-size:10px;">(${task.usage.remainingPercent}% frei)</span>`;
-        }
-      }
 
       // Ein laufender Auftrag bleibt unangetastet: einpacken würde ihn vor dem
       // Abbrechen verstecken. Erledigte dürfen ins Archiv.
@@ -1468,8 +1829,7 @@ function renderProjectTree() {
         <span class="task-icon">↳</span>
         <div class="task-meta">
           <span class="task-prompt" title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</span>
-          <span class="task-badge"><span class="task-status">${statusIcon}</span>${taskHarnessIcon(task)}<span class="task-model" title="${escapeHtml(task.model || 'Standard')}">${escapeHtml(task.model || 'Standard')}</span><span class="task-time">${timeStr}</span>${usageMeta ? `<span class="task-usage">${usageMeta}</span>` : ''}</span>
-          ${isTaskActive ? `<span class="task-konsole">Konsole ${konsole + 1}</span>` : ''}
+          <span class="task-badge"><span class="task-status">${statusIcon}</span>${taskHarnessIcon(task)}<span class="task-model" title="${escapeHtml(task.model || 'Standard')}">${escapeHtml(task.model || 'Standard')}</span><span class="task-time">${timeStr}</span></span>
         </div>
         ${aktion}
       `;
@@ -1782,7 +2142,7 @@ async function loadSkills(filterQuery = '') {
         <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px;">
           ${harnessesHtml}
         </div>
-        <div style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); word-break:break-all; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px; margin-top:auto;">
+        <div style="font-size:10px; color:var(--text-dim); font-family:var(--font-mono); word-break:break-all; border-top:1px solid var(--border-soft); padding-top:6px; margin-top:auto;">
           📂 ${escapeHtml(s.sourcePath || s.path || '')}
         </div>
       `;
@@ -1922,7 +2282,7 @@ function renderUsageUI() {
         `;
         provs.forEach(p => {
           html += `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <tr style="border-bottom:1px solid var(--border-soft);">
               <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(p.group)}</td>
               <td style="padding:4px 6px; font-family:monospace;">${escapeHtml(p.reqs)}</td>
               <td style="padding:4px 6px; font-family:var(--font-mono); color:var(--text-main);">${escapeHtml(p.tokensIn)}</td>
@@ -1969,7 +2329,7 @@ function renderUsageUI() {
           const inTok = m.tokens ? (m.tokens.input || 0).toLocaleString() : '0';
           const outTok = m.tokens ? (m.tokens.output || 0).toLocaleString() : '0';
           html += `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <tr style="border-bottom:1px solid var(--border-soft);">
               <td style="padding:4px 6px; font-weight:600; color:var(--text-main);">${escapeHtml(mid)}</td>
               <td style="padding:4px 6px; color:var(--text-muted);">${escapeHtml(mprov)}</td>
               <td style="padding:4px 6px; font-family:monospace;">${m.steps || 0}</td>
@@ -2057,6 +2417,18 @@ function renderUsageTable() {
 function setupEventListeners() {
   // Konsolenfelder: jedes bricht nur seinen eigenen Auftrag ab, jedes tippt für sich
   setupRunPanes();
+  layoutPanes();
+
+  // Seitenleiste ein-/ausklappen und das Schließen einer Konsole bestätigen.
+  dom.sidebarCollapse?.addEventListener('click', toggleSidebar);
+  dom.sidebarExpand?.addEventListener('click', toggleSidebar);
+  dom.paneCloseKeep?.addEventListener('click', () => confirmClosePane(false));
+  dom.paneCloseAbort?.addEventListener('click', () => confirmClosePane(true));
+  dom.paneCloseDismiss?.addEventListener('click', () => {
+    state.pendingCloseSlot = null;
+    if (dom.paneCloseDialog?.open) dom.paneCloseDialog.close();
+  });
+  dom.paneCloseDialog?.addEventListener('close', () => { state.pendingCloseSlot = null; });
   document.getElementById('context-preview-close').addEventListener('click', () => document.getElementById('context-preview-dialog').close());
   document.getElementById('user-config-reload').addEventListener('click', async (event) => {
     const button = event.currentTarget;
@@ -2079,6 +2451,10 @@ function setupEventListeners() {
 
   if (dom.sidebarSettingsBtn) dom.sidebarSettingsBtn.addEventListener('click', () => openSettingsModal('workspace'));
   if (dom.settingsOpenInstallerBtn) dom.settingsOpenInstallerBtn.addEventListener('click', () => openInstallerModal());
+  // Beide Umschalter fürs Erscheinungsbild (Seitenleiste und mobile Leiste).
+  document.querySelectorAll('.theme-toggle').forEach((knopf) => {
+    knopf.addEventListener('click', () => wechsleErscheinungsbild());
+  });
 
   // Settings Dialog Openers
   if (dom.topOpenSettingsBtn) {
@@ -2086,9 +2462,6 @@ function setupEventListeners() {
   }
   if (dom.rootDirDisplay) {
     dom.rootDirDisplay.addEventListener('click', () => openSettingsModal('workspace'));
-  }
-  if (dom.rootAgentsBadge) {
-    dom.rootAgentsBadge.addEventListener('click', () => openSettingsModal('agents'));
   }
   if (dom.harnessStatusPills) {
     dom.harnessStatusPills.addEventListener('click', () => openSettingsModal('diagnostics'));
@@ -2232,6 +2605,16 @@ function setupEventListeners() {
     if ((e.metaKey || e.ctrlKey) && e.key === ',') {
       e.preventDefault();
       openSettingsModal('harnesses');
+    }
+    // T wechselt das Erscheinungsbild — aber nicht, während jemand tippt.
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 't' || e.key === 'T')) {
+      const ziel = e.target;
+      const tippt = ziel && (ziel.tagName === 'INPUT' || ziel.tagName === 'TEXTAREA'
+        || ziel.tagName === 'SELECT' || ziel.isContentEditable);
+      if (!tippt) {
+        e.preventDefault();
+        wechsleErscheinungsbild();
+      }
     }
   });
 
@@ -2443,19 +2826,21 @@ function renderBackupStatus(pane, backup) {
 
 function renderMemorySummary() {
   const summary = document.getElementById('memory-summary');
+  if (!summary) return;
   const panes = dom.runPanes.filter(pane => pane?.target.value && !pane.root.hidden);
   const states = panes.map(pane => pane.memoryStatus.dataset.state);
   const failed = states.includes('error') || panes.some(pane => pane.backupStatus.dataset.state === 'error');
   summary.dataset.state = failed ? 'error' : states.includes('loading') ? 'loading' : states.includes('ready') ? 'ready' : 'disabled';
-  summary.textContent = failed ? 'Problem – Details öffnen' : states.includes('loading') ? 'Wird geprüft…' :
+  summary.textContent = failed ? 'Problem – Details unten' : states.includes('loading') ? 'Wird geprüft…' :
     states.includes('ready') ? 'Automatisch aktiv' : 'Nicht eingerichtet';
-  for (const pane of dom.runPanes) {
-    if (!pane) continue;
-    const slot = dom.runPanes.indexOf(pane);
-    const project = pane.target.selectedOptions[0]?.textContent || 'Kein Projekt';
-    pane.memoryPanel.querySelector('.memory-pane-title').textContent = `Konsole ${slot + 1} · ${project}`;
+  dom.runPanes.forEach((pane, slot) => {
+    if (!pane) return;
+    // Im Einstellungsdialog trägt jeder Eintrag den Projektnamen; ohne Auswahl
+    // braucht er trotzdem eine Beschriftung, sonst steht dort eine leere Zeile.
+    const project = pane.target.selectedOptions[0]?.textContent || `Konsole ${slot + 1}`;
+    pane.memoryPanel.querySelector('.memory-pane-title').textContent = project;
     pane.memoryPanel.querySelector('.memory-task-label').hidden = pane.beads.hidden;
-  }
+  });
 }
 
 async function loadBeads(pane) {
@@ -2616,7 +3001,7 @@ async function loadRemoteConfig() {
         dom.telegramBotBadge.innerHTML = `<span class="dot"></span> Online (@${escapeHtml(data.telegram.botUsername || 'Bot')})`;
       } else if (data.telegram?.enabled) {
         dom.telegramBotBadge.className = 'diagnostics-status-badge';
-        dom.telegramBotBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+        dom.telegramBotBadge.style.background = 'var(--warning-soft-bg)';
         dom.telegramBotBadge.style.color = 'var(--warning)';
         dom.telegramBotBadge.innerHTML = `<span class="dot"></span> ${escapeHtml(data.telegram?.lastError || 'Wartet auf Verbindung...')}`;
       } else {
@@ -3227,3 +3612,4 @@ function appendInstallerConsoleOutput(content, isHtml = false) {
 // Expose globally for inline onclick handlers & notifications
 window.openInstallerModal = openInstallerModal;
 window.installCli = installCli;
+window.layoutPanes = layoutPanes;

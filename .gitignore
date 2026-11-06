@@ -18,3 +18,5 @@ Archiv/*.zip
 # Lokale Agentennotizen und persönliche Berechtigungen
 .workbuddy-ai/
 .qoder/settings.local.json
+.harness-task-image-*
+

@@ -237,7 +237,7 @@ pruefe("die Routen-Auswahl kennt genau die dreizehn Registry-Harnesses",
     === "claude_code,codex,cline,opencode,antigravity_cli,qoder,codebuddy,cursor,junie,kilo,copilot,kiro,vibe",
   [...document.querySelectorAll("#new-route-harness option")].map((o) => o.value).join(","));
 pruefe("Dispatch-Konsolen haben je ein Routing-Feld",
-  document.querySelectorAll("#run-split .run-pane-routing").length === 2);
+  document.querySelectorAll("#run-split .run-pane-routing").length === 4);
 pruefe("Das globale Routing-Feld ist raus",
   document.querySelector("#harness-override") === null);
 pruefe("die gemeinsame Statuszeile unter den Konsolen ist entfernt",
@@ -293,13 +293,18 @@ const C = auftrag("task_c", "proj-c", "Dritter Auftrag");
 const sag = (json) => ws2.onmessage({ data: JSON.stringify(json) });
 
 pruefe("#run-split existiert", document.querySelector("#run-split") !== null);
-pruefe("Nur die erste Konsole ist am Anfang sichtbar", !konsole(0).hidden && konsole(1).hidden);
+pruefe("Nur die erste Konsole ist am Anfang sichtbar",
+  !konsole(0).hidden && konsole(1).hidden && konsole(2).hidden && konsole(3).hidden);
 pruefe("Ordnerauswahl sitzt als Titel im Konsolenkopf", [...document.querySelectorAll(".run-pane")].every(p => p.querySelector(".run-pane-head .run-pane-target") && !p.querySelector(".run-pane-toolbar .run-pane-target")));
-pruefe("zwei Konsolenfelder", document.querySelectorAll("#run-split .run-pane").length === 2);
+pruefe("vier Konsolenfelder", document.querySelectorAll("#run-split .run-pane").length === 4);
 pruefe("jedes Feld hat eigene Ausgabe",
-  document.querySelectorAll("#run-split .run-pane-body").length === 2);
+  document.querySelectorAll("#run-split .run-pane-body").length === 4);
 pruefe("jedes Feld hat eigenen Abbrechen-Knopf",
-  document.querySelectorAll("#run-split .run-pane-cancel").length === 2);
+  document.querySelectorAll("#run-split .run-pane-cancel").length === 4);
+pruefe("jedes Feld hat einen Schließen-Knopf",
+  [...document.querySelectorAll(".run-pane")].every(p => p.querySelector(".run-pane-close")?.getAttribute("aria-label")));
+pruefe("der Schließen-Knopf bleibt bei einer Konsole verborgen",
+  konsole(0).querySelector(".run-pane-close").hidden);
 pruefe("Kopieren und Abbrechen sind beschriftete Icons unten", [...document.querySelectorAll(".run-pane")].every(p => ["copy", "cancel"].every(action => {
   const button = p.querySelector(`.run-pane-${action}`);
   return button.closest(".run-pane-actions") && button.querySelector("svg") && button.getAttribute("aria-label");
@@ -338,6 +343,20 @@ pruefe("die Seitenleiste zeigt den gewählten Harness",
 pruefe("die Seitenleiste markiert den Lauf als aktiv",
   /◐/.test(document.querySelector('.task-item[data-task-id="task_b"]')?.textContent || ""),
   document.querySelector('.task-item[data-task-id="task_b"]')?.textContent);
+pruefe("das Raster kennt zwei sichtbare Konsolen",
+  document.querySelector("#run-split")?.dataset.panes === "2");
+pruefe("ab zwei Konsolen klappt die Seitenleiste ein",
+  document.querySelector(".app-layout")?.classList.contains("sidebar-collapsed") === true);
+pruefe("der Ausklapp-Griff erscheint im eingeklappten Zustand",
+  document.querySelector("#sidebar-expand")?.hidden === false);
+document.querySelector("#sidebar-expand")?.click();
+await ruhen(2);
+pruefe("ein Klick klappt die Seitenleiste wieder aus",
+  document.querySelector(".app-layout")?.classList.contains("sidebar-collapsed") === false);
+document.querySelector("#sidebar-collapse")?.click();
+await ruhen(2);
+pruefe("ein Klick klappt die Seitenleiste wieder ein",
+  document.querySelector(".app-layout")?.classList.contains("sidebar-collapsed") === true);
 
 sag({ type: "queued", taskId: B.id, reason: "project", blockerTaskId: A.id, message: "Warteschlange: in proj-a arbeitet bereits ein Auftrag" });
 await ruhen(3);
@@ -355,9 +374,9 @@ sag({ type: "route_selected", taskId: C.id, harness: "Cline", command: "cline", 
 sag({ type: "output", taskId: C.id, html: "AUSGABE-C" });
 await ruhen(4);
 
-pruefe("der dritte Auftrag nimmt das Feld des beendeten", (konsole(1)?.textContent || "").includes("AUSGABE-C"));
+pruefe("der dritte Auftrag bekommt ein eigenes, freies Feld", (konsole(2)?.textContent || "").includes("AUSGABE-C"));
 pruefe("C verdrängt A nicht aus dem laufenden Feld", (konsole(0)?.textContent || "").includes("AUSGABE-A"));
-pruefe("C löscht B's Ausgabe aus seinem Feld", !(konsole(1)?.textContent || "").includes("AUSGABE-B"));
+pruefe("C lässt B's Ausgabe stehen", (konsole(1)?.textContent || "").includes("AUSGABE-B"));
 
 let copiedOutput;
 Object.defineProperty(window.navigator, "clipboard", {configurable:true, value:{writeText:async text => { copiedOutput = text; }}});
@@ -402,11 +421,11 @@ pruefe("das gemeinsame Eingabefeld ist raus", gemeinsameEingabe === null);
 pruefe("der gemeinsame Ausführen-Knopf ist raus", document.querySelector("#send-prompt-btn") === null);
 pruefe("der Zielordner-Pill ist raus", document.querySelector("#prompt-target-folder") === null);
 pruefe("jedes Feld hat ein eigenes Eingabefeld",
-  document.querySelectorAll("#run-split .run-pane-input").length === 2);
+  document.querySelectorAll("#run-split .run-pane-input").length === 4);
 pruefe("jedes Feld hat einen eigenen Senden-Knopf",
-  document.querySelectorAll("#run-split .run-pane-send").length === 2);
+  document.querySelectorAll("#run-split .run-pane-send").length === 4);
 pruefe("jedes Feld hat einen eigenen Zielordner",
-  document.querySelectorAll("#run-split .run-pane-target").length === 2);
+  document.querySelectorAll("#run-split .run-pane-target").length === 4);
 pruefe("der Zielordner nennt die Projekte",
   [...(konsole(0)?.querySelectorAll(".run-pane-target option") || [])].some((o) => o.value === "/tmp/proj-b"),
   konsole(0)?.querySelector(".run-pane-target")?.innerHTML);
@@ -513,7 +532,7 @@ await ruhen(6);
 pruefe("Klick auf den Auftrag zeigt die Konsolen",
   document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
 
-const folgeSlot = [0, 1].find((i) => (konsole(i)?.textContent || "").includes("ALTE AUSGABE"));
+const folgeSlot = [0, 1, 2, 3].find((i) => (konsole(i)?.textContent || "").includes("ALTE AUSGABE"));
 pruefe("das alte Protokoll ist in einer Konsole sichtbar", folgeSlot !== undefined);
 const folge = konsole(folgeSlot);
 pruefe("das Feld nennt den alten Auftrag",
@@ -566,6 +585,33 @@ pruefe("das Feld bleibt für weitere Aufträge am alten Ziel",
   sendungen()[0]?.harnessOverride === "Cline" && sendungen()[0]?.projectPath === "/tmp/proj-b",
   JSON.stringify(sendungen()[0]));
 
+// Eine bewusste Wahl im Routing-Feld schlägt die Fortsetzung: der Screenshot
+// zeigte CodeBuddy unten, gelaufen ist trotzdem Cline — die alte Logik nahm
+// immer den Harness des alten Laufs.
+const routing = (slot, wert) => {
+  const feld = konsole(slot).querySelector(".run-pane-routing");
+  if (![...feld.options].some((o) => o.value === wert)) {
+    const opt = document.createElement("option");
+    opt.value = wert;
+    opt.textContent = wert;
+    feld.appendChild(opt);
+  }
+  feld.value = wert;
+  feld.dispatchEvent(new window.Event("change", { bubbles: true }));
+};
+routing(folgeSlot, "CodeBuddy");
+frames.length = 0;
+tippe(folgeSlot, "Bewusst anderer Harness im selben Ordner");
+enter(folgeSlot);
+await ruhen(4);
+const bewusst = sendungen()[0];
+pruefe("eine bewusste Routing-Wahl schlägt die Fortsetzung",
+  bewusst?.harnessOverride === "CodeBuddy" && bewusst?.projectPath === "/tmp/proj-b",
+  JSON.stringify(bewusst));
+pruefe("bei bewusst anderem Harness geht das alte Modell nicht mit",
+  bewusst?.modelOverride === undefined, JSON.stringify(bewusst));
+routing(folgeSlot, "auto");
+
 // Der Folgauftrag zieht in sein Feld zurück, auch wenn das andere Feld gerade
 // einen Platz frei hätte — das Protokoll soll nicht allein stehen bleiben.
 sag({ type: "done", taskId: "task_c" });
@@ -574,10 +620,10 @@ const zweiteZeile = document.querySelector('.task-item[data-task-id="alt_lauf2"]
 pruefe("der zweite alte Auftrag steht in der Seitenleiste", zweiteZeile !== null);
 zweiteZeile?.click();
 await ruhen(4);
-const zweiterSlot = folgeSlot === 0 ? 1 : 0;
-pruefe("der zweite alte Auftrag zieht in das andere Feld",
-  /ZWEITE ALTE AUSGABE/.test(konsole(zweiterSlot)?.textContent || ""),
-  konsole(zweiterSlot)?.textContent?.slice(0, 80));
+const zweiterSlot = [0, 1, 2, 3].find((i) => /ZWEITE ALTE AUSGABE/.test(konsole(i)?.textContent || ""));
+pruefe("der zweite alte Auftrag zieht in ein anderes Feld",
+  zweiterSlot !== undefined && zweiterSlot !== folgeSlot,
+  String(zweiterSlot));
 sag({ type: "done", taskId: "task_f1" });
 await ruhen(3);
 frames.length = 0;
@@ -622,12 +668,12 @@ document.querySelector('.project-node[data-path="/tmp/proj-c"] .add-task-btn')?.
 await ruhen(3);
 pruefe("＋ öffnet die Konsole",
   document.querySelector("#dispatch-panel")?.classList.contains("hidden") === false);
-const aktiverSlot = [0, 1].find((i) => konsole(i).querySelector(".run-pane-input") === document.activeElement);
-pruefe("＋ stellt das fortgesetzte Feld bereit",
-  aktiverSlot === zweiterSlot && konsole(zweiterSlot).querySelector(".run-pane-target").value === "/tmp/proj-c",
+const aktiverSlot = [0, 1, 2, 3].find((i) => konsole(i).querySelector(".run-pane-input") === document.activeElement);
+pruefe("＋ stellt ein Feld mit dem Zielordner bereit",
+  aktiverSlot !== undefined && konsole(aktiverSlot).querySelector(".run-pane-target").value === "/tmp/proj-c",
   String(aktiverSlot));
-tippe(zweiterSlot, "Frischer Auftrag im alten Ordner");
-enter(zweiterSlot);
+tippe(aktiverSlot, "Frischer Auftrag im alten Ordner");
+enter(aktiverSlot);
 await ruhen(4);
 pruefe("＋ im selben Ordner ist ein Anfang statt einer Fortsetzung",
   sendungen()[0]?.harnessOverride === "auto", JSON.stringify(sendungen()[0]));
@@ -657,7 +703,7 @@ await ruhen(4);
 
 // Das Feld gehört dem Lauf, der mit LAYER-MARKER betitelt ist — welches der beiden
 // Konsolenfelder das ist, entscheidet der freie Platz, nicht der Test.
-const slotVon = (marker) => [0, 1].find((i) => (konsole(i)?.textContent || "").includes(marker)) ?? 0;
+const slotVon = (marker) => [0, 1, 2, 3].find((i) => (konsole(i)?.textContent || "").includes(marker)) ?? 0;
 const feld = () => konsole(slotVon("LAYER-MARKER"));
 const body = () => feld()?.querySelector(".run-pane-body");
 const inKeinemOrdner = (text) =>
@@ -694,14 +740,54 @@ pruefe("Werkzeugaufruf und ⎿-Zeile sammeln sich in einem Ordner",
 pruefe("der Werkzeugordner ist zu und zählt seine Zeilen",
   werkzeug && !werkzeug.hasAttribute("open") && /2 Zeilen/.test(werkzeug.querySelector(".ko-kopf")?.textContent || ""),
   werkzeug?.querySelector(".ko-kopf")?.textContent);
-pruefe("die [thinking]-Zeile kommt in einen Gedankengang-Ordner",
-  [...(body()?.querySelectorAll("details.ko-denke") || [])].some((d) => /Analysing build config/.test(d.textContent)),
-  [...(body()?.querySelectorAll("details.ko-denke") || [])].map((d) => d.textContent).join(" | "));
+pruefe("die [thinking]-Zeile kommt in die Gedankenschicht",
+  [...(body()?.querySelectorAll(".ko-denke") || [])].some((d) => /Analysing build config/.test(d.textContent)),
+  [...(body()?.querySelectorAll(".ko-denke") || [])].map((d) => d.textContent).join(" | "));
 pruefe("Tokens-Zeile wird Randnotiz",
-  /Tokens: 4,090/.test(body()?.querySelector("details.ko-notiz")?.textContent || ""),
-  body()?.querySelector("details.ko-notiz")?.textContent);
+  /Tokens: 4,090/.test(body()?.querySelector(".ko-notiz")?.textContent || ""),
+  body()?.querySelector(".ko-notiz")?.textContent);
 pruefe("die Zwischentexte bleiben sichtbar",
   inKeinemOrdner("ZWISCHENTEXT-EIN") && inKeinemOrdner("ZWISCHENTEXT-ZWEI"));
+
+// --- Der Verlauf wird nicht neu gebaut --------------------------------------
+// Gemessen an 37 echten Protokollen (35.804 Blöcke): beim Anhängen bleibt jeder
+// frühere Block Zeichen für Zeichen gleich, nur das Ende wächst. Baut die Oberfläche
+// trotzdem alles neu, stirbt bei jedem Chunk die Textauswahl, und ein Lauf mit 487
+// Chunks baut den DOM 487-mal auf — der größte Puffer misst 1,1 MB. Der Knoten-
+// vergleich ist der Beweis, dass frühere Blöcke stehen bleiben.
+const bannerKnoten = body()?.querySelector(".route-banner");
+const antwortKnoten = body()?.querySelector(".ko-antwort");
+// Die Leerzeile davor trennt den neuen Absatz ab — sonst wüchse der vorige Block
+// und müsste zu Recht neu gemalt werden.
+sag({ type: "output", taskId: "task_l", html: "<br/>NEUER-ABSATZ<br/>" });
+await ruhen(4);
+pruefe("ein früherer Block behält seinen Knoten",
+  body()?.querySelector(".route-banner") === bannerKnoten,
+  "der Banner wurde neu gebaut");
+pruefe("auch ein früherer Antwortabsatz bleibt derselbe Knoten",
+  body()?.querySelector(".ko-antwort") === antwortKnoten,
+  "der Antwortabsatz wurde neu gebaut");
+pruefe("der neue Absatz ist trotzdem da", /NEUER-ABSATZ/.test(body()?.textContent || ""));
+
+// --- Cursor: eine Konsole ist nie fertig, solange der Prozess läuft ----------
+pruefe("solange der Lauf arbeitet, trägt die Konsole den Cursor",
+  body()?.classList.contains("ko-lebt") === true, body()?.className);
+
+// --- Sprungmarke: wer hochscrollt, kommt zurück ------------------------------
+const sprung = feld()?.querySelector(".run-pane-jump");
+pruefe("die Sprungmarke sitzt im Feld", sprung !== null && sprung !== undefined);
+pruefe("solange man unten mitliest, ist sie versteckt", sprung?.hidden === true);
+const körper = body();
+Object.defineProperty(körper, "scrollHeight", { value: 2000, configurable: true });
+Object.defineProperty(körper, "clientHeight", { value: 400, configurable: true });
+körper.scrollTop = 100;
+körper.dispatchEvent(new window.Event("scroll"));
+await ruhen(2);
+pruefe("wer hochscrollt, bekommt sie zu sehen", sprung?.hidden === false, `hidden=${sprung?.hidden}`);
+sprung.click();
+await ruhen(2);
+pruefe("ein Klick springt ans Ende", körper.scrollTop >= 1960, String(körper.scrollTop));
+pruefe("und nimmt die Verfolgung wieder auf", sprung?.hidden === true);
 
 // Faltzustand: jeder Chunk malt das ganze Feld neu — wer einen Ordner aufmacht,
 // darf ihn nicht beim nächsten Chunk wieder verloren haben.
@@ -744,15 +830,99 @@ pruefe("Nach der Antwort erneut geöffnete Werkzeuge bleiben offen", [...body().
 // Konsole leer, obwohl der Harness gerade denkt.
 sag({ type: "output", taskId: "task_l", html: "&lt;think&gt;offener Gedanke ohne Ende<br/>" });
 await ruhen(4);
-pruefe("ein wachsender Gedankengang-Ordner ist als lebendig markiert",
-  body()?.querySelector("details.ko-denke.ko-wachsend") !== null,
+pruefe("ein wachsender Gedankengang ist als lebendig markiert",
+  body()?.querySelector(".ko-denke.ko-wachsend") !== null,
   [...(body()?.querySelectorAll("details") || [])].map((d) => d.className).join(" | "));
 sag({ type: "done", taskId: "task_l", exitCode: 0, message: "Fertig" });
 await ruhen(4);
-pruefe("nach dem Lauf ist kein Ordner mehr lebendig",
-  body()?.querySelector("details.ko-wachsend") === null);
+pruefe("nach dem Lauf ist nichts mehr lebendig",
+  body()?.querySelector(".ko-wachsend") === null);
+pruefe("und der Cursor verschwindet", body()?.classList.contains("ko-lebt") === false);
+
+// Eine echte Konsole sagt am Ende, wie es ausging: Rückgabewert und Dauer. Vorher
+// stand dort nur ein eingefärbtes "[Fertig]".
+const schluss = body()?.querySelector(".ko-schluss");
+pruefe("die Schlusszeile steht am Ende des Verlaufs",
+  schluss !== null && schluss !== undefined &&
+  schluss.parentElement?.lastElementChild === schluss,
+  body()?.lastElementChild?.outerHTML?.slice(0, 120));
+pruefe("die Schlusszeile nennt den Rückgabewert",
+  /Code 0/.test(schluss?.textContent || ""), schluss?.textContent);
+pruefe("die Schlusszeile nennt die Dauer",
+  /\d+\s*(ms|s|min)\b/.test(schluss?.textContent || ""), schluss?.textContent);
+pruefe("die Schlusszeile trägt das Ergebnis als Klasse",
+  schluss?.className.includes("ko-schluss-ok") === true, schluss?.className);
+
+// Ein Fehlschlag trägt seinen Grund in derselben Zeile.
+sag({ type: "error", taskId: "task_l", exitCode: 1, message: "Permission denied" });
+await ruhen(4);
+const fehlschluss = [...(body()?.querySelectorAll(".ko-schluss") || [])].at(-1);
+pruefe("ein Fehlschlag wird als Fehlschlag ausgewiesen",
+  fehlschluss?.className.includes("ko-schluss-fehler") === true, fehlschluss?.className);
+pruefe("der Grund steht in der Schlusszeile",
+  /Permission denied/.test(fehlschluss?.textContent || "") && /Code 1/.test(fehlschluss?.textContent || ""),
+  fehlschluss?.textContent);
 pruefe("nach dem Lauf bleiben die Ordner zugeklappt, die der Nutzer nicht öffnete",
   [...(body()?.querySelectorAll("details") || [])].filter((d) => d.open).every(d => [ersterDenk.dataset.schluessel, finishedTool.dataset.schluessel].includes(d.dataset.schluessel)));
+
+// --- 13b. Einzeiliges bleibt Zeile, die Ausgabe bekommt eine eigene Fläche ---
+// Ein Ordner mit dem Zähler "1 Zeile" behauptet etwas, das er nicht hat: das
+// Aufklappen zeigt genau die Zeile, die im Kopf schon steht.
+sag({ type: "output", taskId: "task_l", html: `<div data-console-layer="werkzeug">Werkzeug: run_commands</div>\n` });
+await ruhen(4);
+const einzeilig = [...body().querySelectorAll(".ko-einzeln.ko-werkzeug")].at(-1);
+pruefe("ein einzelner Werkzeugaufruf steht als Zeile, nicht als Ordner",
+  Boolean(einzeilig) && /run_commands/.test(einzeilig.textContent),
+  body()?.innerHTML?.slice(-300));
+pruefe("der einzeilige Aufruf trägt keinen Zähler",
+  Boolean(einzeilig) && einzeilig.querySelector(".ko-zaehler") === null);
+
+sag({ type: "output", taskId: "task_l", html: `<div data-console-layer="ausgabe">pwd\n/tmp/projekt\ntotal 48</div>\n` });
+await ruhen(4);
+const ausgabeFeld = body()?.querySelector("details.ko-ausgabe");
+pruefe("die Werkzeugausgabe bekommt einen eigenen Ordner",
+  Boolean(ausgabeFeld) && /total 48/.test(ausgabeFeld.textContent),
+  body()?.innerHTML?.slice(-300));
+pruefe("die Ausgabe hängt nicht im Werkzeugaufruf",
+  ![...body().querySelectorAll("details.ko-werkzeug")].some((d) => /total 48/.test(d.textContent)));
+
+// --- 13c. Eine Rückfrage ist anklickbar ----------------------------------
+// Ein Lauf ist headless: eine Antwort kann nicht in den laufenden Prozess zurück.
+// Der Knopf übernimmt deshalb den Auftragstext in das Eingabefeld; gesendet wird
+// erst mit Enter, damit ein Klick keinen Lauf startet, den niemand abgeschickt hat.
+const FRAGE_KARTE = `<div class="ko-frage">` +
+  `<div class="ko-frage-kopf"><span class="ko-art">Rückfrage</span>` +
+  `<span class="ko-frage-hinweis">Antwort anklicken — sie landet im Eingabefeld</span></div>` +
+  `<div class="ko-frage-text">Was soll ich bauen?</div>` +
+  `<div class="ko-frage-optionen">` +
+  `<button type="button" class="ko-frage-option" data-antwort="Antwort auf die Rückfrage „Was soll ich bauen?&quot;: Variante A — Der kleine Weg">` +
+  `<span class="ko-frage-label">Variante A</span><span class="ko-frage-beschreibung">Der kleine Weg</span></button>` +
+  `<button type="button" class="ko-frage-option" data-antwort="Antwort auf die Rückfrage „Was soll ich bauen?&quot;: Variante B">` +
+  `<span class="ko-frage-label">Variante B</span></button>` +
+  `</div></div>\n`;
+sag({ type: "output", taskId: "task_l", html: FRAGE_KARTE });
+await ruhen(4);
+const karte = body()?.querySelector(".ko-frage");
+pruefe("die Rückfrage steht als eigener Block", Boolean(karte), body()?.innerHTML?.slice(-300));
+pruefe("die Frage steht im Klartext", /Was soll ich bauen\?/.test(karte?.textContent || ""));
+pruefe("jede Option ist ein anklickbarer Knopf",
+  karte?.querySelectorAll("button.ko-frage-option").length === 2);
+pruefe("die Beschreibung der Option bleibt sichtbar", /Der kleine Weg/.test(karte?.textContent || ""));
+pruefe("die Rückfrage wird nicht zu einem Ordner",
+  ![...(body()?.querySelectorAll("details") || [])].some((d) => /Was soll ich bauen/.test(d.textContent)));
+
+const feldEingabe = feld()?.querySelector(".run-pane-input");
+if (feldEingabe) feldEingabe.value = "";
+karte?.querySelectorAll("button.ko-frage-option")[0].click();
+await ruhen(2);
+pruefe("ein Klick übernimmt die Antwort in das Eingabefeld",
+  /Variante A/.test(feldEingabe?.value || "") && /Der kleine Weg/.test(feldEingabe?.value || ""),
+  feldEingabe?.value);
+pruefe("die Antwort trägt die Frage mit, damit sie als Auftrag lesbar ist",
+  /Was soll ich bauen\?/.test(feldEingabe?.value || ""), feldEingabe?.value);
+pruefe("der Klick quittiert sich und sendet nicht selbst",
+  /Enter sendet/.test(feld()?.querySelector(".run-pane-frage-hinweis")?.textContent || ""),
+  feld()?.querySelector(".run-pane-frage-hinweis")?.textContent);
 
 // --- 14. Ein Klick auf einen Auftrag zeigt sein Feld ---------------------
 // Zwei Konsolen desselben Harness waren nicht zu unterscheiden: der Titel trug nur
@@ -767,13 +937,14 @@ pruefe("die Marke trägt Harness und Modell",
   konsole(layerSlot)?.querySelector(".run-pane-harness")?.textContent);
 
 const seitenItem = () => document.querySelector('.task-item[data-task-id="task_l"]');
-pruefe("die Seitenleiste nennt das Feld des Laufs",
-  seitenItem()?.querySelector(".task-konsole")?.textContent === `Konsole ${layerSlot + 1}`,
-  seitenItem()?.querySelector(".task-konsole")?.textContent);
+pruefe("die Seitenleiste nennt kein Konsolenfeld mehr",
+  document.querySelectorAll(".task-konsole").length === 0);
+pruefe("die Seitenleiste zeigt keinen Token-Verbrauch mehr",
+  document.querySelectorAll(".task-usage").length === 0);
 
 seitenItem()?.click();
 await ruhen(4);
-const markiert = [0, 1].filter((i) => konsole(i)?.classList.contains("ist-fokus"));
+const markiert = [0, 1, 2, 3].filter((i) => konsole(i)?.classList.contains("ist-fokus"));
 pruefe("Klick markiert genau das Feld des Auftrags",
   markiert.length === 1 && markiert[0] === layerSlot, JSON.stringify(markiert));
 pruefe("Klick auf einen liegenden Auftrag holt die Konsole wieder hervor",
@@ -798,7 +969,30 @@ for (const [id, type, status, code] of [
 }
 
 // Beads-Zustand und ausdrückliche Fortsetzung ohne Projektgedächtnis.
-pruefe('Beads ist zentral und aus beiden Eingaben entfernt', document.querySelectorAll('#project-memory').length === 1 && !document.querySelector('.run-pane .run-pane-context, .run-pane .run-pane-beads'));
+// Die Bedienung liegt seit dem Umzug vollständig im Einstellungsdialog; im
+// Arbeitsbereich bleibt keine Leiste stehen, die eine Zeile kostet und nur
+// wiederholt, dass Beads läuft.
+const arbeitsbereich = document.querySelector('#dispatch-panel');
+pruefe('Der Arbeitsbereich trägt keine Beads-Leiste mehr',
+  !document.querySelector('#dispatch-panel .project-memory, #dispatch-panel .memory-details')
+  && !arbeitsbereich.querySelector('#memory-summary'));
+pruefe('Beads ist zentral und aus beiden Eingaben entfernt', !document.querySelector('.run-pane .run-pane-context, .run-pane .run-pane-beads'));
+pruefe('Der Einstellungsdialog hat einen eigenen Punkt für das Projektgedächtnis',
+  Boolean(document.querySelector('.settings-nav-item[data-section="memory"]'))
+  && Boolean(document.querySelector('#settings-sec-memory')));
+pruefe('Alle vier Konsoleinträge liegen in diesem Bereich',
+  document.querySelectorAll('#settings-sec-memory .memory-pane').length === 4
+  && Boolean(document.querySelector('#settings-sec-memory .memory-pane .run-pane-memory-status')));
+pruefe('Die zentrale Zustandszeile steht im Einstellungsbereich',
+  document.querySelector('#settings-sec-memory #memory-summary') !== null);
+// Ein Zustand, der nur in einem unerreichbaren Bereich steckt, ist keiner.
+const memoryNav = document.querySelector('.settings-nav-item[data-section="memory"]');
+memoryNav?.click();
+await ruhen(2);
+pruefe('Ein Klick auf den Punkt öffnet den Bereich',
+  Boolean(memoryNav?.classList.contains('active'))
+  && Boolean(document.querySelector('#settings-sec-memory')?.classList.contains('active'))
+  && !document.querySelector('#settings-sec-workspace').classList.contains('active'));
 const automaticPayload = window.promptPayload(0).payload;
 pruefe('Normaler Auftrag braucht keine Beads-Auswahl oder Ausnahme', !automaticPayload.beadId && !automaticPayload.withoutBeads);
 const memoryPane = document.querySelector('#run-pane-0');
@@ -967,7 +1161,7 @@ sag({type:'task_created',taskId:'live-follow',task:{...layoutTask,id:'live-follo
 sag({type:'route_selected',taskId:'live-follow',harness:'opencode_cli',command:'opencode',model:longModel});
 sag({type:'output',taskId:'live-follow',html:'LIVE-FOLGE-AUSGABE'});
 await ruhen(2);
-pruefe('Live-Folgeprompt bleibt in seiner Konsole', konsole(liveSlot).textContent.includes('LIVE-FOLGE-AUSGABE') && !konsole(1-liveSlot).textContent.includes('LIVE-FOLGE-AUSGABE'));
+pruefe('Live-Folgeprompt bleibt in seiner Konsole', konsole(liveSlot).textContent.includes('LIVE-FOLGE-AUSGABE') && ![0,1,2,3].some((i) => i !== liveSlot && konsole(i).textContent.includes('LIVE-FOLGE-AUSGABE')));
 sag({type:'done',taskId:'live-follow',exitCode:0});
 await ruhen(2);
 frames.length = 0;
@@ -979,7 +1173,7 @@ const auditTask = {id:'audit-live',projectPath:'/tmp/proj-a',projectName:'proj-a
 sag({type:'task_created',taskId:auditTask.id,task:auditTask});
 sag({type:'route_selected',taskId:auditTask.id,harness:'Cline',command:'cline',model:'plan-free'});
 sag({type:'output',taskId:auditTask.id,html:'AUDIT-ERSTE-AUSGABE'});await ruhen(2);
-const auditSlot = [0,1].find(i=>konsole(i).textContent.includes('AUDIT-ERSTE-AUSGABE'));
+const auditSlot = [0,1,2,3].find(i=>konsole(i).textContent.includes('AUDIT-ERSTE-AUSGABE'));
 sag({type:'task_created',taskId:auditTask.id,task:auditTask});await ruhen(2);
 pruefe('Doppelte Task-Bestätigung reiht den Lauf nicht hinter sich selbst ein', !konsole(auditSlot).querySelector('.run-wartende'));
 sag({type:'done',taskId:auditTask.id,exitCode:0});await ruhen(2);
@@ -998,10 +1192,10 @@ sag({type:'done',taskId:'audit-follow-1',exitCode:0});
 sag({type:'route_selected',taskId:'audit-follow-2',harness:'Cline',command:'cline',model:'plan-free',projectPath:'/tmp/proj-a'});
 sag({type:'output',taskId:'audit-follow-2',html:'AUDIT-DRITTE-AUSGABE'});await ruhen(2);
 pruefe('Warteschlangen-Übergabe erhält Zielordner und altes Protokoll', konsole(auditSlot).querySelector('.run-pane-target').value==='/tmp/proj-a' && konsole(auditSlot).textContent.includes('AUDIT-ZWEITE-AUSGABE') && konsole(auditSlot).textContent.includes('AUDIT-DRITTE-AUSGABE'));
-const beforeLate=[0,1].map(i=>konsole(i).querySelector('.run-pane-title').textContent);
+const beforeLate=[0,1,2,3].map(i=>konsole(i).querySelector('.run-pane-title').textContent);
 sag({type:'output',taskId:'audit-follow-1',html:'VERSPAETETER-CHUNK'});await ruhen(2);
-pruefe('Spätes Ereignis öffnet keinen verdrängten Task erneut', [0,1].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforeLate[i]));
-pruefe('Später Chunk verändert keine fremde sichtbare Ausgabe', ![0,1].some(i=>konsole(i).textContent.includes('VERSPAETETER-CHUNK')));
+pruefe('Spätes Ereignis öffnet keinen verdrängten Task erneut', [0,1,2,3].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforeLate[i]));
+pruefe('Später Chunk verändert keine fremde sichtbare Ausgabe', ![0,1,2,3].some(i=>konsole(i).textContent.includes('VERSPAETETER-CHUNK')));
 sag({type:'task_created',taskId:'audit-follow-3',task:{...auditTask,id:'audit-follow-3',prompt:'Weitere Warteschlange'}});await ruhen(2);
 pruefe('Nach Warteschlangen-Übergabe gehört der nächste Auftrag weiterhin zum selben Feld', konsole(auditSlot).textContent.includes('AUDIT-DRITTE-AUSGABE') && konsole(auditSlot).querySelector('.run-wartende')?.textContent.includes('Weitere Warteschlange'));
 // Ein bewusst neuer Task darf durch den Abschluss des alten Laufs nicht zur Fortsetzung werden.
@@ -1012,9 +1206,9 @@ frames.length=0;tippe(auditSlot,'Bewusst neuer Task');enter(auditSlot);await ruh
 pruefe('Neuer Task bleibt auch nach spätem Abschluss ohne Vorgänger', sendungen()[0]?.previousTaskId === undefined && sendungen()[0]?.harnessOverride === 'auto');
 const oldPool = ANTWORTEN['GET /api/runs'];
 ANTWORTEN['GET /api/runs'] = {running:[{taskId:'audit-follow-1',projectPath:'/tmp/proj-a'}],queued:[]};
-const beforePool=[0,1].map(i=>konsole(i).querySelector('.run-pane-title').textContent);
+const beforePool=[0,1,2,3].map(i=>konsole(i).querySelector('.run-pane-title').textContent);
 await window.refreshRunPool();await ruhen(2);
-pruefe('Pool-Abgleich öffnet einen bewusst verdrängten Lauf nicht erneut', [0,1].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforePool[i]));
+pruefe('Pool-Abgleich öffnet einen bewusst verdrängten Lauf nicht erneut', [0,1,2,3].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforePool[i]));
 ANTWORTEN['GET /api/runs'] = oldPool;
 
 // Bewusste Dropdown-Auswahl muss auch bei einer Fortsetzung Vorrang haben.
@@ -1023,7 +1217,7 @@ sag({type:'task_created',taskId:manualTask.id,task:manualTask});
 sag({type:'route_selected',taskId:manualTask.id,harness:'Cline',command:'cline',model:'plan-free'});
 sag({type:'output',taskId:manualTask.id,html:'MANUELLE-ROUTENWAHL'});
 sag({type:'done',taskId:manualTask.id,exitCode:0});await ruhen(2);
-const manualSlot = [0,1].find(i=>konsole(i).textContent.includes('MANUELLE-ROUTENWAHL'));
+const manualSlot = [0,1,2,3].find(i=>konsole(i).textContent.includes('MANUELLE-ROUTENWAHL')) ?? 0;
 const manualRouting = konsole(manualSlot).querySelector('.run-pane-routing');
 for (const route of ['OpenCode', 'auto', 'consensus']) {
   manualRouting.value = route;
@@ -1039,7 +1233,7 @@ tippe(manualSlot,'Manuelle Kontextvorschau');
 konsole(manualSlot).querySelector('.run-pane-context-preview').click();await ruhen(3);
 pruefe('Kontextvorschau verwendet dieselbe bewusste Routenwahl', previewRequest?.harnessOverride==='OpenCode' && previewRequest?.modelOverride===undefined && previewRequest?.previousTaskId===manualTask.id);
 document.getElementById('context-preview-close').click();
-const isolatedSlot=1-manualSlot;
+const isolatedSlot=(manualSlot + 1) % 4;
 konsole(isolatedSlot).querySelector('.run-pane-input').focus();
 const isolatedTask={id:'isolated-route-source',projectPath:'/tmp/proj-b',projectName:'proj-b',prompt:'Andere Konsole',status:'queued',timestamp:new Date().toISOString()};
 sag({type:'task_created',taskId:isolatedTask.id,task:isolatedTask});
@@ -1047,6 +1241,200 @@ sag({type:'route_selected',taskId:isolatedTask.id,harness:'Qoder',command:'qoder
 sag({type:'done',taskId:isolatedTask.id,exitCode:0});await ruhen(2);
 frames.length=0;tippe(isolatedSlot,'Fortsetzung ohne Dropdown-Änderung');enter(isolatedSlot);await ruhen(2);
 pruefe('Manuelle Auswahl verändert die andere Konsole nicht', sendungen()[0]?.harnessOverride==='Qoder' && sendungen()[0]?.modelOverride==='isolation-model', JSON.stringify(sendungen()[0]));
+
+// --- 15. Konsolen schließen ---------------------------------------------
+// Der ×-Knopf im Konsolenkopf blendet ein Feld aus. Läuft der Auftrag noch, wird
+// gefragt; ohne Dialog (jsdom kennt showModal nicht) läuft er im Hintergrund weiter
+// und wird nie abgebrochen.
+pruefe("der Schließen-Dialog bietet beide Wege",
+  document.querySelector("#pane-close-abort")?.textContent.includes("abbrechen")
+  && document.querySelector("#pane-close-keep")?.textContent.includes("weiterlaufen"));
+
+const schliessTask = auftrag("task_close", "proj-b", "Schließbarer Auftrag");
+sag({ type: "task_created", taskId: schliessTask.id, task: schliessTask });
+sag({ type: "route_selected", taskId: schliessTask.id, harness: "Cline", command: "cline", model: "plan-free" });
+sag({ type: "output", taskId: schliessTask.id, html: "SCHLIESS-AUSGABE" });
+await ruhen(3);
+const schliessSlot = [0, 1, 2, 3].find((i) => konsole(i).textContent.includes("SCHLIESS-AUSGABE"));
+pruefe("der schließbare Lauf sitzt in einem eigenen Feld", schliessSlot !== undefined);
+pruefe("bei mehreren Konsolen ist der Schließen-Knopf sichtbar",
+  konsole(schliessSlot)?.querySelector(".run-pane-close")?.hidden === false);
+
+frames.length = 0;
+konsole(schliessSlot)?.querySelector(".run-pane-close")?.click();
+await ruhen(3);
+pruefe("ein laufender Auftrag fragt vor dem Schließen nach",
+  document.querySelector("#pane-close-dialog")?.open === true);
+document.querySelector("#pane-close-dismiss")?.click();
+await ruhen(2);
+pruefe("„Nicht schließen“ lässt das Feld stehen", konsole(schliessSlot)?.hidden === false);
+
+konsole(schliessSlot)?.querySelector(".run-pane-close")?.click();
+await ruhen(2);
+document.querySelector("#pane-close-keep")?.click();
+await ruhen(3);
+pruefe("„Im Hintergrund weiterlaufen“ blendet das Feld aus", konsole(schliessSlot)?.hidden === true);
+pruefe("Weiterlaufen bricht den Auftrag nicht ab",
+  !frames.some((f) => f.type === "cancel"), JSON.stringify(frames));
+pruefe("das Raster zählt die sichtbaren Konsolen neu",
+  Number(document.querySelector("#run-split").dataset.panes)
+    === document.querySelectorAll("#run-split .run-pane:not([hidden])").length);
+
+// Ein zweiter laufender Auftrag zeigt den Abbrechen-Weg.
+const abbrechTask = auftrag("task_close2", "proj-c", "Abbrechbarer Auftrag");
+sag({ type: "task_created", taskId: abbrechTask.id, task: abbrechTask });
+sag({ type: "route_selected", taskId: abbrechTask.id, harness: "Cline", command: "cline", model: "plan-free" });
+sag({ type: "output", taskId: abbrechTask.id, html: "ABBRECH-AUSGABE" });
+await ruhen(3);
+const abbrechSlot = [0, 1, 2, 3].find((i) => konsole(i).textContent.includes("ABBRECH-AUSGABE"));
+konsole(abbrechSlot)?.querySelector(".run-pane-close")?.click();
+await ruhen(2);
+frames.length = 0;
+document.querySelector("#pane-close-abort")?.click();
+await ruhen(3);
+pruefe("„Auftrag abbrechen“ schickt cancel und schließt das Feld",
+  frames.some((f) => f.type === "cancel" && f.taskId === abbrechTask.id) && konsole(abbrechSlot)?.hidden === true,
+  JSON.stringify(frames));
+
+// --- 16. Dreier-Raster: zwei untereinander, eins in voller Höhe -------------
+// Bei genau 3 sichtbaren Feldern stehen die beiden ersten untereinander und das
+// dritte zieht über beide Zeilen (run-pane-hoch), nicht über beide Spalten.
+[0, 1, 2].forEach((i) => { if (konsole(i)) konsole(i).hidden = false; });
+if (konsole(3)) konsole(3).hidden = true;
+window.layoutPanes();
+await ruhen(2);
+const dreiSichtbar = [0, 1, 2, 3].map((i) => konsole(i)).filter((k) => k && !k.hidden);
+pruefe("bei genau 3 Konsolen ist dataset.panes auf 3",
+  document.querySelector("#run-split")?.dataset.panes === "3");
+pruefe("bei 3 Konsolen trägt das 3. Feld die Höhenklasse, die beiden anderen nicht",
+  dreiSichtbar.length === 3 && dreiSichtbar[2]?.classList.contains("run-pane-hoch")
+  && !dreiSichtbar[0]?.classList.contains("run-pane-hoch")
+  && !dreiSichtbar[1]?.classList.contains("run-pane-hoch"));
+pruefe("die Höhenklasse spannt über Zeilen, nicht über Spalten",
+  !/run-pane-wide/.test(readFileSync(join(PUBLIC, "style.css"), "utf8")));
+const dreierRegel = readFileSync(join(PUBLIC, "style.css"), "utf8")
+  .match(/\.run-split\[data-panes="3"\][^{]*\{[^}]*\}/)?.[0] ?? "";
+pruefe("die Dreier-Regel spannt das Sonderfeld über beide Zeilen in der zweiten Spalte",
+  /grid-row:\s*1\s*\/\s*-1/.test(dreierRegel) && /grid-column:\s*2\b/.test(dreierRegel), dreierRegel);
+
+// Bei 4 Konsolen wird das 2x2-Quadrat genutzt und run-pane-hoch entfernt.
+if (konsole(3)) konsole(3).hidden = false;
+window.layoutPanes();
+await ruhen(2);
+pruefe("bei 4 Konsolen verliert das 3. Feld die Sonderhöhe",
+  !konsole(2)?.classList.contains("run-pane-hoch") && document.querySelector("#run-split")?.dataset.panes === "4");
+
+// --- 17. Erscheinungsbild: hell und dunkel --------------------------------
+// Ein Umschalter, ein Attribut am Wurzelelement, ein gemerkter Wert. Der
+// Zustand muss an beiden Stellen gleich sein — in der Seitenleiste und in der
+// mobilen Leiste —, sonst zeigt das Handy den falschen nächsten Schritt.
+const themenKnoepfe = [...document.querySelectorAll('.theme-toggle')];
+pruefe('Theme-Umschalter gibt es in Seitenleiste und mobiler Leiste',
+  themenKnoepfe.length === 2, String(themenKnoepfe.length));
+pruefe('Theme-Umschalter sind Knöpfe mit Beschriftung',
+  themenKnoepfe.every((b) => b.tagName === 'BUTTON' && b.getAttribute('aria-label') && b.title));
+
+const wurzel = document.documentElement;
+pruefe('Beim Start steht ein Erscheinungsbild am Wurzelelement',
+  wurzel.dataset.theme === 'light' || wurzel.dataset.theme === 'dark', String(wurzel.dataset.theme));
+
+const vorher = wurzel.dataset.theme;
+themenKnoepfe[0]?.click();
+await ruhen(2);
+const nachher = wurzel.dataset.theme;
+pruefe('Ein Klick wechselt das Erscheinungsbild',
+  nachher !== vorher && (nachher === 'light' || nachher === 'dark'),
+  `${vorher} -> ${nachher}`);
+pruefe('Der gewechselte Wert wird gemerkt',
+  window.localStorage.getItem('cliscade_theme') === nachher,
+  String(window.localStorage.getItem('cliscade_theme')));
+pruefe('Der Umschalter nennt seinen Zustand und das nächste Erscheinungsbild',
+  themenKnoepfe.every((b) => b.getAttribute('aria-pressed') === String(nachher === 'dark')));
+pruefe('Beide Umschalter zeigen dasselbe Zeichen',
+  themenKnoepfe.every((b) => b.getAttribute('data-icon') === themenKnoepfe[0].getAttribute('data-icon')));
+pruefe('Die Farbe der Browserleiste folgt dem Erscheinungsbild',
+  document.querySelector('meta[name="theme-color"]')?.getAttribute('content')
+    === (nachher === 'dark' ? '#0c0d10' : '#f7f8fa'),
+  document.querySelector('meta[name="theme-color"]')?.getAttribute('content'));
+
+// Tastatur: T wechselt — aber nicht, während der Nutzer seinen Auftrag tippt.
+const vorT = wurzel.dataset.theme;
+window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 't', bubbles: true }));
+await ruhen(2);
+pruefe('T wechselt das Erscheinungsbild', wurzel.dataset.theme !== vorT, String(wurzel.dataset.theme));
+
+const nachT = wurzel.dataset.theme;
+const auftragsfeld = konsole(0)?.querySelector('.run-pane-input');
+auftragsfeld.value = 'Text mit t';
+auftragsfeld.dispatchEvent(new window.KeyboardEvent('keydown', { key: 't', bubbles: true }));
+await ruhen(2);
+pruefe('T im Auftragsfeld wechselt nichts', wurzel.dataset.theme === nachT, String(wurzel.dataset.theme));
+
+// Zurück auf den gemerkten Wert: ein Neustart darf nicht anders aussehen.
+window.localStorage.setItem('cliscade_theme', 'light');
+pruefe('Ein gemerktes Erscheinungsbild wird gelesen',
+  window.leseErscheinungsbild() === 'light' && window.setzeErscheinungsbild('light') === 'light');
+pruefe('Ein unsinniger gemerkter Wert fällt auf die Systemvorgabe zurück',
+  (window.localStorage.setItem('cliscade_theme', 'neon'), window.leseErscheinungsbild()) !== 'neon');
+
+// --- 18. Kein AGENTS.md-Rest in der Seitenleiste ---------------------------
+// Die Marke stand neben dem Root-Ordner und sagte wenig. Wer die Richtlinien
+// öffnen will, geht über die Einstellungen. Der Test hält Oberfläche und
+// Quelltext frei, damit die Referenz nicht als toter Griff zurückkommt.
+const leiste = document.getElementById("sidebar");
+pruefe("Der Kopf der Seitenleiste trägt keine AGENTS.md-Marke",
+  document.getElementById("root-agents-badge") === null
+  && document.querySelector(".workspace-agents-badge") === null);
+pruefe("Der Text „AGENTS.md aktiv“ steht nicht mehr in der Seitenleiste",
+  !leiste.textContent.includes("AGENTS.md"));
+pruefe("Der Root-Ordner bleibt im Kopf der Seitenleiste",
+  document.getElementById("root-dir-display") !== null
+  && document.getElementById("refresh-tree-btn") !== null);
+
+const quelltext = {
+  "index.html": readFileSync(join(PUBLIC, "index.html"), "utf8"),
+  "style.css": readFileSync(join(PUBLIC, "style.css"), "utf8"),
+  "app.js": readFileSync(join(PUBLIC, "app.js"), "utf8"),
+};
+const reste = Object.entries(quelltext).flatMap(([datei, text]) =>
+  ["root-agents-badge", "root-agents-text", "workspace-agents-badge", "rootAgentsBadge", "rootAgentsText"]
+    .filter((spur) => text.includes(spur))
+    .map((spur) => `${datei}:${spur}`));
+pruefe("Keine Spur der Marke in HTML, Stil oder Skript", reste.length === 0, reste.join(", "));
+
+// --- 19. Das Erscheinungsbild erreicht den Fensterrahmen -------------------
+// Die Mac-App setzte im Fenster fest .darkAqua. Das legt auch prefers-color-scheme
+// im WebView fest: der Hellmodus war nie zu sehen, die App sah aus wie vor der
+// Überarbeitung. Jetzt meldet die Oberfläche ihre Wahl über die WebKit-Brücke,
+// und das Fenster folgt ihr — solange keine eigene Wahl gemerkt ist, bleibt es
+// beim System, damit ein Systemwechsel weiter durchkommt.
+const gemeldet = [];
+window.webkit = { messageHandlers: { erscheinungsbild: { postMessage: (wert) => gemeldet.push(wert) } } };
+window.localStorage.removeItem('cliscade_theme');
+window.setzeErscheinungsbild('dark', false);
+await ruhen(2);
+pruefe('Ohne eigene Wahl meldet die Oberfläche: es entscheidet das System',
+  gemeldet.length === 1 && gemeldet[0].theme === 'dark' && gemeldet[0].folgtSystem === true,
+  JSON.stringify(gemeldet[0]));
+window.setzeErscheinungsbild('light');
+await ruhen(2);
+pruefe('Nach eigener Wahl meldet sie die Wahl selbst',
+  gemeldet.length === 2 && gemeldet[1].theme === 'light' && gemeldet[1].folgtSystem === false,
+  JSON.stringify(gemeldet[1]));
+
+// Eine Brücke, die scheitert, darf den Wechsel nicht verhindern.
+window.webkit = { messageHandlers: { erscheinungsbild: { postMessage: () => { throw new Error('kein Empfänger'); } } } };
+const trotzBruecke = window.setzeErscheinungsbild('dark');
+await ruhen(2);
+pruefe('Eine fehlerhafte Brücke blockiert den Wechsel nicht',
+  trotzBruecke === 'dark' && document.documentElement.dataset.theme === 'dark');
+
+// Im Browser gibt es keine Brücke. Das darf weder werfen noch den Wechsel stören.
+delete window.webkit;
+const ohneBruecke = window.setzeErscheinungsbild('light');
+await ruhen(2);
+pruefe('Ohne Brücke bleibt der Wechsel folgenlos und fehlerfrei',
+  ohneBruecke === 'light' && document.documentElement.dataset.theme === 'light');
 
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;

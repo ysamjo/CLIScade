@@ -158,9 +158,26 @@ const DEFAULT_MODEL_PRESETS = {
     { id: 'auto', label: 'Auto' }
   ],
   junie: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
-  kilo: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  kilo: [
+    { id: 'Standard', label: 'Standard / Kilo Auto Free' },
+    { id: 'kilo/kilo-auto/free', label: 'Kilo Auto Free (Kostenlos)' },
+    { id: 'kilo/openrouter/free', label: 'OpenRouter Free (Kostenlos)' },
+    { id: 'kilo/kilo-auto/balanced', label: 'Kilo Auto Balanced' },
+    { id: 'kilo/kilo-auto/frontier', label: 'Kilo Auto Frontier' },
+    { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (Anthropic Key)' },
+    { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5 (Anthropic Key)' }
+  ],
   copilot: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
-  kiro: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }],
+  kiro: [
+    { id: 'Standard', label: 'Standard / Auto' },
+    { id: 'auto', label: 'Auto (Optimal)' },
+    { id: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+    { id: 'deepseek-3.2', label: 'DeepSeek 3.2' },
+    { id: 'minimax-m2.5', label: 'MiniMax M2.5' },
+    { id: 'glm-5', label: 'GLM-5' },
+    { id: 'qwen3-coder-next', label: 'Qwen3 Coder Next' }
+  ],
   vibe: [{ id: 'Standard', label: 'Standard / konfigurierte CLI-Auswahl' }]
 };
 
@@ -311,6 +328,39 @@ async function fetchDynamicModelPresets() {
       const cbData = JSON.parse(fs.readFileSync(cbPath, 'utf8'));
       if (cbData.model && !result.codebuddy.some(m => m.id === cbData.model)) {
         result.codebuddy.splice(1, 0, { id: cbData.model, label: `${cbData.model} (In settings.json konfiguriert)` });
+      }
+    }
+  } catch (e) {}
+
+  // 8. Kilo: inspect ~/.local/state/kilo/model.json
+  try {
+    const kiloModelPath = path.join(os.homedir(), '.local', 'state', 'kilo', 'model.json');
+    if (fs.existsSync(kiloModelPath)) {
+      const kData = JSON.parse(fs.readFileSync(kiloModelPath, 'utf8'));
+      const active = kData.model?.code?.modelID;
+      const prov = kData.model?.code?.providerID;
+      const full = prov && active && !active.startsWith(`${prov}/`) ? `${prov}/${active}` : active;
+      if (full && !['stealth/glyph-cluster'].includes(full) && !result.kilo.some(m => m.id === full)) {
+        result.kilo.splice(1, 0, { id: full, label: `${full} (Aktiv in model.json)` });
+      }
+    }
+  } catch (e) {}
+
+  // 9. Kiro: query models from kiro-cli
+  try {
+    const kiroRaw = await execAsync('kiro-cli chat --list-models --format json 2>/dev/null', 3000);
+    if (kiroRaw) {
+      const parsed = JSON.parse(kiroRaw);
+      const models = Array.isArray(parsed.models) ? parsed.models : [];
+      if (models.length > 0) {
+        const list = [{ id: 'Standard', label: 'Standard / Auto' }];
+        models.forEach(m => {
+          const id = m.model_id || m.model_name;
+          if (!id) return;
+          const label = m.model_name ? `${m.model_name}${m.description ? ` (${m.description.slice(0, 35)})` : ''}` : id;
+          list.push({ id, label });
+        });
+        result.kiro = list;
       }
     }
   } catch (e) {}
@@ -685,7 +735,7 @@ function fetchCliCostsAndUsage(forceRefresh = false) {
     cursor: {
       id: 'cursor',
       name: 'Cursor CLI',
-      command: 'agent',
+      command: 'cursor-agent',
       available: false,
       plan: 'Cursor-Konto',
       contextWindow: 'Modellabhängig',
@@ -1043,7 +1093,7 @@ app.post('/api/harness/test', async (req, res) => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-modeltest-'));
   try {
     const result = await runHarness({
-      harnessId: entry.id, model: req.body.model || 'Standard', prompt: MODEL_TEST_PROMPT,
+      harnessId: entry.id, model: req.body.model || 'Standard', transport: req.body.transport === 'acp' ? 'acp' : 'headless', prompt: MODEL_TEST_PROMPT,
       cwd: workDir, env: harnessEnv({ PWD: workDir }), timeoutMs: MODEL_TEST_TIMEOUT_MS,
       idleTimeoutMs: MODEL_TEST_TIMEOUT_MS
     });
@@ -1752,22 +1802,51 @@ AUFGABE FÜR DIE KONSENS-SYNTHESE:
   });
 }
 
+// Eine Auswahlabfrage ist keine Protokollzeile, sondern eine Frage an den Nutzer.
+// Sie wird als eigener Block gemalt, mit einem Knopf je Option. Ein Lauf ist headless —
+// eine Antwort kann nicht in den laufenden Prozess zurück, deshalb trägt jeder Knopf den
+// vollständigen Auftragstext, den die Oberfläche in das Eingabefeld des Feldes übernimmt.
+function renderFrage(question, options) {
+  const liste = Array.isArray(options) ? options : [];
+  const knopf = (option) => {
+    const label = String(option.label || '');
+    const beschreibung = String(option.description || '');
+    const antwort = beschreibung
+      ? `Antwort auf die Rückfrage „${question}": ${label} — ${beschreibung}`
+      : `Antwort auf die Rückfrage „${question}": ${label}`;
+    return `<button type="button" class="ko-frage-option" data-antwort="${escapeHtml(antwort)}">` +
+      `<span class="ko-frage-label">${escapeHtml(label)}</span>` +
+      (beschreibung ? `<span class="ko-frage-beschreibung">${escapeHtml(beschreibung)}</span>` : '') +
+      `</button>`;
+  };
+  return `\n<div class="ko-frage">` +
+    `<div class="ko-frage-kopf"><span class="ko-art">Rückfrage</span>` +
+    `<span class="ko-frage-hinweis">Antwort anklicken — sie landet im Eingabefeld</span></div>` +
+    `<div class="ko-frage-text">${escapeHtml(question)}</div>` +
+    (liste.length ? `<div class="ko-frage-optionen">${liste.map(knopf).join('')}</div>` : '') +
+    `</div>\n`;
+}
+
 function renderRuntimeEvent(event, renderChunk) {
   let raw = '';
   if (event.type === 'text') raw = event.text || '';
   else if (event.type === 'thinking') raw = `[thinking] ${event.text || ''}\n`;
   else if (event.type === 'warning') raw = event.text || '';
   else if (event.type === 'tool_start') raw = `Werkzeug: ${event.name || 'unbekannt'}\n`;
-  else if (event.type === 'tool_result') raw = `⎿ ${event.text || ''}\n`;
+  // Ohne das ⎿: die Ausgabe hat eine eigene Schicht, die sie schon markiert.
+  else if (event.type === 'tool_result') raw = `${event.text || ''}\n`;
+  else if (event.type === 'question') raw = `Rückfrage: ${event.question || ''}\n`;
   else if (event.type === 'session_lost') raw = `${event.message}\n`;
   else if (event.type === 'error') raw = `${event.message}\n`;
   if (!raw) return null;
   const layer = event.type === 'thinking' ? 'denke'
-    : ['tool_start', 'tool_result'].includes(event.type) ? 'werkzeug' : null;
-  const html = layer ? `\n<div data-console-layer="${layer}">${renderChunk(raw)}</div>
+    : event.type === 'tool_start' ? 'werkzeug'
+      : event.type === 'tool_result' ? 'ausgabe' : null;
+  const html = event.type === 'question' ? renderFrage(event.question || '', event.options)
+    : layer ? `\n<div data-console-layer="${layer}">${renderChunk(raw)}</div>
 `
-    : event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
-      ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
+      : event.type === 'warning' || event.type === 'error' || event.type === 'session_lost'
+        ? `<span style="color:var(--warning)">${renderChunk(raw)}</span>` : renderChunk(raw);
   return { raw, html };
 }
 
@@ -1780,10 +1859,10 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     entry.controllers.add(controller);
   }
   const renderChunk = makeChunkRenderer();
-  const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: selectedRoute.harnessId, model: selectedRoute.model });
+  const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: selectedRoute.harnessId, model: selectedRoute.model, transport: selectedRoute.transport || 'headless' });
   runHarness({
     harnessId: selectedRoute.harnessId,
-    model: selectedRoute.model || 'Standard', prompt: fullPrompt, cwd: workingDir,
+    model: selectedRoute.model || 'Standard', transport: selectedRoute.transport || 'headless', prompt: fullPrompt, cwd: workingDir,
     env: harnessEnv({ PWD: workingDir }), signal: controller.signal, execution: loadConfig().execution,
     idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
     onIdle: (idleMs) => {
@@ -1803,6 +1882,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     taskStore.finishAttempt(attemptId, { status: result.status, exitCode: result.exitCode, error: result.error, sessionId: result.sessionId });
     taskRecord.resultText = result.finalText.slice(-12000);
     if (result.sessionId) taskRecord.sessionId = result.sessionId;
+    taskRecord.transport = result.transport || 'headless';
     callback(result.status === 'completed' ? null : new Error(result.error?.message || result.status), result.finalText, result.exitCode, result);
   }).catch((err) => callback(err, '', null, { status: 'failed', error: { kind: 'harness_failure', message: err.message } }))
     .finally(() => entry?.controllers?.delete(controller));
@@ -1827,6 +1907,7 @@ function runDispatch(entry) {
     taskRecord.exitCode = status === 'cancelled' ? 130 : status === 'completed' ? 0 : (result?.exitCode || 1);
     if (result?.error) taskRecord.error = result.error;
     if (result?.sessionId) taskRecord.sessionId = result.sessionId;
+    if (result?.transport) taskRecord.transport = result.transport;
     saveCheckpoint(taskRecord, result?.finalText);
     writeTask(taskRecord);
     notify(terminalMessage(taskRecord, message));
@@ -1882,12 +1963,13 @@ function runDispatch(entry) {
       if (!entry.controllers) entry.controllers = new Set();
       entry.controllers.add(controller);
       let result;
-      const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: route.harnessId, model });
+      const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: route.harnessId, model, transport: route.transport || 'headless' });
       taskRecord.activeAttemptId = attemptId;
       writeTask(taskRecord);
       try {
         result = await runHarness({ harnessId: route.harnessId, model, prompt: effectivePrompt,
-          cwd: workingDir, previousSessionId, signal: controller.signal, execution: loadConfig().execution,
+          transport: route.transport || 'headless', cwd: workingDir, previousSessionId,
+          previousSessionTransport: previousTask?.transport, signal: controller.signal, execution: loadConfig().execution,
           env: harnessEnv({ PWD: workingDir }), idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
           onIdle: (idleMs) => {
             const html = `<div class="route-fallback-banner">⏱ <strong>${escapeHtml(route.name)}</strong> schreibt seit ${Math.round(idleMs / 1000)} s nichts mehr — Abbruch und Übergabe.</div>\n`;

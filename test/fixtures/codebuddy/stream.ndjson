@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"codebuddy-session","model":"deepseek-v4.1-flash","cwd":"/tmp/projekt"}
+{"type":"system","subtype":"status","status":null,"session_id":"codebuddy-session"}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Überlegen"},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"/tmp/projekt/marker.txt"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-1","content":[{"type":"text","text":"GEHEIM-42"}]}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Antwort"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"Antwort","session_id":"codebuddy-session"}
