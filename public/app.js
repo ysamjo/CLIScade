@@ -1204,6 +1204,7 @@ function setupRunPanes() {
     });
     pane.routing.addEventListener('change', () => {
       state.paneRouting[slot] = pane.routing.value;
+      pane.routingExplicit = true;
     });
   });
 }
@@ -2870,22 +2871,16 @@ function promptPayload(slot) {
   const prompt = pane.input.value.trim() || (window.HarnessImages.has(pane.root) ? 'Analysiere das beigefügte Bild.' : '');
   const stream = streamAtSlot(slot);
   const folge = !pane.newTask && stream?.folge && pane.target.value === stream.folge.projectPath ? stream.folge : null;
-
-  // Eine bewusste Wahl im Routing-Feld schlägt die Fortsetzung: wer nach dem
-  // Anklicken eines alten Laufs einen anderen Harness wählt, meint diesen —
-  // sonst wäre die manuelle Einstellung wirkungslos.
-  const manuell = pane.routing && pane.routing.value && pane.routing.value !== 'auto'
-    ? pane.routing.value : null;
+  // Die Historie liefert Kontext; eine bewusste Dropdown-Wahl bestimmt die Route.
+  const inheritRoute = folge && !pane.routingExplicit;
 
   const payload = {
     type: 'dispatch',
     prompt,
-    harnessOverride: manuell || (folge ? folge.harness : (pane.routing ? pane.routing.value : 'auto')),
+    harnessOverride: inheritRoute ? folge.harness : (pane.routing ? pane.routing.value : 'auto'),
     projectPath: pane.target.value || state.activeProject
   };
-  // Das Modell gehört zum alten Lauf: nur bei dessen Harness übernehmen, nicht
-  // bei bewusst anderem Routing — dort gilt das Modell der gewählten Route.
-  if (!manuell && folge?.model) payload.modelOverride = folge.model;
+  if (inheritRoute && folge.model) payload.modelOverride = folge.model;
   if (folge?.previousTaskId) payload.previousTaskId = folge.previousTaskId;
   if (pane.withoutBeads?.checked) payload.withoutBeads = true;
   else if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;
