@@ -127,6 +127,8 @@ Codex schreibt standardmäßig innerhalb der `workspace-write`-Sandbox. In den R
 
 Nach einem Server-Neustart stehen zuvor laufende oder wartende Aufgaben als `incomplete` in der Historie. Sie starten nicht automatisch: Aufgabe anklicken und eine Fortsetzung in der Konsole senden. Dabei werden Ziel, Regeln, Bildhinweis, letzter Arbeitsstand und aktueller Git-Stand erneut zusammengestellt. Eine fehlende native Session verliert dadurch nicht den gespeicherten Router-Kontext. Zwischenstände aus Agentenausgaben sind ausdrücklich nicht unabhängig verifiziert. Regeln werden nicht automatisch aus solchen Aussagen erzeugt.
 
+Eine Fortsetzung verwendet zunächst CLI und Modell des bisherigen Laufs. Sobald du das Routing-Dropdown dieser Konsole bewusst änderst, gilt deine Auswahl: die gewählte Route mit ihrem konfigurierten Modell, Auto-Route oder Konsens. Das alte Modell wird dabei nicht als Überschreibung mitgeschickt. Vorgänger und Projektkontext bleiben erhalten; die Auswahl gilt nur für diese Konsole und bleibt bei weiteren Folgeprompts bestehen.
+
 Zum Sichern von `studio.sqlite` den Server zuerst ohne aktive Aufträge beenden und danach die Datenbank kopieren; eine einzelne Dateikopie während des WAL-Betriebs ist kein vollständiges Backup. Die alte JSON-Datei ist nach der Migration nur noch Sicherung, kein aktiver Speicher. Niemals bei laufendem Server durch eine JSON-Datei ersetzen.
 
 ## Automatischer Beads-Projektkontext

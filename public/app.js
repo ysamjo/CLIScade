@@ -848,6 +848,7 @@ function setupRunPanes() {
     });
     pane.routing.addEventListener('change', () => {
       state.paneRouting[slot] = pane.routing.value;
+      pane.routingExplicit = true;
     });
   });
 }
@@ -2485,14 +2486,16 @@ function promptPayload(slot) {
   const prompt = pane.input.value.trim() || (window.HarnessImages.has(pane.root) ? 'Analysiere das beigefügte Bild.' : '');
   const stream = streamAtSlot(slot);
   const folge = !pane.newTask && stream?.folge && pane.target.value === stream.folge.projectPath ? stream.folge : null;
+  // Die Historie liefert Kontext; eine bewusste Dropdown-Wahl bestimmt die Route.
+  const inheritRoute = folge && !pane.routingExplicit;
 
   const payload = {
     type: 'dispatch',
     prompt,
-    harnessOverride: folge ? folge.harness : (pane.routing ? pane.routing.value : 'auto'),
+    harnessOverride: inheritRoute ? folge.harness : (pane.routing ? pane.routing.value : 'auto'),
     projectPath: pane.target.value || state.activeProject
   };
-  if (folge?.model) payload.modelOverride = folge.model;
+  if (inheritRoute && folge.model) payload.modelOverride = folge.model;
   if (folge?.previousTaskId) payload.previousTaskId = folge.previousTaskId;
   if (pane.withoutBeads?.checked) payload.withoutBeads = true;
   else if (pane.beads?.value || folge?.beadId) payload.beadId = pane.beads?.value || folge.beadId;

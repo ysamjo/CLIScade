@@ -1017,5 +1017,36 @@ await window.refreshRunPool();await ruhen(2);
 pruefe('Pool-Abgleich öffnet einen bewusst verdrängten Lauf nicht erneut', [0,1].every(i=>konsole(i).querySelector('.run-pane-title').textContent===beforePool[i]));
 ANTWORTEN['GET /api/runs'] = oldPool;
 
+// Bewusste Dropdown-Auswahl muss auch bei einer Fortsetzung Vorrang haben.
+const manualTask = {id:'manual-route-source',projectPath:'/tmp/proj-a',projectName:'proj-a',prompt:'Routenwahl prüfen',status:'queued',timestamp:new Date().toISOString()};
+sag({type:'task_created',taskId:manualTask.id,task:manualTask});
+sag({type:'route_selected',taskId:manualTask.id,harness:'Cline',command:'cline',model:'plan-free'});
+sag({type:'output',taskId:manualTask.id,html:'MANUELLE-ROUTENWAHL'});
+sag({type:'done',taskId:manualTask.id,exitCode:0});await ruhen(2);
+const manualSlot = [0,1].find(i=>konsole(i).textContent.includes('MANUELLE-ROUTENWAHL'));
+const manualRouting = konsole(manualSlot).querySelector('.run-pane-routing');
+for (const route of ['OpenCode', 'auto', 'consensus']) {
+  manualRouting.value = route;
+  manualRouting.dispatchEvent(new window.Event('change', {bubbles:true}));
+  frames.length=0;tippe(manualSlot,`Fortsetzen mit ${route}`);enter(manualSlot);await ruhen(2);
+  const payload = sendungen()[0];
+  pruefe(`Bewusste Auswahl ${route} überschreibt geerbten Harness`, payload?.harnessOverride===route, JSON.stringify(payload));
+  pruefe(`Bewusste Auswahl ${route} übernimmt kein fremdes Vorgängermodell`, payload?.modelOverride===undefined, JSON.stringify(payload));
+  pruefe(`Bewusste Auswahl ${route} erhält Vorgänger und Projekt`, payload?.previousTaskId===manualTask.id && payload?.projectPath==='/tmp/proj-a', JSON.stringify(payload));
+}
+manualRouting.value='OpenCode';manualRouting.dispatchEvent(new window.Event('change', {bubbles:true}));
+tippe(manualSlot,'Manuelle Kontextvorschau');
+konsole(manualSlot).querySelector('.run-pane-context-preview').click();await ruhen(3);
+pruefe('Kontextvorschau verwendet dieselbe bewusste Routenwahl', previewRequest?.harnessOverride==='OpenCode' && previewRequest?.modelOverride===undefined && previewRequest?.previousTaskId===manualTask.id);
+document.getElementById('context-preview-close').click();
+const isolatedSlot=1-manualSlot;
+konsole(isolatedSlot).querySelector('.run-pane-input').focus();
+const isolatedTask={id:'isolated-route-source',projectPath:'/tmp/proj-b',projectName:'proj-b',prompt:'Andere Konsole',status:'queued',timestamp:new Date().toISOString()};
+sag({type:'task_created',taskId:isolatedTask.id,task:isolatedTask});
+sag({type:'route_selected',taskId:isolatedTask.id,harness:'Qoder',command:'qoder',model:'isolation-model'});
+sag({type:'done',taskId:isolatedTask.id,exitCode:0});await ruhen(2);
+frames.length=0;tippe(isolatedSlot,'Fortsetzung ohne Dropdown-Änderung');enter(isolatedSlot);await ruhen(2);
+pruefe('Manuelle Auswahl verändert die andere Konsole nicht', sendungen()[0]?.harnessOverride==='Qoder' && sendungen()[0]?.modelOverride==='isolation-model', JSON.stringify(sendungen()[0]));
+
 console.log(`\n${bestanden.length} bestanden, ${gefallen.length} fehlgeschlagen`);
 process.exitCode = gefallen.length === 0 ? 0 : 1;
