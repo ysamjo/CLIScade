@@ -15,6 +15,32 @@ HOST=127.0.0.1 npm start
 
 Öffne anschließend [localhost:3000](http://localhost:3000), wähle den Workspace und aktiviere die gewünschten Harnesses in den Einstellungen.
 
+## ACP v1 (optional, auch in der macOS-App)
+
+CLIscade kann einzelne Routen optional über das Agent Client Protocol (ACP v1, JSON-RPC über stdio) statt als Headless-Einmalaufruf ausführen. Das bestehende Task-Board, SQLite, Beads-Projektkontext, automatische Kaskade, Abbruch und die Swift/WebKit-Desktop-App bleiben erhalten. ACP benötigt keinen zusätzlichen Port.
+
+In **Einstellungen → Harnesses** bei einer unterstützten Route das Protokoll **ACP v1** wählen und speichern. Nur diese Route wird umgestellt; alle anderen bleiben Headless. Der Protokollwechsel gilt auch für Modelltests dieser Route. Der Runner nutzt eine feste Allowlist; in der Konfiguration sind keine beliebigen Kommandos ausführbar.
+
+| Harness | ACP-Aufruf | Installation/Voraussetzung |
+| --- | --- | --- |
+| OpenCode | opencode acp | Aktuelle OpenCode-CLI installieren und authentifizieren |
+| Kiro | kiro-cli acp | Aktuelle Kiro-CLI installieren und authentifizieren |
+| Claude Code | claude-agent-acp | Separaten ACP-Adapter @agentclientprotocol/claude-agent-acp installieren und Claude-Zugang einrichten |
+| Codex | codex-acp | Separaten ACP-Adapter @agentclientprotocol/codex-acp installieren und Codex-Zugang einrichten |
+
+Die betreffenden Programme müssen im **PATH des laufenden Servers** vorhanden sein, nicht nur in deinem Terminal. Bei fehlendem ACP-Executable fällt die Route vor dem ersten Prompt sichtbar auf den bestehenden Headless-Adapter zurück. Bei Protokoll-, Auth- oder Ausführungsfehlern findet kein automatischer zweiter Aufruf desselben Agenten statt: Der normale CLIscade-Router kann anschließend zur nächsten Route wechseln.
+
+**Grenzen der ersten ACP-Stufe:**
+
+- Der Client implementiert ACP v1 über stdio (keine v2-Draft-Funktionen). Unterstützt werden Initialisierung, neue Sessions, Capability-geprüftes Resume/Load, Prompt-Streaming, Tool-Events, Abbruch und Timeouts. Persistiert wird die ACP-Session-ID mit Transportart pro Task/Attempt. Eine Headless-Session wird nie als ACP-Session fortgesetzt.
+- Die App unterstützt **noch keine interaktiven ACP-Berechtigungsdialoge**, kein vom Agenten beim Client angefordertes Terminal und keine Client-Dateisystemmethoden. ACP-Permission-Requests werden mit cancelled beantwortet und als Fehler sichtbar; es gibt keine automatische Vollfreigabe. ACP ist hier zunächst ein alternativer, kontrollierter Runner und noch kein vollständiger TUI-Ersatz.
+- Bei ACP muss die Modellauswahl vorerst **Standard** sein. Eine explizite Modell-ID wird statt einer stillschweigenden Fehlauswahl abgelehnt. Die ACL/Berechtigungen werden weiterhin vom Anbieter kontrolliert.
+- Resume funktioniert nur, wenn der Anbieter sessionCapabilities.resume oder loadSession unterstützt. Bei fehlender Session startet ein neuer Thread mit dem von CLIscade ohnehin aufgebauten Task-/Beads-/Git-Kontext. Ein erfolgreicher Agent-Text ist weiterhin kein unabhängig bestätigter Testbeleg.
+- Der ACP-Client bleibt zunächst pro Task ein eigener Subprozess. Lang laufende, interaktive Agentenprozesse und UI-Permission-Requests sind ein separater Ausbau.
+- Ohne installierten/verifizierten CLI-Adapter sind die Vertragstests Mock-Tests; Live-Tests mit authentifizierten Anbieteraccounts bleiben notwendig.
+
+Protokoll: https://agentclientprotocol.com/protocol/v1/overview
+
 ## Funktionen
 
 - Priorisierte Harness-Kaskade mit automatischem Fallback und Kontextübergabe.

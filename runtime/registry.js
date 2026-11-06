@@ -126,6 +126,8 @@ const CLI_INSTALL_REGISTRY = {
   }
 };
 
+const { acpProgram } = require('./acp-runner');
+
 const HARNESS_DEFINITIONS = {
   claude: { installId: 'claude_code_cli', aliases: ['claude_code'], transport: 'headless', resumable: true, structuredOutput: true },
   codex: { installId: 'codex_cli', aliases: [], transport: 'headless', resumable: true, structuredOutput: true },
@@ -152,6 +154,7 @@ const HARNESS_REGISTRY = Object.freeze(Object.fromEntries(
       transport: definition.transport, dispatchable: headless, consensus: headless,
       scheduler: headless, telegramDispatch: headless, modelTest: headless,
       resumable: definition.resumable, structuredOutput: definition.structuredOutput,
+      acp: Boolean(acpProgram(id)), acpExecutable: acpProgram(id)?.command || null,
       strictOutput: definition.strictOutput === true, requiresText: definition.requiresText === true,
       ...(install.limitations ? { limitations: install.limitations } : {})
     })];
@@ -179,7 +182,8 @@ function normalizeRoutes(routes, { strict = true } = {}) {
       name: typeof name === 'string' && name.trim() ? name.trim() : entry.name,
       harnessId: entry.id,
       ...(model !== undefined ? { model } : {}),
-      ...(enabled !== undefined || !entry.dispatchable ? { enabled: entry.dispatchable && enabled !== false } : {})
+      ...(enabled !== undefined || !entry.dispatchable ? { enabled: entry.dispatchable && enabled !== false } : {}),
+      ...(route.transport === 'acp' && entry.acp ? { transport: 'acp' } : {})
     };
   }).filter(Boolean);
 }

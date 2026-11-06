@@ -1093,7 +1093,7 @@ app.post('/api/harness/test', async (req, res) => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-modeltest-'));
   try {
     const result = await runHarness({
-      harnessId: entry.id, model: req.body.model || 'Standard', prompt: MODEL_TEST_PROMPT,
+      harnessId: entry.id, model: req.body.model || 'Standard', transport: req.body.transport === 'acp' ? 'acp' : 'headless', prompt: MODEL_TEST_PROMPT,
       cwd: workDir, env: harnessEnv({ PWD: workDir }), timeoutMs: MODEL_TEST_TIMEOUT_MS,
       idleTimeoutMs: MODEL_TEST_TIMEOUT_MS
     });
@@ -1859,10 +1859,10 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     entry.controllers.add(controller);
   }
   const renderChunk = makeChunkRenderer();
-  const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: selectedRoute.harnessId, model: selectedRoute.model });
+  const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: selectedRoute.harnessId, model: selectedRoute.model, transport: selectedRoute.transport || 'headless' });
   runHarness({
     harnessId: selectedRoute.harnessId,
-    model: selectedRoute.model || 'Standard', prompt: fullPrompt, cwd: workingDir,
+    model: selectedRoute.model || 'Standard', transport: selectedRoute.transport || 'headless', prompt: fullPrompt, cwd: workingDir,
     env: harnessEnv({ PWD: workingDir }), signal: controller.signal, execution: loadConfig().execution,
     idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
     onIdle: (idleMs) => {
@@ -1882,6 +1882,7 @@ function executeSingleRun(selectedRoute, fullPrompt, workingDir, notify, taskRec
     taskStore.finishAttempt(attemptId, { status: result.status, exitCode: result.exitCode, error: result.error, sessionId: result.sessionId });
     taskRecord.resultText = result.finalText.slice(-12000);
     if (result.sessionId) taskRecord.sessionId = result.sessionId;
+    taskRecord.transport = result.transport || 'headless';
     callback(result.status === 'completed' ? null : new Error(result.error?.message || result.status), result.finalText, result.exitCode, result);
   }).catch((err) => callback(err, '', null, { status: 'failed', error: { kind: 'harness_failure', message: err.message } }))
     .finally(() => entry?.controllers?.delete(controller));
@@ -1906,6 +1907,7 @@ function runDispatch(entry) {
     taskRecord.exitCode = status === 'cancelled' ? 130 : status === 'completed' ? 0 : (result?.exitCode || 1);
     if (result?.error) taskRecord.error = result.error;
     if (result?.sessionId) taskRecord.sessionId = result.sessionId;
+    if (result?.transport) taskRecord.transport = result.transport;
     saveCheckpoint(taskRecord, result?.finalText);
     writeTask(taskRecord);
     notify(terminalMessage(taskRecord, message));
@@ -1961,12 +1963,13 @@ function runDispatch(entry) {
       if (!entry.controllers) entry.controllers = new Set();
       entry.controllers.add(controller);
       let result;
-      const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: route.harnessId, model });
+      const attemptId = taskStore.beginAttempt(taskRecord.id, { harnessId: route.harnessId, model, transport: route.transport || 'headless' });
       taskRecord.activeAttemptId = attemptId;
       writeTask(taskRecord);
       try {
         result = await runHarness({ harnessId: route.harnessId, model, prompt: effectivePrompt,
-          cwd: workingDir, previousSessionId, signal: controller.signal, execution: loadConfig().execution,
+          transport: route.transport || 'headless', cwd: workingDir, previousSessionId,
+          previousSessionTransport: previousTask?.transport, signal: controller.signal, execution: loadConfig().execution,
           env: harnessEnv({ PWD: workingDir }), idleTimeoutMs: RUN_IDLE_TIMEOUT_MS,
           onIdle: (idleMs) => {
             const html = `<div class="route-fallback-banner">⏱ <strong>${escapeHtml(route.name)}</strong> schreibt seit ${Math.round(idleMs / 1000)} s nichts mehr — Abbruch und Übergabe.</div>\n`;
