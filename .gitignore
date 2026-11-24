@@ -6,7 +6,6 @@ output.json
 
 
 # Lokale Sicherungen vor riskanten Umbauten
-Archiv/*.zip
 
 # Beads / Dolt files (added by bd init)
 .dolt/
