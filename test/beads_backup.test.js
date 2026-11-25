@@ -46,9 +46,10 @@ test('NAS gilt erst nach Übertragung und bestätigter Prüfsumme als gesichert'
  assert.ok(fs.readFileSync(`${state.archive}.sha256`,'utf8').startsWith(state.checksum));
 });
 
-test('Standard sichert nur lokal und blendet alte ausstehende NAS-Transfers aus', t => {
+test('Standard-Ziel ist ZimaOS; fremde Home-Verzeichnisse sichern nur lokal', t => {
  const {defaultNas} = require('../services/beads-backup');
- assert.equal(defaultNas('/Users/family'),null);
+ assert.deepEqual(defaultNas('/Users/family'), { host: 'ysamjo@192.168.178.162', key: '/Users/family/.ssh/id_ed25519_zimaos', directory: '/DATA/AppData/beads' });
+ assert.equal(defaultNas('/other/home'),null);
  const f = fixture(t);
  const service = new BeadsBackupService({beads:f.beads,stateDirectory:f.root});
  const {digest} = require('../services/project-memory');

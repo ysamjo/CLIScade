@@ -4,7 +4,7 @@ const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { digest } = require('./project-memory');
-function defaultNas() { return null; }
+function defaultNas(home = os.homedir()) { return home === '/Users/family' ? { host: 'ysamjo@192.168.178.162', key: path.join(home, '.ssh/id_ed25519_zimaos'), directory: '/DATA/AppData/beads' } : null; }
 function command(file, args, options = {}) {
  return new Promise((resolve, reject) => execFile(file, args, { timeout: 120000, maxBuffer: 1024 * 1024, ...options },
   (error, stdout) => error ? reject(new Error(`${path.basename(file)} fehlgeschlagen`)) : resolve(stdout)));
